@@ -1,0 +1,16 @@
+# uv-managed virtualenv — never commit
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Generated artifacts
+input.txt
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
