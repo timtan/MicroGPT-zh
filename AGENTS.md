@@ -3,6 +3,12 @@
 This project is a pure-Python reimplementation of Karpathy's MicroGPT
 (`microgpt.py`), a 200-line dependency-free GPT trainer and sampler.
 
+## Core Mission: Learning microgpt.py
+
+**The single most important objective for work in this repo is learning and deeply understanding `microgpt.py`.** This file contains the complete implementation of a GPT — training loop, sampling strategy, tokenization, and inference — in just 200 lines with zero external dependencies beyond NumPy. It is a masterclass in applied deep learning fundamentals.
+
+When you encounter code, architecture, or design questions in this repo, **always defer to understanding microgpt.py** as your north star. Tasks that don't directly serve learning and understanding this core file should be questioned.
+
 ## Environment — MUST use `uv`
 
 **All work in this folder must be done through [`uv`](https://docs.astral.sh/uv/).**
