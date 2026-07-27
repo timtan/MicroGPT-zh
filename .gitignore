@@ -7,9 +7,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Generated artifacts
-input.txt
-
 # OS / editor
 .DS_Store
 .idea/

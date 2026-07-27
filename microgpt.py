@@ -6,24 +6,25 @@ Everything else is just efficiency.
 @karpathy
 """
 
-import os       # os.path.exists
 import math     # math.log, math.exp
 import random   # random.seed, random.choices, random.gauss, random.shuffle
 random.seed(42) # Let there be order among chaos
 
 # Let there be a Dataset `docs`: list[str] of documents (e.g. a list of names)
-if not os.path.exists('input.txt'):
-    import urllib.request
-    names_url = 'https://raw.githubusercontent.com/karpathy/makemore/988aa59/names.txt'
-    urllib.request.urlretrieve(names_url, 'input.txt')
-docs = [line.strip() for line in open('input.txt') if line.strip()]
+with open('input.txt', encoding='utf-8') as f:
+    docs = [line.strip() for line in f if line.strip()]
+assert docs, "input.txt is empty"
 random.shuffle(docs)
 print(f"num docs: {len(docs)}")
 
 # Let there be a Tokenizer to translate strings to sequences of integers ("tokens") and back
-uchars = sorted(set(''.join(docs))) # unique characters in the dataset become token ids 0..n-1
-BOS = len(uchars) # token id for a special Beginning of Sequence (BOS) token
-vocab_size = len(uchars) + 1 # total number of unique tokens, +1 is for BOS
+chars = sorted(set(''.join(docs))) # unique characters in the dataset become token ids 0..n-1
+stoi = {ch: i for i, ch in enumerate(chars)} # string to integer
+itos = {i: ch for i, ch in enumerate(chars)} # integer to string
+encode = lambda text: [stoi[ch] for ch in text]
+decode = lambda tokens: ''.join(itos[token] for token in tokens)
+BOS = len(chars) # token id for a special Beginning of Sequence (BOS) token
+vocab_size = len(chars) + 1 # total number of unique tokens, +1 is for BOS
 print(f"vocab size: {vocab_size}")
 
 # Let there be Autograd to recursively apply the chain rule through a computation graph
@@ -74,7 +75,7 @@ class Value:
 # Initialize the parameters, to store the knowledge of the model
 n_layer = 1     # depth of the transformer neural network (number of layers)
 n_embd = 16     # width of the network (embedding dimension)
-block_size = 16 # maximum context length of the attention window (note: the longest name is 15 characters)
+block_size = max(len(doc) for doc in docs) + 1 # longest name, plus one position to predict BOS (end)
 n_head = 4      # number of attention heads
 head_dim = n_embd // n_head # derived dimension of each head
 matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in range(nin)] for _ in range(nout)]
@@ -154,7 +155,7 @@ for step in range(num_steps):
 
     # Take single document, tokenize it, surround it with BOS special token on both sides
     doc = docs[step % len(docs)]
-    tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]
+    tokens = [BOS] + encode(doc) + [BOS]
     n = min(block_size, len(tokens) - 1)
 
     # Forward the token sequence through the model, building up the computation graph all the way to the loss
@@ -196,5 +197,5 @@ for sample_idx in range(20):
         token_id = random.choices(range(vocab_size), weights=[p.data for p in probs])[0]
         if token_id == BOS:
             break
-        sample.append(uchars[token_id])
-    print(f"sample {sample_idx+1:2d}: {''.join(sample)}")
+        sample.append(token_id)
+    print(f"sample {sample_idx+1:2d}: {decode(sample)}")
