@@ -6,14 +6,42 @@ Everything else is just efficiency.
 @karpathy
 """
 
+import argparse
+import hashlib
 import math     # math.log, math.exp
+import os
+import pickle
 import random   # random.seed, random.choices, random.gauss, random.shuffle
 random.seed(42) # Let there be order among chaos
+
+parser = argparse.ArgumentParser(description="Train or sample the tiny GPT")
+parser.add_argument('--steps', type=int, default=5000, help="total training steps")
+parser.add_argument('--resume', action='store_true', help="resume an interrupted training run")
+parser.add_argument('--inference', action='store_true', help="load the checkpoint without training")
+parser.add_argument('--checkpoint', default='checkpoint.pkl', help="checkpoint file to save or load")
+parser.add_argument('--temperature', type=float, default=0.7)
+parser.add_argument('--top-p', type=float, default=1.0, help="1.0 disables nucleus sampling")
+parser.add_argument('--samples', type=int, default=20)
+parser.add_argument('--sample-seed', type=int, default=42)
+args = parser.parse_args()
+if args.steps < 0:
+    parser.error('--steps must be non-negative')
+if not 0 < args.temperature:
+    parser.error('--temperature must be positive')
+if not 0 < args.top_p <= 1:
+    parser.error('--top-p must be in (0, 1]')
+if args.samples < 1:
+    parser.error('--samples must be positive')
+if args.resume and args.inference:
+    parser.error('--resume and --inference cannot be used together')
+
+checkpoint_path = args.checkpoint
 
 # Let there be a Dataset `docs`: list[str] of documents (e.g. a list of names)
 with open('input.txt', encoding='utf-8') as f:
     docs = [line.strip() for line in f if line.strip()]
 assert docs, "input.txt is empty"
+dataset_hash = hashlib.sha256('\n'.join(docs).encode()).hexdigest()
 random.shuffle(docs)
 print(f"num docs: {len(docs)}")
 
@@ -73,7 +101,7 @@ class Value:
                 child.grad += local_grad * v.grad
 
 # Initialize the parameters, to store the knowledge of the model
-n_layer = 1     # depth of the transformer neural network (number of layers)
+n_layer = 2     # depth of the transformer neural network (number of layers)
 n_embd = 16     # width of the network (embedding dimension)
 block_size = max(len(doc) for doc in docs) + 1 # longest name, plus one position to predict BOS (end)
 n_head = 4      # number of attention heads
@@ -148,54 +176,129 @@ def gpt(token_id, pos_id, keys, values):
 learning_rate, beta1, beta2, eps_adam = 0.01, 0.85, 0.99, 1e-8
 m = [0.0] * len(params) # first moment buffer
 v = [0.0] * len(params) # second moment buffer
+completed_steps = 0
 
-# Repeat in sequence
-num_steps = 1000 # number of training steps
-for step in range(num_steps):
+checkpoint_config = {
+    'dataset_hash': dataset_hash,
+    'chars': chars,
+    'n_layer': n_layer,
+    'n_embd': n_embd,
+    'block_size': block_size,
+    'n_head': n_head,
+}
 
-    # Take single document, tokenize it, surround it with BOS special token on both sides
-    doc = docs[step % len(docs)]
+def save_checkpoint(target_steps):
+    checkpoint = {
+        'version': 1,
+        'config': checkpoint_config,
+        'target_steps': target_steps,
+        'completed_steps': completed_steps,
+        'params': [p.data for p in params],
+        'm': m,
+        'v': v,
+        'random_state': random.getstate(),
+    }
+    os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)), exist_ok=True)
+    temporary_path = checkpoint_path + '.tmp'
+    with open(temporary_path, 'wb') as f:
+        pickle.dump(checkpoint, f)
+    os.replace(temporary_path, checkpoint_path)
+    print(f"checkpoint saved: {checkpoint_path} ({completed_steps} steps)")
+
+def load_checkpoint():
+    global m, v, completed_steps
+    with open(checkpoint_path, 'rb') as f:
+        checkpoint = pickle.load(f)
+    if checkpoint.get('version') != 1 or checkpoint.get('config') != checkpoint_config:
+        raise ValueError('checkpoint does not match input.txt or model settings')
+    if len(checkpoint['params']) != len(params):
+        raise ValueError('checkpoint parameter count does not match the model')
+    for p, data in zip(params, checkpoint['params']):
+        p.data = data
+    m, v = checkpoint['m'], checkpoint['v']
+    completed_steps = checkpoint['completed_steps']
+    random.setstate(checkpoint['random_state'])
+    return checkpoint['target_steps']
+
+def document_loss(doc):
     tokens = [BOS] + encode(doc) + [BOS]
     n = min(block_size, len(tokens) - 1)
-
-    # Forward the token sequence through the model, building up the computation graph all the way to the loss
     keys, values = [[] for _ in range(n_layer)], [[] for _ in range(n_layer)]
     losses = []
     for pos_id in range(n):
         token_id, target_id = tokens[pos_id], tokens[pos_id + 1]
-        logits = gpt(token_id, pos_id, keys, values)
-        probs = softmax(logits)
-        loss_t = -probs[target_id].log()
-        losses.append(loss_t)
-    loss = (1 / n) * sum(losses) # final average loss over the document sequence. May yours be low.
+        probs = softmax(gpt(token_id, pos_id, keys, values))
+        losses.append(-probs[target_id].log())
+    return (1 / n) * sum(losses)
 
-    # Backward the loss, calculating the gradients with respect to all model parameters
-    loss.backward()
+def evaluate():
+    return sum(document_loss(doc).data for doc in docs) / len(docs)
 
-    # Adam optimizer update: update the model parameters based on the corresponding gradients
-    lr_t = learning_rate * (1 - step / num_steps) # linear learning rate decay
-    for i, p in enumerate(params):
-        m[i] = beta1 * m[i] + (1 - beta1) * p.grad
-        v[i] = beta2 * v[i] + (1 - beta2) * p.grad ** 2
-        m_hat = m[i] / (1 - beta1 ** (step + 1))
-        v_hat = v[i] / (1 - beta2 ** (step + 1))
-        p.data -= lr_t * m_hat / (v_hat ** 0.5 + eps_adam)
-        p.grad = 0
+def choose_token(probs, sample_rng):
+    weights = [p.data for p in probs]
+    token_ids = list(range(vocab_size))
+    if args.top_p < 1.0:
+        ranked = sorted(zip(token_ids, weights), key=lambda item: item[1], reverse=True)
+        kept, cumulative = [], 0.0
+        for token_id, weight in ranked:
+            kept.append((token_id, weight))
+            cumulative += weight
+            if cumulative >= args.top_p:
+                break
+        token_ids, weights = map(list, zip(*kept))
+    return sample_rng.choices(token_ids, weights=weights)[0]
 
-    print(f"step {step+1:4d} / {num_steps:4d} | loss {loss.data:.4f}", end='\r')
+def generate_samples():
+    sample_rng = random.Random(args.sample_seed)
+    samples = []
+    for _ in range(args.samples):
+        keys, values = [[] for _ in range(n_layer)], [[] for _ in range(n_layer)]
+        token_id = BOS
+        sample = []
+        for pos_id in range(block_size):
+            probs = softmax([l / args.temperature for l in gpt(token_id, pos_id, keys, values)])
+            token_id = choose_token(probs, sample_rng)
+            if token_id == BOS:
+                break
+            sample.append(token_id)
+        samples.append(decode(sample))
+    return samples
 
-# Inference: may the model babble back to us
-temperature = 0.5 # in (0, 1], control the "creativity" of generated text, low to high
-print("\n--- inference (new, hallucinated names) ---")
-for sample_idx in range(20):
-    keys, values = [[] for _ in range(n_layer)], [[] for _ in range(n_layer)]
-    token_id = BOS
-    sample = []
-    for pos_id in range(block_size):
-        logits = gpt(token_id, pos_id, keys, values)
-        probs = softmax([l / temperature for l in logits])
-        token_id = random.choices(range(vocab_size), weights=[p.data for p in probs])[0]
-        if token_id == BOS:
-            break
-        sample.append(token_id)
-    print(f"sample {sample_idx+1:2d}: {decode(sample)}")
+def report(include_loss):
+    if include_loss:
+        print(f"mean training loss: {evaluate():.4f}")
+    print(f"--- inference (temperature={args.temperature}, top_p={args.top_p}) ---")
+    for sample_idx, sample in enumerate(generate_samples(), 1):
+        print(f"sample {sample_idx:2d}: {sample}")
+
+if args.resume or args.inference:
+    saved_target_steps = load_checkpoint()
+    print(f"checkpoint loaded: {checkpoint_path} ({completed_steps} steps)")
+    if args.resume and args.steps != saved_target_steps:
+        raise ValueError(f'--steps must remain {saved_target_steps} when resuming this training run')
+
+if not args.inference:
+    if args.steps <= completed_steps:
+        raise ValueError(f'--steps must be greater than completed steps ({completed_steps})')
+    for step in range(completed_steps, args.steps):
+        loss = document_loss(docs[step % len(docs)])
+        loss.backward()
+
+        lr_t = learning_rate * (1 - step / args.steps) # linear learning rate decay
+        for i, p in enumerate(params):
+            m[i] = beta1 * m[i] + (1 - beta1) * p.grad
+            v[i] = beta2 * v[i] + (1 - beta2) * p.grad ** 2
+            m_hat = m[i] / (1 - beta1 ** (step + 1))
+            v_hat = v[i] / (1 - beta2 ** (step + 1))
+            p.data -= lr_t * m_hat / (v_hat ** 0.5 + eps_adam)
+            p.grad = 0
+
+        completed_steps = step + 1
+        print(f"step {completed_steps:5d} / {args.steps:5d} | loss {loss.data:.4f}", end='\r')
+        if completed_steps % 1000 == 0 or completed_steps == args.steps:
+            print()
+            save_checkpoint(args.steps)
+        if completed_steps % 5000 == 0 or completed_steps == args.steps:
+            report(include_loss=True)
+else:
+    report(include_loss=False)

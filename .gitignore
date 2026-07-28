@@ -7,6 +7,11 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Generated model checkpoint
+checkpoint.pkl
+checkpoint.pkl.tmp
+checkpoints/*.tmp
+
 # OS / editor
 .DS_Store
 .idea/
