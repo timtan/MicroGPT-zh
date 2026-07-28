@@ -16,3 +16,6 @@ checkpoints/*.tmp
 .DS_Store
 .idea/
 .vscode/
+
+# Local PDF extraction intermediates
+tmp/

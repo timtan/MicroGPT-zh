@@ -19,6 +19,11 @@ parser.add_argument('--steps', type=int, default=5000, help="total training step
 parser.add_argument('--resume', action='store_true', help="resume an interrupted training run")
 parser.add_argument('--inference', action='store_true', help="load the checkpoint without training")
 parser.add_argument('--checkpoint', default='checkpoint.pkl', help="checkpoint file to save or load")
+parser.add_argument('--init-checkpoint', help="initialize model weights for a new fine-tuning run")
+parser.add_argument('--input', default='input.txt', help="one training document per line")
+parser.add_argument('--vocab-input', action='append', default=[], help="extra dataset used only to fix the shared vocabulary")
+parser.add_argument('--learning-rate', type=float, default=0.01)
+parser.add_argument('--eval-docs', type=int, default=0, help="documents to evaluate; 0 evaluates all")
 parser.add_argument('--temperature', type=float, default=0.7)
 parser.add_argument('--top-p', type=float, default=1.0, help="1.0 disables nucleus sampling")
 parser.add_argument('--samples', type=int, default=20)
@@ -32,21 +37,33 @@ if not 0 < args.top_p <= 1:
     parser.error('--top-p must be in (0, 1]')
 if args.samples < 1:
     parser.error('--samples must be positive')
+if args.learning_rate <= 0:
+    parser.error('--learning-rate must be positive')
+if args.eval_docs < 0:
+    parser.error('--eval-docs must be non-negative')
 if args.resume and args.inference:
     parser.error('--resume and --inference cannot be used together')
+if args.init_checkpoint and (args.resume or args.inference):
+    parser.error('--init-checkpoint cannot be combined with --resume or --inference')
 
 checkpoint_path = args.checkpoint
 
 # Let there be a Dataset `docs`: list[str] of documents (e.g. a list of names)
-with open('input.txt', encoding='utf-8') as f:
-    docs = [line.strip() for line in f if line.strip()]
-assert docs, "input.txt is empty"
+def read_documents(path):
+    with open(path, encoding='utf-8') as f:
+        return [line.strip() for line in f if line.strip()]
+
+docs = read_documents(args.input)
+assert docs, f"{args.input} is empty"
 dataset_hash = hashlib.sha256('\n'.join(docs).encode()).hexdigest()
 random.shuffle(docs)
-print(f"num docs: {len(docs)}")
+vocab_docs = list(docs)
+for vocab_path in args.vocab_input:
+    vocab_docs.extend(read_documents(vocab_path))
+print(f"num docs: {len(docs)} ({len(vocab_docs)} used for vocabulary)")
 
 # Let there be a Tokenizer to translate strings to sequences of integers ("tokens") and back
-chars = sorted(set(''.join(docs))) # unique characters in the dataset become token ids 0..n-1
+chars = sorted(set(''.join(vocab_docs))) # unique characters in all vocabulary datasets become token ids 0..n-1
 stoi = {ch: i for i, ch in enumerate(chars)} # string to integer
 itos = {i: ch for i, ch in enumerate(chars)} # integer to string
 encode = lambda text: [stoi[ch] for ch in text]
@@ -103,7 +120,7 @@ class Value:
 # Initialize the parameters, to store the knowledge of the model
 n_layer = 2     # depth of the transformer neural network (number of layers)
 n_embd = 16     # width of the network (embedding dimension)
-block_size = max(len(doc) for doc in docs) + 1 # longest name, plus one position to predict BOS (end)
+block_size = max(len(doc) for doc in vocab_docs) + 1 # longest name, plus one position to predict BOS (end)
 n_head = 4      # number of attention heads
 head_dim = n_embd // n_head # derived dimension of each head
 matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in range(nin)] for _ in range(nout)]
@@ -173,13 +190,12 @@ def gpt(token_id, pos_id, keys, values):
     return logits
 
 # Let there be Adam, the blessed optimizer and its buffers
-learning_rate, beta1, beta2, eps_adam = 0.01, 0.85, 0.99, 1e-8
+learning_rate, beta1, beta2, eps_adam = args.learning_rate, 0.85, 0.99, 1e-8
 m = [0.0] * len(params) # first moment buffer
 v = [0.0] * len(params) # second moment buffer
 completed_steps = 0
 
-checkpoint_config = {
-    'dataset_hash': dataset_hash,
+model_config = {
     'chars': chars,
     'n_layer': n_layer,
     'n_embd': n_embd,
@@ -189,8 +205,9 @@ checkpoint_config = {
 
 def save_checkpoint(target_steps):
     checkpoint = {
-        'version': 1,
-        'config': checkpoint_config,
+        'version': 2,
+        'model_config': model_config,
+        'dataset_hash': dataset_hash,
         'target_steps': target_steps,
         'completed_steps': completed_steps,
         'params': [p.data for p in params],
@@ -205,19 +222,36 @@ def save_checkpoint(target_steps):
     os.replace(temporary_path, checkpoint_path)
     print(f"checkpoint saved: {checkpoint_path} ({completed_steps} steps)")
 
-def load_checkpoint():
+def checkpoint_model_config(checkpoint):
+    if checkpoint.get('version') == 1:
+        legacy_config = dict(checkpoint['config'])
+        legacy_config.pop('dataset_hash')
+        return legacy_config
+    if checkpoint.get('version') == 2:
+        return checkpoint['model_config']
+    raise ValueError('unsupported checkpoint version')
+
+def load_checkpoint(path, restore_training_state):
     global m, v, completed_steps
-    with open(checkpoint_path, 'rb') as f:
+    with open(path, 'rb') as f:
         checkpoint = pickle.load(f)
-    if checkpoint.get('version') != 1 or checkpoint.get('config') != checkpoint_config:
-        raise ValueError('checkpoint does not match input.txt or model settings')
+    if checkpoint_model_config(checkpoint) != model_config:
+        raise ValueError('checkpoint does not match the vocabulary or model settings')
     if len(checkpoint['params']) != len(params):
         raise ValueError('checkpoint parameter count does not match the model')
     for p, data in zip(params, checkpoint['params']):
         p.data = data
-    m, v = checkpoint['m'], checkpoint['v']
-    completed_steps = checkpoint['completed_steps']
-    random.setstate(checkpoint['random_state'])
+    if restore_training_state:
+        checkpoint_dataset_hash = (
+            checkpoint['config']['dataset_hash']
+            if checkpoint.get('version') == 1
+            else checkpoint['dataset_hash']
+        )
+        if checkpoint_dataset_hash != dataset_hash:
+            raise ValueError('checkpoint does not match the training dataset')
+        m, v = checkpoint['m'], checkpoint['v']
+        completed_steps = checkpoint['completed_steps']
+        random.setstate(checkpoint['random_state'])
     return checkpoint['target_steps']
 
 def document_loss(doc):
@@ -232,7 +266,8 @@ def document_loss(doc):
     return (1 / n) * sum(losses)
 
 def evaluate():
-    return sum(document_loss(doc).data for doc in docs) / len(docs)
+    eval_docs = docs[:args.eval_docs] if args.eval_docs else docs
+    return sum(document_loss(doc).data for doc in eval_docs) / len(eval_docs)
 
 def choose_token(probs, sample_rng):
     weights = [p.data for p in probs]
@@ -272,10 +307,14 @@ def report(include_loss):
         print(f"sample {sample_idx:2d}: {sample}")
 
 if args.resume or args.inference:
-    saved_target_steps = load_checkpoint()
+    saved_target_steps = load_checkpoint(checkpoint_path, restore_training_state=True)
     print(f"checkpoint loaded: {checkpoint_path} ({completed_steps} steps)")
     if args.resume and args.steps != saved_target_steps:
         raise ValueError(f'--steps must remain {saved_target_steps} when resuming this training run')
+
+if args.init_checkpoint:
+    load_checkpoint(args.init_checkpoint, restore_training_state=False)
+    print(f"model initialized from: {args.init_checkpoint}; optimizer reset")
 
 if not args.inference:
     if args.steps <= completed_steps:
@@ -294,9 +333,9 @@ if not args.inference:
             p.grad = 0
 
         completed_steps = step + 1
-        print(f"step {completed_steps:5d} / {args.steps:5d} | loss {loss.data:.4f}", end='\r')
+        if completed_steps == 1 or completed_steps % 100 == 0 or completed_steps == args.steps:
+            print(f"step {completed_steps:5d} / {args.steps:5d} | loss {loss.data:.4f}")
         if completed_steps % 1000 == 0 or completed_steps == args.steps:
-            print()
             save_checkpoint(args.steps)
         if completed_steps % 5000 == 0 or completed_steps == args.steps:
             report(include_loss=True)
