@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>MicroGPT — 4,192 個數字如何學會取名字</title>
+<style>
+/* ============ 色彩系統（dataviz 深色驗證色板） ============ */
+:root{
+  --bg:#0d0d0d; --panel:#1a1a19; --panel2:#222221;
+  --border:rgba(255,255,255,.10); --grid:#2c2c2a; --baseline:#383835;
+  --ink:#ffffff; --ink2:#c3c2b7; --ink3:#898781;
+  --c-bus:#3987e5;   /* 主幹 / 16 維向量 / residual */
+  --c-attn:#d95926;  /* Attention（搬運） */
+  --c-mlp:#199e70;   /* MLP（加工） */
+  --c-now:#c98500;   /* 當前 token / 本輪新算 */
+  --c-kv:#9085e9;    /* KV cache（跨輪狀態） */
+  --c-rand:#e66767;  /* 隨機性（全場唯一） */
+  --sans:system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg)}
+body{font-family:var(--sans);visibility:hidden}
+
+/* ============ 舞台 ============ */
+#stage{position:fixed;left:50%;top:50%;width:1280px;height:720px;
+       transform-origin:50% 50%;background:var(--bg)}
+.slide{display:none;position:absolute;inset:0;padding:26px 44px 20px;color:var(--ink)}
+.slide.active{display:grid}
+.std{grid-template-rows:66px minmax(0,1fr)}
+.hero{grid-template-rows:minmax(0,1fr);place-items:center}
+
+/* ============ 標題列＋迷你導覽 ============ */
+.slide header{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.slide h1{margin:0;font-size:27px;font-weight:650;letter-spacing:.5px;display:flex;align-items:center;gap:14px}
+.figno{font:600 13px/1 var(--mono);color:var(--ink2);border:1px solid var(--border);
+       background:var(--panel);padding:6px 10px;border-radius:8px;letter-spacing:1px;white-space:nowrap}
+.map{display:flex;align-items:center;gap:0;flex:0 0 auto}
+.chip{font-size:12px;color:var(--ink3);border:1px solid var(--border);padding:4px 10px;
+      border-radius:999px;display:flex;align-items:center;gap:5px;white-space:nowrap;background:rgba(255,255,255,.02)}
+.chip b{font-weight:500;font-family:var(--mono)}
+.chip.on{color:var(--ink);border-color:var(--c-bus);background:rgba(57,135,229,.14)}
+.chip.on b{color:var(--c-bus)}
+.tick{width:9px;height:1px;background:var(--grid)}
+
+/* ============ 左右欄 ============ */
+.cols{display:grid;grid-template-columns:var(--split,52fr 48fr);gap:26px;min-height:0;padding-top:10px}
+.cols.solo{grid-template-columns:1fr}
+.pane{min-height:0;min-width:0}
+.pane.left{display:flex;align-items:center;justify-content:center}
+.pane.left svg{width:100%;height:100%;}
+
+/* ============ 程式碼卡 ============ */
+.codecard{height:100%;display:flex;flex-direction:column;background:var(--panel);
+          border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.codehead{padding:10px 16px;font:12.5px var(--mono);color:var(--ink3);
+          border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex:0 0 auto}
+.codebody{flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 6px;min-height:0;overflow:hidden}
+.codesep{font:12px var(--sans);color:var(--ink3);padding:10px 16px 4px;letter-spacing:.5px}
+.codesep b{color:var(--ink2);font-weight:600}
+pre.py{margin:0;padding:2px 8px;font-family:var(--mono);font-size:var(--code-fs,14px);line-height:1.62}
+.row{display:flex;white-space:pre;border-radius:4px}
+.no{flex:0 0 4ch;text-align:right;padding-right:13px;color:#56554f;user-select:none}
+.cd{white-space:pre;color:#e8e6df}
+.row.elide .no,.row.elide .cd{color:#4c4b45}
+.fold{color:#56554f}
+.kw{color:#86b6ef}.st{color:#d2a86a}.cm{color:#898781;font-style:italic}.nu{color:#d55181}.fn{color:#54b89c}
+.anno{color:var(--c-now)}
+.row.hl-bus {background:rgba(57,135,229,.10);box-shadow:inset 3px 0 0 var(--c-bus)}
+.row.hl-attn{background:rgba(217,89,38,.10); box-shadow:inset 3px 0 0 var(--c-attn)}
+.row.hl-mlp {background:rgba(25,158,112,.10);box-shadow:inset 3px 0 0 var(--c-mlp)}
+.row.hl-kv  {background:rgba(144,133,233,.10);box-shadow:inset 3px 0 0 var(--c-kv)}
+.row.hl-rand{background:rgba(230,103,103,.10);box-shadow:inset 3px 0 0 var(--c-rand)}
+.row.hl-now {background:rgba(201,133,0,.12); box-shadow:inset 3px 0 0 var(--c-now)}
+.row.hl-bus .no{color:var(--c-bus)} .row.hl-attn .no{color:var(--c-attn)}
+.row.hl-mlp .no{color:var(--c-mlp)} .row.hl-kv .no{color:var(--c-kv)}
+.row.hl-rand .no{color:var(--c-rand)} .row.hl-now .no{color:var(--c-now)}
+
+/* ============ SVG 圖示系統 ============ */
+svg text{font-family:var(--sans)}
+.t {fill:var(--ink);font-size:15px}
+.th{fill:var(--ink);font-size:18px;font-weight:600}
+.ts{fill:var(--ink2);font-size:13px}
+.td{fill:var(--ink3);font-size:12.5px}
+.tn{fill:var(--ink2);font-size:13px;font-family:var(--mono)}
+.tb{fill:var(--ink);font-size:15px;font-weight:600}
+.mid{text-anchor:middle}.end{text-anchor:end}
+.box{fill:var(--panel2);stroke:#4a4947;stroke-width:1.4;rx:8}
+.tint-bus {fill:rgba(57,135,229,.13);stroke:var(--c-bus);stroke-width:1.6;rx:8}
+.tint-attn{fill:rgba(217,89,38,.13);stroke:var(--c-attn);stroke-width:1.6;rx:8}
+.tint-mlp {fill:rgba(25,158,112,.13);stroke:var(--c-mlp);stroke-width:1.6;rx:8}
+.tint-kv  {fill:rgba(144,133,233,.12);stroke:var(--c-kv);stroke-width:1.6;rx:8}
+.tint-rand{fill:rgba(230,103,103,.13);stroke:var(--c-rand);stroke-width:1.6;rx:8}
+.tint-now {fill:rgba(201,133,0,.15);stroke:var(--c-now);stroke-width:1.6;rx:8}
+.f-bus{fill:var(--c-bus)}.f-attn{fill:var(--c-attn)}.f-mlp{fill:var(--c-mlp)}
+.f-kv{fill:var(--c-kv)}.f-rand{fill:var(--c-rand)}.f-now{fill:var(--c-now)}
+.wire{stroke:#8a8981;stroke-width:1.8;fill:none}
+.wire-bus{stroke:var(--c-bus);stroke-width:2.2;fill:none}
+.wire-attn{stroke:var(--c-attn);stroke-width:1.8;fill:none}
+.wire-mlp{stroke:var(--c-mlp);stroke-width:1.8;fill:none}
+.wire-kv{stroke:var(--c-kv);stroke-width:1.8;fill:none}
+.wire-rand{stroke:var(--c-rand);stroke-width:1.8;fill:none}
+.wire-now{stroke:var(--c-now);stroke-width:1.8;fill:none}
+.dash{stroke-dasharray:5 4}
+.bar{fill:var(--c-attn)}.bar-bus{fill:var(--c-bus)}.bar-rand{fill:var(--c-rand)}
+.bar-mlp{fill:var(--c-mlp)}.bar-kv{fill:var(--c-kv)}.bar-now{fill:var(--c-now)}.bar-grey{fill:#4a4947}
+.axis{stroke:var(--baseline);stroke-width:1}
+
+/* ============ 講者備註 ============ */
+.notes{display:none;position:absolute;left:0;right:0;bottom:0;max-height:44%;overflow:auto;
+       background:rgba(9,9,11,.95);border-top:1px solid var(--baseline);
+       padding:16px 44px 20px;z-index:6}
+body.notes-on .slide.active .notes{display:block}
+.notes ul{margin:6px 0 0;padding-left:22px}
+.notes li{font-size:16.5px;line-height:1.65;color:var(--ink2);margin:4px 0}
+.notes b{color:var(--ink)}
+.notes .ntag{font-size:12px;color:var(--c-now);letter-spacing:2px}
+
+/* ============ 頁碼 ============ */
+#pageno{position:absolute;right:44px;bottom:13px;font:12.5px var(--mono);color:var(--ink3);z-index:2}
+
+/* ============ 封面/總結類頁面 ============ */
+.heroBox{text-align:center;max-width:1050px}
+.kicker{font:600 14px var(--mono);color:var(--c-bus);letter-spacing:6px;text-transform:uppercase}
+.heroBox h1{font-size:52px;margin:18px 0 10px;letter-spacing:1px}
+.heroBox .sub{font-size:20px;color:var(--ink2)}
+.stats{display:flex;gap:14px;justify-content:center;margin-top:30px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 22px}
+.stat .v{font:600 24px var(--mono);color:var(--ink)}
+.stat .k{font-size:12.5px;color:var(--ink3);margin-top:3px}
+.hint{margin-top:34px;font-size:13px;color:var(--ink3)}
+.hint b{color:var(--ink2);font-weight:500;font-family:var(--mono)}
+.cards{display:flex;gap:20px;justify-content:center;margin-top:34px}
+.card{flex:1;max-width:330px;text-align:left;background:var(--panel);border:1px solid var(--border);
+      border-radius:14px;padding:20px 22px}
+.card h3{margin:0 0 8px;font-size:18px}
+.card p{margin:0;font-size:14.5px;line-height:1.6;color:var(--ink2)}
+.card .mono{font-family:var(--mono);font-size:13px;color:var(--ink3)}
+
+/* ============ 列印 ============ */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  body{visibility:visible!important}
+  #stage{position:static;transform:none!important;width:1280px;height:auto}
+  .slide{display:grid!important;position:relative;inset:auto;width:1280px;height:720px;
+         break-after:page;page-break-after:always}
+  .notes,#pageno{display:none!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<!-- 共用 defs：六色箭頭 -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<marker id="ar-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8981"/></marker>
+<marker id="ar-bus" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3987e5"/></marker>
+<marker id="ar-attn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d95926"/></marker>
+<marker id="ar-mlp" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#199e70"/></marker>
+<marker id="ar-kv" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9085e9"/></marker>
+<marker id="ar-rand" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e66767"/></marker>
+<marker id="ar-now" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c98500"/></marker>
+</defs>
+</svg>
+
+<div id="stage">
+
+<!-- ═══════════ 1 封面 ═══════════ -->
+<section class="slide hero" data-station="">
+  <div class="heroBox">
+    <div class="kicker">MicroGPT</div>
+    <h1>4,192 個數字，怎麼學會取名字</h1>
+    <div class="sub">一個 200 行、零依賴的純 Python GPT — 拆到只剩加法和乘法</div>
+    <svg viewBox="0 0 900 136" style="width:900px;height:136px;margin-top:26px">
+      <text x="40" y="66" class="tn mid" style="font-size:15px">BOS</text>
+      <path d="M62 62 H92" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="96" y="42" width="118" height="40" class="box"/><text x="155" y="67" class="ts mid">Tokenizer</text>
+      <path d="M214 62 H240" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="244" y="42" width="126" height="40" class="tint-bus"/><text x="307" y="67" class="ts mid">Embedding</text>
+      <path d="M370 62 H396" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="400" y="30" width="150" height="64" class="box"/>
+      <text x="475" y="55" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+      <text x="475" y="79" class="ts mid" style="fill:var(--c-mlp)">＋ MLP</text>
+      <path d="M550 62 H576" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="580" y="42" width="110" height="40" class="tint-bus"/><text x="635" y="67" class="ts mid">lm_head</text>
+      <path d="M690 62 H716" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="67" class="ts mid">抽樣 ★</text>
+      <path d="M806 62 H836" class="wire-rand" marker-end="url(#ar-rand)"/>
+      <text x="848" y="68" class="th" style="font-family:var(--mono);fill:var(--c-now)">e</text>
+      <path d="M763 90 V106 H40 V80" class="wire dash" marker-end="url(#ar-grey)"/>
+      <text x="450" y="128" class="td mid">抽到的字母回頭當下一輪輸入（自迴歸）</text>
+    </svg>
+    <div class="stats">
+      <div class="stat"><div class="v">4,192</div><div class="k">全部參數</div></div>
+      <div class="stat"><div class="v">200</div><div class="k">行純 Python</div></div>
+      <div class="stat"><div class="v">1</div><div class="k">層 transformer</div></div>
+      <div class="stat"><div class="v">16</div><div class="k">維向量</div></div>
+      <div class="stat"><div class="v">27</div><div class="k">vocab（a–z＋BOS）</div></div>
+    </div>
+    <div class="hint"><b>←</b> <b>→</b> 翻頁 ・ <b>n</b> 講者備註 ・ <b>f</b> 全螢幕 ・ 貫穿全場的例子：生成 <b>emma</b></div>
+  </div>
+  <aside class="notes"><span class="ntag">開場</span>
+    <ul>
+      <li>四千個數字、一個 200 行零依賴的 Python 檔案，學會了「英文名字長什麼樣子」。</li>
+      <li>等一下把它拆到只剩加法和乘法——每個數字都是真的、可以手算。</li>
+      <li>資料集：names.txt，32,033 個英文名字；全場以 microgpt_en.py 為準。</li>
+    </ul>
+  </aside>
+</section>
+
+<!-- ═══════════ 2 圖0 模型有多小 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">圖 0</span>這個模型有多小</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <defs><linearGradient id="fadeG" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4a4947"/><stop offset="1" stop-color="#4a4947" stop-opacity="0"/>
+        </linearGradient></defs>
+        <text x="0" y="24" class="th">整個模型的全部知識 = 5 張數字表</text>
+
+        <text x="0" y="76" class="t" style="font-family:var(--mono)">wte</text>
+        <text x="0" y="96" class="td">27 × 16・字母 → 向量（查表）</text>
+        <rect x="255" y="66" width="70" height="26" rx="3.5" class="bar-bus"/>
+        <text x="335" y="85" class="tn">432</text>
+
+        <text x="0" y="134" class="t" style="font-family:var(--mono)">wpe</text>
+        <text x="0" y="154" class="td">16 × 16・位置 0–15 的向量</text>
+        <rect x="255" y="124" width="41" height="26" rx="3.5" class="bar-bus"/>
+        <text x="306" y="143" class="tn">256</text>
+
+        <text x="0" y="192" class="t" style="font-family:var(--mono)">lm_head</text>
+        <text x="0" y="212" class="td">27 × 16・向量 → 字母（反查表）</text>
+        <rect x="255" y="182" width="70" height="26" rx="3.5" class="bar-bus"/>
+        <text x="335" y="201" class="tn">432</text>
+
+        <text x="0" y="250" class="t" style="font-family:var(--mono)">attention</text>
+        <text x="0" y="270" class="td">Wq Wk Wv Wo・各 16 × 16</text>
+        <rect x="255" y="240" width="165" height="26" rx="3.5" class="bar"/>
+        <text x="430" y="259" class="tn">1,024</text>
+
+        <text x="0" y="308" class="t" style="font-family:var(--mono)">MLP</text>
+        <text x="0" y="328" class="td">16 → 64 → 16</text>
+        <rect x="255" y="298" width="330" height="26" rx="3.5" class="bar-mlp"/>
+        <text x="595" y="317" class="tn">2,048</text>
+
+        <line x1="0" y1="360" x2="640" y2="360" class="axis"/>
+        <text x="0" y="404" class="t">合計</text>
+        <text x="70" y="408" style="fill:var(--ink);font:700 36px var(--mono)">4,192</text>
+        <text x="185" y="404" class="ts">個數字，全部可以手算</text>
+
+        <text x="0" y="462" class="td">對照組</text>
+        <text x="0" y="492" class="t">GPT-2 small</text>
+        <text x="122" y="492" class="tn">124,000,000</text>
+        <rect x="255" y="474" width="385" height="26" rx="3.5" fill="url(#fadeG)"/>
+        <text x="420" y="493" class="ts" style="fill:var(--ink)">× 30,000 …畫不下</text>
+        <text x="0" y="536" class="t">現代大模型</text>
+        <text x="122" y="536" class="tn">100,000,000,000+</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・參數初始化</span><span>num params: 4192</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="81:bus,83:attn,87:mlp">
+75	n_layer = 1     # depth of the transformer …
+76	n_embd = 16     # width of the network …
+77	block_size = 16 # maximum context length …
+78	n_head = 4      # number of attention heads
+79	head_dim = n_embd // n_head # derived dimension …
+	# ★ 五個超參數：層數・寬度・看幾格・幾頭・每頭 4 維
+80	matrix = lambda nout, nin, std=0.08:
+	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
+	↪  for _ in range(nout)]
+	# ★ matrix：造表工具；Value＝會記帳的數字（圖 10 收帳）
+81	state_dict = {'wte': matrix(vocab_size, n_embd),
+	↪ 'wpe': matrix(block_size, n_embd),
+	↪ 'lm_head': matrix(vocab_size, n_embd)}
+	# ★ state_dict：知識收納櫃；vocab_size＝27（圖 2 細講）
+82	for i in range(n_layer):
+83	    state_dict[f'layer{i}.attn_wq'] =
+	↪         matrix(n_embd, n_embd)
+⋯
+87	    state_dict[f'layer{i}.mlp_fc1'] =
+	↪         matrix(4 * n_embd, n_embd)
+⋯
+89	params = [p for mat in state_dict.values()
+	↪ for row in mat for p in row] # flatten …
+	# ★ params：攤平成一條 list 的 4,192 個數字
+90	print(f"num params: {len(params)}")
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 0・尺度感</span>
+    <ul>
+      <li>四千個數字＋一個 200 行、零依賴的 Python 檔案，學會了「英文名字長什麼樣子」。每個數字都是真的、<b>可以手算</b>。</li>
+      <li><b>只有一層。</b>完整的 Transformer 不需要「很多層」才成立——一層就包含 attention、MLP、殘差這三件事的全部；多層只是同一件事再做一次。</li>
+      <li>對照：GPT-2 small = 124,000,000（3 萬倍）；現代大模型 ≈ 100,000,000,000+。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預1 主角 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 1</span>全場只有一個主角：一個 16 維向量</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <text x="0" y="36" class="ts">它長這樣——就是一個裝著 16 個小數的 Python list：</text>
+        <rect x="0" y="58" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="235" y="92" class="mid" style="font:16.5px var(--mono);fill:var(--ink)">x = [ 0.13, -0.82, 0.55, … , -0.07 ]</text>
+        <path d="M70 126 H400" stroke="var(--baseline)" stroke-width="1.5" fill="none"/>
+        <path d="M235 126 V138" stroke="var(--baseline)" stroke-width="1.5" fill="none"/>
+        <text x="235" y="162" class="ts mid">這 16 個數字，濃縮了</text>
+        <text x="235" y="184" class="ts mid">「這個字母＋它前面所有字母」到此刻的理解</text>
+
+        <rect x="0" y="330" width="470" height="130" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="330" width="4" height="130" class="f-bus"/>
+        <text x="24" y="364" class="t" style="font-weight:600">加完三次料、進出口（lm_head）之前：</text>
+        <text x="24" y="394" class="ts">「此刻的意義」與「對下一個字母的預測」</text>
+        <text x="24" y="418" class="ts">已同時濃縮在這 16 個數字裡</text>
+        <text x="24" y="446" class="td">——圖 7 會揭曉：這兩件事其實是同一件事</text>
+        <text x="0" y="524" class="ts" style="fill:var(--c-now)">★ 每一步的動詞都是「＋」——三個加號（圖 6 收這條線）</text>
+
+        <text x="530" y="36" class="ts">整個程式＝對同一個 x 不停「加料」（生成 emma 走到第 3 步）：</text>
+        <rect x="530" y="58" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="91" class="td">出生・wte 查表</text>
+        <text x="780" y="91" class="t mid" style="font-weight:600">「我是字母 m」</text>
+        <text x="988" y="91" class="td end">圖 3</text>
+        <path d="M765 112 V146" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="781" y="135" class="ts" style="fill:var(--c-now)">＋ wpe</text>
+        <rect x="530" y="150" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="183" class="td">知道位置</text>
+        <text x="780" y="183" class="t mid" style="font-weight:600">「我是第 3 格的 m」</text>
+        <text x="988" y="183" class="td end">圖 3</text>
+        <path d="M765 204 V238" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="781" y="227" class="ts" style="fill:var(--c-now)">＋ attention 算出來的修正</text>
+        <rect x="530" y="242" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="275" class="td">拌入前文</text>
+        <text x="780" y="275" class="t mid" style="font-weight:600">「我前面是 e、m」</text>
+        <text x="988" y="275" class="td end">圖 4</text>
+        <path d="M765 296 V330" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="781" y="319" class="ts" style="fill:var(--c-now)">＋ MLP 算出來的修正</text>
+        <rect x="530" y="334" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="367" class="td">想清楚了</text>
+        <text x="780" y="367" class="t mid" style="font-weight:600">「下一個八成是 a」</text>
+        <text x="988" y="367" class="td end">圖 5</text>
+        <text x="765" y="440" class="ts mid">你等一下看到的每一張圖，都只是在回答：</text>
+        <text x="765" y="466" class="t mid" style="font-weight:600">「這一步往 x 裡加了什麼料？」</text>
+        <text x="765" y="522" class="td mid">尾鉤：這個 x 從頭到尾，只會被三種方式對待——一招一節</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 1・主角</span>
+    <ul>
+      <li>別被「16 維向量」四個字嚇到：<b>它就是一個長度 16 的 list</b>，沒有更多了。</li>
+      <li>整個模型跑一輪＝這個 list 被加料<b>三次</b>（＋位置、＋attention 修正、＋MLP 修正）。</li>
+      <li>加完三次、進 lm_head 之前：「此刻的意義」和「對下一個字母的預測」同時濃縮在這 16 個數字裡——圖 7 揭曉這兩件事是<b>同一件事</b>。</li>
+      <li>尾鉤：這個 x 從頭到尾只會被三種方式對待。下一節開始，一招一節。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預2 第1招 加法 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 2</span>第 1 招：向量＋向量 — 把兩份理解疊在一起</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="td">這個模型從頭到尾只會三招。接下來一招一節，都拿同一個道具示範。</text>
+        <text x="20" y="78" class="t">「我是字母 m」</text>
+        <text x="230" y="78" style="font:15px var(--mono);fill:var(--ink2)">[ 0.3, -0.1,  0.7, … ]</text>
+        <text x="470" y="78" class="td">← wte 的一列</text>
+        <text x="0" y="126" class="t" style="fill:var(--c-now);font-weight:650">＋</text>
+        <text x="20" y="126" class="t">「我在第 3 格」</text>
+        <text x="230" y="126" style="font:15px var(--mono);fill:var(--ink2)">[ 0.1,  0.4, -0.2, … ]</text>
+        <text x="470" y="126" class="td">← wpe 的一列</text>
+        <line x1="0" y1="146" x2="590" y2="146" class="axis"/>
+        <rect x="0" y="158" width="590" height="46" class="tint-bus" rx="8"/>
+        <text x="20" y="187" class="t" style="font-weight:600">「我是第 3 格的 m」</text>
+        <text x="230" y="187" style="font:15px var(--mono);fill:var(--ink)">[ 0.4,  0.3,  0.5, … ]</text>
+        <text x="470" y="187" class="td">兩張便利貼疊起來</text>
+
+        <text x="0" y="258" class="ts">同一招的第二用途：把「修正量」疊上去（attention／MLP 算出來的料）</text>
+        <rect x="40" y="282" width="90" height="40" class="tint-bus" rx="8"/>
+        <text x="85" y="307" class="tn mid" style="fill:var(--ink)">x</text>
+        <text x="152" y="307" class="t mid" style="fill:var(--c-now);font-weight:650">＋</text>
+        <rect x="176" y="282" width="120" height="40" class="box" rx="8"/>
+        <text x="236" y="307" class="ts mid" style="fill:var(--ink)">修正量</text>
+        <path d="M300 302 H336" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="342" y="282" width="160" height="40" class="tint-bus" rx="8"/>
+        <text x="422" y="307" class="ts mid" style="fill:var(--ink)">更新後的 x</text>
+
+        <rect x="0" y="366" width="590" height="104" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="366" width="4" height="104" class="f-bus"/>
+        <text x="24" y="404" style="font:600 17px var(--mono);fill:var(--ink)">殘差就是 x += 修正，不是 x = 修正</text>
+        <text x="24" y="438" class="ts">疊上去、不覆蓋——全場沒有任何一步會「洗掉」x（圖 6 收這條線）</text>
+
+        <text x="303" y="536" class="td mid">尾鉤：加法只會疊、不會變——要變出「我在找母音」這種新理解，得靠第 2 招</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・第 1 招的三次上場</span><span>zip＝兩個 list 並排走</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="111:bus,134:bus,141:bus">
+111	x = [t + p for t, p in zip(tok_emb, pos_emb)] # …
+	# ★ x、tok_emb、pos_emb：主角本人＋兩張便利貼
+⋯
+134	    x = [a + b for a, b in zip(x, x_residual)]
+	# ★ x_residual：加料前先留一份的備份——殘差（圖 6 主場）
+⋯
+141	    x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 2・第 1 招</span>
+    <ul>
+      <li>相加的意義：<b>把兩份理解疊在一起</b>——字母的意義＋位置的感覺＝帶著位置的字母意義。</li>
+      <li>對寫過程式的人：殘差就是 <b>x += 修正</b>，不是 x = 修正。全場沒有任何一步會「洗掉」x。</li>
+      <li>句型順帶學：zip＝兩個 list 並排走；list comprehension＝對每一格做同一件事。</li>
+      <li>尾鉤：加法只會疊、不會變——想變出「我在找母音」這種新理解，得靠第 2 招。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預3 第2招 乘法 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 3</span>第 2 招：向量 × 矩陣 — 拿 x 去回答一份問卷</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="ts">W 是一份「16 題的問卷」，每一列一題：</text>
+        <rect x="0" y="88" width="104" height="44" class="tint-bus" rx="8"/>
+        <text x="52" y="115" class="tn mid" style="fill:var(--ink)">x（16）</text>
+        <path d="M104 110 H140" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="146" y="44" width="304" height="204" class="box" rx="10"/>
+        <text x="166" y="80" class="ts">列 1 「你身上有多少 A？」</text>
+        <path d="M436 75 H466" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="474" y="80" class="tn">答案 a₁</text>
+        <text x="166" y="122" class="ts">列 2 「你身上有多少 B？」</text>
+        <path d="M436 117 H466" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="474" y="122" class="tn">答案 a₂</text>
+        <text x="166" y="164" class="ts" style="fill:var(--ink3)">　⋮</text>
+        <text x="474" y="164" class="tn" style="fill:var(--ink3)">⋮</text>
+        <text x="166" y="206" class="ts">列 16「你身上有多少 P？」</text>
+        <path d="M436 201 H466" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="474" y="206" class="tn">答案 a₁₆</text>
+        <text x="303" y="286" class="ts mid">出來＝16 個答案＝<tspan fill="var(--ink)" font-weight="600">換了一組角度重新看的 x</tspan></text>
+
+        <rect x="0" y="312" width="590" height="42" class="box" rx="8"/>
+        <text x="295" y="339" class="ts mid">內積＝一題的評分：逐項相乘、再加總——像對答案</text>
+
+        <text x="0" y="396" class="ts">全場總共 7 份問卷，題目不同、動作永遠一樣（先混臉熟）：</text>
+        <rect x="0" y="414" width="188" height="92" class="tint-attn" rx="10"/>
+        <text x="16" y="444" style="font:600 15px var(--mono);fill:var(--ink)">× Wq</text>
+        <text x="16" y="470" class="ts">「我在找什麼？」</text>
+        <text x="16" y="494" class="td">圖 4a-0</text>
+        <rect x="202" y="414" width="188" height="92" class="tint-mlp" rx="10"/>
+        <text x="218" y="444" style="font:600 15px var(--mono);fill:var(--ink)">× fc1</text>
+        <text x="218" y="470" class="ts">「64 題健檢」</text>
+        <text x="218" y="494" class="td">圖 5</text>
+        <rect x="404" y="414" width="188" height="92" class="tint-bus" rx="10"/>
+        <text x="420" y="444" style="font:600 15px var(--mono);fill:var(--ink)">× lm_head</text>
+        <text x="420" y="470" class="ts">「27 題：你是誰？」</text>
+        <text x="420" y="494" class="td">圖 7</text>
+
+        <text x="303" y="546" class="td mid">尾鉤：答完的分數正負混雜、大小不一——誰來過濾？第 3 招</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・問卷的本體</span><span>雙層 comprehension＝造表</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="94-95:bus">
+94	def linear(x, w):   # ★ linear：第 2 招的本體，出現 7 次
+95	    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+	# 前半＝跟一列逐項相乘再加總（內積）；後半＝每列做一次
+</pre>
+<div class="codesep"><b>問卷是怎麼生出來的</b>・雙層 list comprehension＝造一張表</div>
+<pre class="py">
+80	matrix = lambda nout, nin, std=0.08:
+	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
+	↪  for _ in range(nout)]
+	# 外層每列、內層每欄——一張 nout × nin 的表
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 3・第 2 招（問卷比喻的定義處）</span>
+    <ul>
+      <li>相乘的意義：<b>拿 x 去回答一份問卷</b>。答完得到一串新數字＝從另一組角度看同一個 x。「16 維 × 矩陣能表達什麼」取決於問卷<b>問什麼</b>——而問卷是訓練學出來的。</li>
+      <li>內積＝一題的評分：逐項對答案、加總。等一下 attention 的「像不像」也是同一個動作。</li>
+      <li>這一節不深講任何一份問卷的題目（主場各自在圖 4a-0、圖 5、圖 7）。7 次 linear＝q、k、v、Wo、fc1、fc2、lm_head。</li>
+      <li>尾鉤：答完的分數正負混雜、大小不一——誰來過濾？第 3 招。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預4 第3招 非線性 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 4</span>第 3 招：非線性 — 神經網路裡的 if（主角 relu）</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="24" class="ts">relu＝一道門檻：不夠強的訊號，閉嘴</text>
+        <text x="130" y="64" class="mid" style="font:16px var(--mono);fill:var(--ink)">−1.2</text>
+        <text x="250" y="64" class="mid" style="font:16px var(--mono);fill:var(--ink)">+3.4</text>
+        <text x="370" y="64" class="mid" style="font:16px var(--mono);fill:var(--ink)">−0.8</text>
+        <text x="490" y="64" class="mid" style="font:16px var(--mono);fill:var(--ink)">+0.1</text>
+        <path d="M130 74 V96" class="wire"/>
+        <path d="M250 74 V96" class="wire"/>
+        <path d="M370 74 V96" class="wire"/>
+        <path d="M490 74 V96" class="wire"/>
+        <rect x="70" y="100" width="480" height="32" class="tint-now" rx="8"/>
+        <text x="310" y="121" class="t mid" style="font-weight:650">relu</text>
+        <path d="M250 136 V158" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M490 136 V158" class="wire-now" marker-end="url(#ar-now)"/>
+        <text x="130" y="184" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
+        <text x="250" y="184" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+3.4</text>
+        <text x="370" y="184" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
+        <text x="490" y="184" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+0.1</text>
+        <text x="310" y="216" class="td mid">負的一律歸零，正的原樣通過——沒有 if，程式只是一條算式</text>
+        <text x="303" y="248" class="ts mid">沒有 relu，fc1 × fc2 事先乘成一張 16×16——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan>（圖 5 還債）</text>
+
+        <line x1="0" y1="274" x2="606" y2="274" class="axis"/>
+
+        <text x="0" y="306" class="ts">附贈半招｜<tspan fill="var(--ink)" font-weight="600">rmsnorm＝音控台</tspan>：只調音量、不動方向</text>
+        <text x="60" y="346" style="font:15px var(--mono);fill:var(--ink2)">[ 3.2, -1.6,  4.8, … ]</text>
+        <text x="330" y="346" class="td">← 加料疊久了、問卷答多了，音量會漂</text>
+        <path d="M150 358 V390" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="168" y="380" class="ts">÷ 整體音量（16 個數字的均方根）</text>
+        <text x="60" y="416" style="font:15px var(--mono);fill:var(--ink)">[ 0.8, -0.4,  1.2, … ]</text>
+        <text x="330" y="416" class="td">← 方向沒變，音量回到標準</text>
+        <rect x="0" y="446" width="590" height="60" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="20" y="472" class="ts"><tspan fill="var(--ink)" font-weight="600">每次拿 x 去作答之前，先過一次音控</tspan>（進主幹前・attention 前・MLP 前）</text>
+        <text x="20" y="496" class="td">零參數：4,192 個數字裡沒有半個屬於它——它不是知識，是水電</text>
+
+        <text x="303" y="544" class="td mid">尾鉤：三招齊了。同一件事要重複 N 次（每層、每個 head、每一格），程式怎麼寫？</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・第 3 招＋半招</span><span>relu 的微分：0 或 1</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="50:now,139:now">
+50	def relu(self): return Value(max(0, self.data),
+	↪     (self,), (float(self.data > 0),))
+	# ★ self.data：Value 的數值本體；括號＝記帳（圖 10 收）
+⋯
+139	x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
+</pre>
+<div class="codesep"><b>半招 rmsnorm</b>・三行、零參數</div>
+<pre class="py">
+103	def rmsnorm(x):   # ★ rmsnorm：音控台
+104	    ms = sum(xi * xi for xi in x) / len(x)   # ms：平均音量
+105	    scale = (ms + 1e-5) ** -0.5   # scale：調回標準的倍率
+106	    return [xi * scale for xi in x]   # 只動音量，不動方向
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 4・第 3 招＋半招</span>
+    <ul>
+      <li><b>relu 就是神經網路裡的 if</b>——沒有 if，程式只是一條算式；有了 if 才會「分情況」。（圖 5 的「64 條 if-then 規則」就是這個 if。）</li>
+      <li>相加是疊、相乘是換角度，都還是線性的——非線性是唯一能製造「分情況」的地方。兄弟 softmax（attention／抽樣見）；加上半招 rmsnorm，「只會三招」沒有破功。</li>
+      <li><b>rmsnorm 為什麼存在</b>：第 1 招一直疊、第 2 招會放大縮小，x 的音量會漂移；音量一漂，內積評分沒有共同尺度、softmax 被極端值綁架。所以每次作答前先過音控。零參數＝它不是知識，是水電。</li>
+      <li>尾鉤：三招齊了——同一件事重複 N 次怎麼寫？</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預5 收納 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 5</span>收納：句型到此為止</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="30" class="t" style="font-weight:600">最後一個句型｜for 迴圈＝「同一件事做 N 次」</text>
+        <text x="0" y="56" class="td">右欄三行，就是全檔 for 的全部用法</text>
+
+        <rect x="0" y="92" width="150" height="60" class="tint-bus" rx="10"/>
+        <text x="75" y="129" class="t mid" style="font-weight:650">句型</text>
+        <text x="180" y="120" class="ts">只有這幾種：</text>
+        <text x="180" y="144" class="tn">＋、問卷（×）、門檻（relu）、for、zip、comprehension</text>
+        <rect x="0" y="176" width="150" height="60" class="tint-attn" rx="10"/>
+        <text x="75" y="213" class="t mid" style="font-weight:650">招式</text>
+        <text x="180" y="204" class="ts">只有三招</text>
+        <text x="180" y="228" class="td">加（疊理解）・乘（答問卷）・非線性（分情況）</text>
+        <rect x="0" y="260" width="150" height="60" class="tint-mlp" rx="10"/>
+        <text x="75" y="297" class="t mid" style="font-weight:650">數字</text>
+        <text x="180" y="288" class="ts">只有 4,192 個</text>
+        <text x="180" y="312" class="td">訓練＝把它們各挪一小步（圖 10）</text>
+
+        <rect x="0" y="356" width="590" height="86" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="356" width="4" height="86" class="f-now"/>
+        <text x="24" y="390" class="t" style="font-weight:600">之後每張圖都可以問：「這一步是第幾招？」</text>
+        <text x="24" y="420" class="ts">先劇透：Attention＝用三招去「搬」前文；MLP＝用三招來「想」（圖 4 開講）</text>
+
+        <rect x="0" y="462" width="590" height="70" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="462" width="4" height="70" class="f-rand"/>
+        <text x="24" y="492" class="ts"><tspan fill="var(--ink)" font-weight="600">承諾</tspan>：全檔最兇的一行藏在 attention 裡，</text>
+        <text x="24" y="518" class="ts">輪到它之前會先拆給你看（圖 4a-0）——不會咬人</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・迴圈只有三個</span><span>看懂這幾頁＝全檔看得懂</span></div>
+        <div class="codebody">
+<pre class="py">
+114	for li in range(n_layer):   # ★ li：第幾層（這裡 N=1）
+⋯
+124	for h in range(n_head):   # ★ h：第幾個 head（N=4）
+⋯
+193	for pos_id in range(block_size):
+	# ★ pos_id：第幾格——跟 wpe 查表用同一個號碼
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 5・收納</span>
+    <ul>
+      <li><b>200 行裡沒有任何一行用到預 2–預 5 以外的 Python。</b>看懂這幾頁，今晚所有程式碼你都看得懂。</li>
+      <li>互動哏：之後每張圖都可以問「這一步是第幾招？」——Attention＝用三招搬前文、MLP＝用三招想。</li>
+      <li>承諾：全檔最兇的一行藏在 attention 裡，輪到它之前先拆給你看（圖 4a-0）。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 3 圖1 Overview ═══════════ -->
+<section class="slide std" data-station="1,2,3,4,5">
+  <header>
+    <h1><span class="figno">圖 1</span>Overview — 一次前向，只產生一個字母</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:54fr 46fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 630 560">
+        <text x="20" y="120" class="t mid" style="font:600 20px var(--mono)">em</text>
+        <path d="M40 116 H50" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="54" y="92" width="96" height="48" class="box"/>
+        <text x="102" y="121" class="ts mid" style="fill:var(--ink)">Tokenizer</text>
+        <text x="102" y="178" class="tn mid" style="font-size:12px">字元 → id</text>
+        <text x="102" y="196" class="tn mid" style="font-size:12px">[e]=4</text>
+        <path d="M150 116 H162" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="166" y="92" width="108" height="48" class="tint-bus"/>
+        <text x="220" y="121" class="ts mid" style="fill:var(--ink)">Embedding</text>
+        <text x="220" y="178" class="tn mid" style="font-size:12px">wte[id] + wpe[pos]</text>
+        <path d="M274 116 H286" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="290" y="70" width="118" height="92" class="box"/>
+        <text x="349" y="100" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+        <text x="349" y="122" class="ts mid">＋</text>
+        <text x="349" y="146" class="ts mid" style="fill:var(--c-mlp)">MLP</text>
+        <path d="M408 116 H420" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="424" y="92" width="96" height="48" class="tint-bus"/>
+        <text x="472" y="121" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">lm_head</text>
+        <text x="472" y="178" class="tn mid" style="font-size:12px">16 → 27 分數</text>
+        <path d="M520 116 H532" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="536" y="92" width="84" height="48" class="tint-rand"/>
+        <text x="578" y="121" class="ts mid" style="fill:var(--ink)">抽樣 ★</text>
+        <text x="578" y="84" class="ts mid">溫度・加權隨機</text>
+        <text x="626" y="40" class="ts end" style="fill:var(--c-rand)">★ 全流程唯一的隨機性</text>
+
+        <path d="M578 140 V162" class="wire-rand" marker-end="url(#ar-rand)"/>
+        <text x="578" y="196" class="mid" style="font:600 22px var(--mono);fill:var(--c-now)">m</text>
+        <path d="M578 208 V382 H20 V150" class="wire dash" marker-end="url(#ar-grey)"/>
+        <text x="300" y="374" class="td mid">抽到的字母回頭當下一輪的輸入（自迴歸）</text>
+
+        <path d="M327 166 V264" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <text x="319" y="212" class="ts end" style="fill:var(--c-kv)">每輪 append</text>
+        <path d="M371 264 V168" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+        <text x="379" y="212" class="ts" style="fill:var(--c-kv)">讀回全部</text>
+        <rect x="279" y="268" width="140" height="62" class="tint-kv" rx="10"/>
+        <rect x="285" y="274" width="128" height="50" fill="none" stroke="var(--c-kv)" stroke-width="1.2" rx="7"/>
+        <text x="349" y="296" class="ts mid" style="fill:var(--c-kv);font-weight:600">KV cache</text>
+        <text x="349" y="316" class="ts mid">過去每個字母的 k, v</text>
+        <text x="349" y="350" class="td mid">跨輪留下來的狀態，不是流過去的資料</text>
+
+        <text x="0" y="498" class="td">形狀</text>
+        <text x="64" y="498" class="ts mid">字母</text>
+        <path d="M84 493 H94" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="100" y="478" width="50" height="30" class="box" rx="6"/>
+        <text x="125" y="498" class="tn mid">整數</text>
+        <path d="M152 493 H164" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="170" y="478" width="46" height="30" class="tint-bus" rx="6"/>
+        <text x="193" y="498" class="tn mid" style="fill:var(--ink)">16</text>
+        <path d="M218 493 H230" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="234" y="478" width="46" height="30" class="tint-bus" rx="6"/>
+        <text x="257" y="498" class="tn mid" style="fill:var(--ink)">16</text>
+        <path d="M282 493 H294" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="298" y="478" width="46" height="30" class="tint-bus" rx="6"/>
+        <text x="321" y="498" class="tn mid" style="fill:var(--ink)">16</text>
+        <path d="M346 493 H358" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="362" y="478" width="46" height="30" class="box" rx="6"/>
+        <text x="385" y="498" class="tn mid">27</text>
+        <path d="M410 493 H422" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="428" y="498" class="ts">1 個字母</text>
+        <path d="M170 522 H344" stroke="var(--c-bus)" stroke-width="1.5" fill="none"/>
+        <text x="257" y="543" class="ts mid" style="fill:var(--c-bus)">中間全程都是 16 維</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・推論迴圈</span><span>整條流水線就這 11 行</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="194:bus,195-196:rand">
+189	for sample_idx in range(20):   # ★ sample_idx：第幾個名字
+190	    keys, values = [[] for _ in range(n_layer)],
+	↪         [[] for _ in range(n_layer)]
+	# ★ keys、values：KV cache 本體——只進不出（圖 9 主場）
+191	    token_id = BOS   # ★ token_id：現在手上這個字母的編號
+192	    sample = []   # ★ sample：已經生出來的字母們
+193	    for pos_id in range(block_size):
+194	        logits = gpt(token_id, pos_id, keys, values)
+	# ★ gpt：整個模型＝一個函數；logits：27 個分數
+195	        probs = softmax([l / temperature for l in logits])
+	# ★ probs：27 個機率；temperature 圖 8 主場，先不停留
+196	        token_id = random.choices(range(vocab_size),
+	↪             weights=[p.data for p in probs])[0]
+197	        if token_id == BOS:
+198	            break
+199	        sample.append(uchars[token_id])
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 1・全景地圖</span>
+    <ul>
+      <li>回收預 1：預 1 看的是 x 的<b>內在履歷</b>，這一張是<b>工廠的外觀</b>——五站流水線。</li>
+      <li>中間<b>全程 16 維不變</b>：不是「越算越大」，而是同一個 16 維向量被反覆修改。</li>
+      <li><b>①④是一對鏡像</b>：wte 是 id→向量，lm_head 是向量→分數。整個模型 = 把字變成向量 → 在向量空間想事情 → 把向量變回字。</li>
+      <li><b>⑤是全流程唯一有隨機性的地方</b>，前面全是確定性的乘加。同一個模型每次跑出不同名字，原因只在這一格。</li>
+      <li>雙線框的 KV cache 是<b>跨輪留下來的狀態</b>（紫色），不是流過去的資料。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 4 圖2 Tokenizer ═══════════ -->
+<section class="slide std" data-station="1">
+  <header>
+    <h1><span class="figno">圖 2</span>Tokenizer — 這裡沒有魔法</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="ts">訓練資料裡出現過的所有字元，排序後編號：</text>
+        <rect x="0" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="23" y="65" class="tn mid" style="fill:var(--ink)">a</text>
+        <text x="23" y="81" class="td mid">0</text>
+        <rect x="54" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="77" y="65" class="tn mid" style="fill:var(--ink)">b</text>
+        <text x="77" y="81" class="td mid">1</text>
+        <rect x="108" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="131" y="65" class="tn mid" style="fill:var(--ink)">c</text>
+        <text x="131" y="81" class="td mid">2</text>
+        <rect x="162" y="46" width="46" height="42" class="tint-now" rx="6"/>
+        <text x="185" y="65" class="tn mid" style="fill:var(--ink)">e</text>
+        <text x="185" y="81" class="td mid" style="fill:var(--c-now)">4</text>
+        <text x="232" y="72" class="ts">⋯</text>
+        <rect x="262" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="285" y="65" class="tn mid" style="fill:var(--ink)">z</text>
+        <text x="285" y="81" class="td mid">25</text>
+        <text x="322" y="72" class="ts">＋</text>
+        <rect x="348" y="46" width="66" height="42" class="box" rx="6"/>
+        <text x="381" y="65" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <text x="381" y="81" class="td mid">26</text>
+        <text x="436" y="60" class="ts">→ vocab = 27</text>
+        <text x="436" y="80" class="td">26 個字母＋1 個特殊符號</text>
+
+        <text x="0" y="150" style="font:600 19px var(--mono);fill:var(--ink)">emma</text>
+        <path d="M76 144 H100" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="112" y="150" style="font:19px var(--mono);fill:var(--ink2)">[ 4, 12, 12, 0 ]</text>
+        <text x="0" y="180" class="td">一個字母一個 token——沒有 BPE、沒有 subword</text>
+
+        <text x="0" y="238" class="ts">加上開頭與結尾——同一個符號：</text>
+        <rect x="0" y="258" width="76" height="58" class="tint-now" rx="8"/>
+        <text x="38" y="283" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <text x="38" y="303" class="td mid" style="fill:var(--c-now)">26</text>
+        <rect x="88" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="126" y="283" class="tn mid" style="fill:var(--ink)">e</text>
+        <text x="126" y="303" class="td mid">4</text>
+        <rect x="176" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="214" y="283" class="tn mid" style="fill:var(--ink)">m</text>
+        <text x="214" y="303" class="td mid">12</text>
+        <rect x="264" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="302" y="283" class="tn mid" style="fill:var(--ink)">m</text>
+        <text x="302" y="303" class="td mid">12</text>
+        <rect x="352" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="390" y="283" class="tn mid" style="fill:var(--ink)">a</text>
+        <text x="390" y="303" class="td mid">0</text>
+        <rect x="440" y="258" width="76" height="58" class="tint-now" rx="8"/>
+        <text x="478" y="283" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <text x="478" y="303" class="td mid" style="fill:var(--c-now)">26</text>
+        <text x="38" y="340" class="ts mid" style="fill:var(--c-now)">▲</text>
+        <text x="38" y="362" class="ts mid">「開始了」</text>
+        <text x="478" y="340" class="ts mid" style="fill:var(--c-now)">▲</text>
+        <text x="478" y="362" class="ts mid">「結束了」</text>
+
+        <rect x="0" y="420" width="580" height="86" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="420" width="4" height="86" class="f-rand"/>
+        <text x="26" y="454" class="t" style="font-weight:600">「模型怎麼知道要停？」</text>
+        <text x="26" y="484" class="ts">停止也是一個它要學會預測的 token——生成時抽到 BOS 就停手。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・Tokenizer</span><span>就是 sorted(set(…)) 一行</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="25:now">
+24	uchars = sorted(set(''.join(docs))) # unique characters …
+	# ★ uchars：字元排序表；docs：全部 32,033 個名字
+25	BOS = len(uchars) # token id for a special Beginning …
+	# ★ BOS：開頭兼結尾的特殊符號＝26（vocab_size＝27 的由來）
+26	vocab_size = len(uchars) + 1 # total number of unique …
+</pre>
+<div class="codesep"><b>訓練時</b>・BOS 首尾包夾</div>
+<pre class="py">
+157	tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]
+	# ★ tokens：一筆名字變成的編號串 [26, 4, 12, 12, 0, 26]
+</pre>
+<div class="codesep"><b>生成時</b>・抽到 BOS 就停</div>
+<pre class="py" data-hl="197-198:rand">
+196	token_id = random.choices(range(vocab_size),
+	↪     weights=[p.data for p in probs])[0]
+197	if token_id == BOS:
+198	    break
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 2・Tokenizer</span>
+    <ul>
+      <li>一個字母一個 token，沒有 BPE、沒有 subword——就是 <b>sorted(set(...)) 一行</b>。</li>
+      <li>BOS 同時當開頭和結尾；生成時抽到它就停手。</li>
+      <li><b>「模型怎麼知道要停？」的答案：停止也是一個它要學會預測的 token。</b></li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 5 圖3 Embedding ═══════════ -->
+<section class="slide std" data-station="2">
+  <header>
+    <h1><span class="figno">圖 3</span>Embedding — 從符號進入語意空間</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="160" y="28" class="t mid">token id = 4（「e」）</text>
+        <text x="446" y="28" class="t mid">位置 pos = 1</text>
+        <rect x="60" y="44" width="200" height="120" class="tint-bus" rx="10"/>
+        <line x1="60" y1="68" x2="260" y2="68" stroke="rgba(57,135,229,.35)"/>
+        <line x1="60" y1="92" x2="260" y2="92" stroke="rgba(57,135,229,.35)"/>
+        <line x1="60" y1="140" x2="260" y2="140" stroke="rgba(57,135,229,.35)"/>
+        <text x="160" y="61" class="td mid">wte（27 × 16）</text>
+        <rect x="63" y="95" width="194" height="21" class="tint-now" rx="4"/>
+        <text x="160" y="110" class="td mid" style="fill:var(--ink)">第 4 列＝「e」的向量</text>
+        <text x="160" y="133" class="td mid">⋮</text>
+        <rect x="346" y="44" width="200" height="120" class="tint-bus" rx="10"/>
+        <line x1="346" y1="68" x2="546" y2="68" stroke="rgba(57,135,229,.35)"/>
+        <line x1="346" y1="92" x2="546" y2="92" stroke="rgba(57,135,229,.35)"/>
+        <line x1="346" y1="140" x2="546" y2="140" stroke="rgba(57,135,229,.35)"/>
+        <text x="446" y="61" class="td mid">wpe（16 × 16）</text>
+        <rect x="349" y="71" width="194" height="21" class="tint-now" rx="4"/>
+        <text x="446" y="86" class="td mid" style="fill:var(--ink)">第 1 列＝位置 1 的向量</text>
+        <text x="446" y="133" class="td mid">⋮</text>
+        <text x="160" y="188" class="tn mid">[ 16 個數字 ]</text>
+        <text x="446" y="188" class="tn mid">[ 16 個數字 ]</text>
+        <path d="M160 196 V226 H281" class="wire-bus"/>
+        <path d="M446 196 V226 H325" class="wire-bus"/>
+        <circle cx="303" cy="226" r="17" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
+        <text x="303" y="233" class="mid" style="font-size:19px;fill:var(--c-bus)">＋</text>
+        <text x="336" y="231" class="ts">相加</text>
+        <path d="M303 243 V272" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="243" y="276" width="120" height="38" class="box"/>
+        <text x="303" y="300" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <text x="376" y="300" class="td">← 把長度標準化</text>
+        <path d="M303 314 V344" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="153" y="348" width="300" height="46" class="tint-bus"/>
+        <text x="303" y="371" class="t mid">進入主幹（16 維）</text>
+        <text x="303" y="388" class="td mid" style="font-family:var(--mono)">residual stream</text>
+
+        <rect x="0" y="446" width="580" height="94" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="446" width="4" height="94" class="f-bus"/>
+        <text x="26" y="480" class="t" style="font-weight:600">這裡是「符號」變成「意義」的轉折點</text>
+        <text x="26" y="512" class="ts">wpe 是模型唯一知道「我在第幾格」的管道——拿掉它，emma 和 amme 完全相同。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・gpt() 的第一站</span><span>兩次查表＋一次相加</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="109-111:bus">
+108	def gpt(token_id, pos_id, keys, values):
+109	    tok_emb = state_dict['wte'][token_id] # token embedding
+110	    pos_emb = state_dict['wpe'][pos_id] # position embedding
+	# 預 2 見過的兩張便利貼——這是它們的出生地
+111	    x = [t + p for t, p in zip(tok_emb, pos_emb)] # joint …
+	# 第 1 招，正式上場
+112	    x = rmsnorm(x) # note: not redundant due to backward …
+	# 預 4 的音控台正式上工（旁路沒過音控，這裡不多餘）
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 3・Embedding</span>
+    <ul>
+      <li>這是「符號」變成「意義」的轉折點（109–112）——也是<b>預 2 第 1 招第一次正式上場</b>（L111 那個「＋」）。</li>
+      <li>rmsnorm（預 4 的音控台）全場上工三次：這裡、attention 作答前、MLP 作答前——永遠在「作答前」。旁路帶的是沒過音控的 x，所以這裡再過一次不多餘。</li>
+      <li>加上 wpe 是模型唯一知道「我在第幾個字母」的管道——拿掉它，<b>emma 和 amme 對模型完全相同</b>。</li>
+      <li>wpe 不是公式，<b>就是普通參數</b>：跟 wte 一樣進 state_dict、一樣被攤平進 params、訓練迴圈一視同仁地更新。「第 0 格」「第 3 格」的意思是模型自己從資料裡學出來的。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 6 圖3b context 上限 ═══════════ -->
+<section class="slide std" data-station="2">
+  <header>
+    <h1><span class="figno">圖 3b</span>context length 上限，就是這張表的列數</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="ts">wpe 是一張只有 block_size = 16 列的表：</text>
+        <rect x="40" y="46" width="340" height="272" class="tint-bus" rx="10"/>
+        <line x1="40" y1="86" x2="380" y2="86" stroke="rgba(57,135,229,.35)"/>
+        <line x1="40" y1="126" x2="380" y2="126" stroke="rgba(57,135,229,.35)"/>
+        <line x1="40" y1="278" x2="380" y2="278" stroke="rgba(57,135,229,.35)"/>
+        <text x="100" y="71" class="tn end">pos 0</text>
+        <text x="240" y="71" class="td mid">[ 16 個數字 ]</text>
+        <text x="100" y="111" class="tn end">pos 1</text>
+        <text x="240" y="111" class="td mid">[ 16 個數字 ]</text>
+        <text x="240" y="210" class="ts mid">⋮</text>
+        <text x="100" y="303" class="tn end">pos 15</text>
+        <text x="240" y="303" class="td mid">[ 16 個數字 ]</text>
+        <text x="400" y="76" class="ts">block_size = 16</text>
+        <text x="400" y="98" class="td">（最長的名字＝15 個字母）</text>
+        <rect x="40" y="336" width="340" height="40" rx="8" fill="rgba(230,103,103,.07)" stroke="var(--c-rand)" stroke-dasharray="6 4" stroke-width="1.6"/>
+        <text x="100" y="361" class="tn end" style="fill:var(--c-rand)">pos 16</text>
+        <text x="240" y="361" class="ts mid" style="fill:var(--c-rand)">✗ 沒有這一列</text>
+        <text x="400" y="354" class="ts" style="fill:var(--c-rand)">查不到 → 直接 crash</text>
+        <text x="400" y="374" class="td">不是效果變差，是物理上不存在</text>
+
+        <text x="0" y="428" class="ts">位置資訊的三種來法：</text>
+        <rect x="0" y="444" width="190" height="104" class="tint-bus" rx="10"/>
+        <text x="16" y="472" class="t" style="font-weight:600">學出來的</text>
+        <text x="16" y="496" class="ts">就是普通參數</text>
+        <text x="16" y="530" class="td">GPT-2・本專案</text>
+        <rect x="205" y="444" width="190" height="104" class="box" rx="10"/>
+        <text x="221" y="472" class="t" style="font-weight:600">正弦函數</text>
+        <text x="221" y="496" class="ts">寫死 sin/cos，不訓練</text>
+        <text x="221" y="530" class="td">原始 Transformer 論文</text>
+        <rect x="410" y="444" width="190" height="104" class="box" rx="10"/>
+        <text x="426" y="472" class="t" style="font-weight:600">RoPE</text>
+        <text x="426" y="496" class="ts">把 q/k 旋轉一個角度</text>
+        <text x="426" y="530" class="td">Llama・現代模型</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py</span><span>「context 128K」的真面目</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="77:now">
+77	block_size = 16 # maximum context length
+	↪ of the attention window
+	↪ (note: the longest name is 15 characters)
+</pre>
+<div class="codesep"><b>表就這麼大</b>・16 列，一列一個位置</div>
+<pre class="py" data-hl="81:bus">
+81	state_dict = {'wte': matrix(vocab_size, n_embd),
+	↪ 'wpe': matrix(block_size, n_embd),
+	↪ 'lm_head': matrix(vocab_size, n_embd)}
+	# wpe 就只有 block_size＝16 列
+</pre>
+<div class="codesep"><b>用的時候就是查表</b>・pos_id 超過 15 直接 IndexError</div>
+<pre class="py">
+110	    pos_emb = state_dict['wpe'][pos_id] # position …
+	# pos_id 超過 15 → 這一行直接 IndexError
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 3b・context 上限</span>
+    <ul>
+      <li>block_size 取訓練資料裡最長的名字（15 個字母）。第 17 個位置<b>不是效果變差，是物理上不存在</b>。</li>
+      <li>收尾：「你聽過『這個模型 context 是 128K』——在最小的模型裡，那件事就長這樣：<b>一張只有 16 列的表</b>。」</li>
+      <li>現代模型改用 RoPE，正是因為旋轉角度可以外推到訓練時沒看過的長度。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 7 圖4 一橫一縱 ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4</span>Transformer Block — 一橫一縱</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="300" y="24" class="tn mid">這一格的 x（16 維）</text>
+        <path d="M300 34 V64" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="90" y="68" width="420" height="118" class="tint-attn"/>
+        <text x="300" y="100" class="mid" style="font-size:17px;font-weight:650;fill:var(--c-attn)">Attention　——　橫向</text>
+        <text x="300" y="130" class="t mid">「我需要前面哪些資訊？」</text>
+        <text x="300" y="160" class="ts mid">整個模型唯一能跨 token 交換資訊的地方</text>
+        <path d="M300 186 V224" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="316" y="210" class="td">現在 x 裡面混進了前面 token 的意義</text>
+        <rect x="90" y="228" width="420" height="118" class="tint-mlp"/>
+        <text x="300" y="260" class="mid" style="font-size:17px;font-weight:650;fill:var(--c-mlp)">MLP　——　縱向</text>
+        <text x="300" y="290" class="t mid">「有了這些資訊，我懂了什麼？」</text>
+        <text x="300" y="320" class="ts mid">一個人關起門來想，完全不看別的 token</text>
+        <path d="M300 346 V376" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="300" y="400" class="tn mid">更新後的 x（16 維）</text>
+
+        <text x="300" y="452" class="t mid" style="font-weight:600">兩個動作交替，就是整個 Transformer 的骨架</text>
+        <rect x="60" y="472" width="225" height="72" class="tint-attn" rx="12"/>
+        <text x="172" y="502" class="mid" style="font-size:19px;font-weight:650;fill:var(--c-attn)">搬運</text>
+        <text x="172" y="528" class="ts mid">Attention＝去哪裡拿資訊</text>
+        <rect x="320" y="472" width="225" height="72" class="tint-mlp" rx="12"/>
+        <text x="432" y="502" class="mid" style="font-size:19px;font-weight:650;fill:var(--c-mlp)">加工</text>
+        <text x="432" y="528" class="ts mid">MLP＝拿到之後要想什麼</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・一個 Block 的全部</span><span>119–132 見圖 4a–4c</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="115-133:attn,134:bus,135-140:mlp,141:bus">
+114	for li in range(n_layer):
+115	    # 1) Multi-head Attention block
+116	    x_residual = x
+117	    x = rmsnorm(x)
+118	    q = linear(x, state_dict[f'layer{li}.attn_wq'])
+	# q？——下一節 4a-0 專門介紹，先看結構
+⋯
+133	    x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])
+	# ★ x_attn：四個 head 的輸出接起來（16 維，拼法圖 4c）
+134	    x = [a + b for a, b in zip(x, x_residual)]
+135	    # 2) MLP block
+136	    x_residual = x
+137	    x = rmsnorm(x)
+138	    x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139	    x = [xi.relu() for xi in x]
+140	    x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+141	    x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4・一橫一縱</span>
+    <ul>
+      <li><b>「一橫一縱」就是整個 Transformer 的骨架</b>：Attention 負責搬運、MLP 負責加工，兩者交替就是全部。（這句話在圖 6 會再出現，那時它會有更深的意思。）</li>
+      <li><b>只有 Attention 會跨 token</b>——把它拿掉，模型退化成「每個字母各自獨立預測」，完全不知道前面出現過什麼。</li>
+      <li><b>MLP 的橫向是斷開的</b>：138–140 那三行只吃 x 這一個向量，手上根本沒有其他位置的資料。這是程式碼裡看得到的事實。</li>
+      <li>箭頭只從左邊來（causal）：任務是「猜下一個」，看得到答案就是作弊。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 8 圖4 攤開 ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4</span>把位置攤開看 — 正在算第 4 格</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="26" style="font-size:15px;font-weight:650;fill:var(--c-attn)">橫向</text>
+        <text x="44" y="26" class="ts">前面三格早就算完了，只有最右邊這格在算</text>
+        <text x="80" y="66" class="mid" style="font:16px var(--mono);fill:var(--ink2)">BOS</text>
+        <text x="220" y="66" class="mid" style="font:16px var(--mono);fill:var(--ink2)">e</text>
+        <text x="360" y="66" class="mid" style="font:16px var(--mono);fill:var(--ink2)">m</text>
+        <rect x="468" y="44" width="64" height="30" class="tint-now" rx="6"/>
+        <text x="500" y="65" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">m</text>
+        <text x="565" y="58" class="td">◀ 現在只算</text>
+        <text x="565" y="74" class="td">　這一格</text>
+        <text x="80" y="102" class="ts mid" style="fill:var(--c-kv)">k,v</text>
+        <text x="220" y="102" class="ts mid" style="fill:var(--c-kv)">k,v</text>
+        <text x="360" y="102" class="ts mid" style="fill:var(--c-kv)">k,v</text>
+        <text x="500" y="102" class="ts mid" style="fill:var(--c-now)">q,k,v</text>
+        <path d="M80 112 V160" class="wire-kv"/>
+        <path d="M220 112 V160" class="wire-kv"/>
+        <path d="M360 112 V160" class="wire-kv"/>
+        <path d="M80 160 H486" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <path d="M500 112 V148" class="wire-now"/>
+        <circle cx="500" cy="160" r="6" class="f-now"/>
+        <text x="80" y="200" class="ts">前三格的 k,v <tspan fill="var(--c-kv)">直接沿用</tspan>（不重算 → 圖 9）</text>
+        <text x="500" y="200" class="ts mid">把前面每一格的意義</text>
+        <text x="500" y="220" class="ts mid">按比例拌進「我」自己</text>
+
+        <line x1="0" y1="258" x2="641" y2="258" class="axis"/>
+
+        <text x="0" y="296" style="font-size:15px;font-weight:650;fill:var(--c-mlp)">縱向</text>
+        <text x="44" y="296" class="ts">拌完之後——注意只剩一根箭頭</text>
+        <text x="80" y="336" class="mid" style="font:16px var(--mono);fill:var(--ink3)">BOS</text>
+        <text x="220" y="336" class="mid" style="font:16px var(--mono);fill:var(--ink3)">e</text>
+        <text x="360" y="336" class="mid" style="font:16px var(--mono);fill:var(--ink3)">m</text>
+        <text x="500" y="336" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">m</text>
+        <text x="80" y="380" class="ts mid" style="fill:var(--ink3)">・</text>
+        <text x="220" y="380" class="ts mid" style="fill:var(--ink3)">・</text>
+        <text x="360" y="380" class="ts mid" style="fill:var(--ink3)">・</text>
+        <text x="190" y="416" class="td">← 前三格這一輪完全沒動</text>
+        <path d="M500 346 V386" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <rect x="450" y="390" width="100" height="44" class="tint-mlp"/>
+        <text x="500" y="417" class="ts mid" style="fill:var(--ink);font-weight:600">MLP</text>
+        <path d="M500 434 V474" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <text x="500" y="498" class="tn mid">更新後的 x（16）</text>
+        <text x="320" y="544" class="ts mid">MLP 只吃自己這一個 16 維向量——手上根本沒有別格的資料</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py</span><span>橫的讀全部・縱的只吃自己</span></div>
+        <div class="codebody">
+<div class="codesep"><b>橫向</b>・讀回過去每一格的 k, v</div>
+<pre class="py" data-hl="121-122:kv,129-131:attn">
+121	keys[li].append(k)
+122	values[li].append(v)
+⋯
+129	attn_logits = [sum(q_h[j] * k_h[t][j]
+	↪     for j in range(head_dim)) / head_dim**0.5
+	↪     for t in range(len(k_h))]
+130	attn_weights = softmax(attn_logits)
+131	head_out = [sum(attn_weights[t] * v_h[t][j]
+	↪     for t in range(len(v_h)))
+	↪     for j in range(head_dim)]
+</pre>
+<div class="codesep"><b>縱向</b>・手上只有 x 這一個向量</div>
+<pre class="py" data-hl="138-140:mlp">
+138	x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139	x = [xi.relu() for xi in x]
+140	x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4・攤開</span>
+    <ul>
+      <li><b>一輪只有一格在算。</b>橫向那張站著四個 token，但真正在運算的只有最右邊那格；前三格貢獻的是「算過就冰起來」的 k,v。（這裡先埋，圖 9 收。）</li>
+      <li>重點不是「自己融合自己」，而是<b>這一格把前面每個 token 的意義按比例拌進來</b>。</li>
+      <li>小字但誠實：上面畫的是推論時的樣子。訓練時整個名字一次餵進去、每格各走一遍 MLP——但各格之間仍然完全不交談。</li>
+      <li>接下來三張圖，都在拆 Attention 方框裡到底發生了什麼。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 圖4a-0 QKV 前置 ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4a-0</span>先認識 q、k、v — 同一個 x 的三種角度</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <rect x="140" y="10" width="360" height="36" class="tint-bus" rx="8"/>
+        <text x="320" y="33" class="ts mid" style="fill:var(--ink)">rmsnorm 後的 x＝這一格「m」此刻的理解</text>
+        <path d="M320 46 L146 84" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 46 V84" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 46 L494 84" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="504" y="66" class="td">三份不同的 16 題問卷</text>
+        <text x="504" y="82" class="td">（第 2 招連用三次）</text>
+        <rect x="106" y="88" width="80" height="30" class="box" rx="6"/>
+        <text x="146" y="108" class="tn mid" style="fill:var(--ink)">× Wq</text>
+        <rect x="280" y="88" width="80" height="30" class="box" rx="6"/>
+        <text x="320" y="108" class="tn mid" style="fill:var(--ink)">× Wk</text>
+        <rect x="454" y="88" width="80" height="30" class="box" rx="6"/>
+        <text x="494" y="108" class="tn mid" style="fill:var(--ink)">× Wv</text>
+        <path d="M146 118 V138" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M320 118 V138" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M494 118 V138" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="61" y="142" width="170" height="84" class="tint-attn" rx="10"/>
+        <text x="146" y="168" style="font:600 14px var(--mono);fill:var(--ink)" text-anchor="middle">q（16）</text>
+        <text x="146" y="192" class="ts mid">「我想找什麼」</text>
+        <text x="146" y="212" class="td mid">搜尋詞・用完即丟</text>
+        <rect x="235" y="142" width="170" height="84" class="tint-attn" rx="10"/>
+        <text x="320" y="168" style="font:600 14px var(--mono);fill:var(--ink)" text-anchor="middle">k（16）</text>
+        <text x="320" y="192" class="ts mid">「我是什麼」</text>
+        <text x="320" y="212" class="td mid">書背標題</text>
+        <rect x="409" y="142" width="170" height="84" class="tint-attn" rx="10"/>
+        <text x="494" y="168" style="font:600 14px var(--mono);fill:var(--ink)" text-anchor="middle">v（16）</text>
+        <text x="494" y="192" class="ts mid">「找到我，我給你什麼」</text>
+        <text x="494" y="212" class="td mid">書的內容</text>
+        <path d="M320 226 V246" class="wire-kv"/>
+        <path d="M494 226 V246" class="wire-kv"/>
+        <path d="M320 246 H406" class="wire-kv"/>
+        <path d="M494 246 H420" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <rect x="250" y="252" width="330" height="34" class="tint-kv" rx="8"/>
+        <text x="415" y="274" class="ts mid" style="fill:var(--c-kv)">k、v 存進 KV cache——前文每一格都留過一份</text>
+        <text x="146" y="252" class="td mid">之後各切 4 段</text>
+        <text x="146" y="268" class="td mid">每個 head 拿 4 個（圖 4c）</text>
+
+        <text x="0" y="322" class="ts">一個 head 的七步，每一步只為了一個效果（<tspan fill="var(--ink)">數字下一張才登場</tspan>）：</text>
+        <line x1="0" y1="336" x2="620" y2="336" class="axis"/>
+        <text x="8" y="358" class="tn" style="font-size:12.5px">rmsnorm</text>
+        <text x="150" y="358" class="td">16 → 16</text>
+        <text x="280" y="358" class="ts" style="font-size:12.5px">先把音量歸一，別讓誰壓過誰</text>
+        <line x1="0" y1="366" x2="620" y2="366" class="axis" opacity=".4"/>
+        <text x="8" y="388" class="tn" style="font-size:12.5px">× Wq／Wk／Wv</text>
+        <text x="150" y="388" class="td">16 → 16（切 4）</text>
+        <text x="280" y="388" class="ts" style="font-size:12.5px">抽出搜尋詞／掛書背標題／備好內容（上圖）</text>
+        <line x1="0" y1="396" x2="620" y2="396" class="axis" opacity=".4"/>
+        <text x="8" y="418" class="tn" style="font-size:12.5px">q·k 內積</text>
+        <text x="150" y="418" class="td">每格前文 1 分</text>
+        <text x="280" y="418" class="ts" style="font-size:12.5px">我跟每一格前文有多對頻</text>
+        <line x1="0" y1="426" x2="620" y2="426" class="axis" opacity=".4"/>
+        <text x="8" y="448" class="tn" style="font-size:12.5px">softmax</text>
+        <text x="150" y="448" class="td">分數 → 比例</text>
+        <text x="280" y="448" class="ts" style="font-size:12.5px">擠成加總＝1 的注意力（第 3 招）</text>
+        <line x1="0" y1="456" x2="620" y2="456" class="axis" opacity=".4"/>
+        <text x="8" y="478" class="tn" style="font-size:12.5px">Σ wₜ·vₜ</text>
+        <text x="150" y="478" class="td">比例 × v → 4</text>
+        <text x="280" y="478" class="ts" style="font-size:12.5px">按比例把前文內容拌回「我」</text>
+        <line x1="0" y1="488" x2="620" y2="488" class="axis"/>
+        <text x="0" y="520" class="td">（x 的來歷：wte＋wpe＋前文——預 1／圖 3 講過，這裡不重來）</text>
+        <text x="0" y="546" class="ts" style="fill:var(--c-rand)">★ 左表第 3 步就是「魔王句」——右欄先拆好，圖 4a 一格一格走</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・三張紙條</span><span>兌現預 5 的承諾</span></div>
+        <div class="codebody">
+<div class="codesep"><b>三張紙條</b>・都是同一個 x 自己算出來的</div>
+<pre class="py" data-hl="118-120:attn">
+118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
+	# ★ q／k／v：搜尋詞／書背標題／書的內容
+</pre>
+<div class="codesep"><b>魔王句，先拆好</b>・對過去每格 t：q 跟它的 k 內積，再 ÷√4</div>
+<pre class="py" data-hl="129:attn">
+129	attn_logits = [sum(q_h[j] * k_h[t][j]
+	↪     for j in range(head_dim)) / head_dim**0.5
+	↪     for t in range(len(k_h))]
+	# ★ q_h、k_h：q、k 切給這個 head 的 4 維——魔王句本尊
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4a-0・q/k/v 前置（零數字）</span>
+    <ul>
+      <li>三張紙條都是<b>同一個 x 自己算出來的</b>（L118-120），不是外面發的。</li>
+      <li>為什麼要三個角度、不拿 x 直接比 x？——「我在找的」跟「我是誰」通常不是同一件事：m 在找母音，但它自己是子音。三份問卷，各司其職。</li>
+      <li>k、v 是「留給後人查的」，q 是「當下用完就丟的」——這個不對稱，圖 9 的 KV cache 會收。</li>
+      <li>魔王句拆解＝兌現預 5 的承諾；圖 4a 馬上一格一格走，它不會咬人。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 9 圖4a 一個 head ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4a</span>一個 attention head，手算尺寸</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="20" class="td">已有「em」，正在決定第 3 個字母・第 0 層的 head 0・每個向量只有 4 個數字（16÷4）・示意值</text>
+        <rect x="230" y="34" width="180" height="40" class="tint-now"/>
+        <text x="320" y="59" class="tn mid" style="fill:var(--ink)">查詢「m」的 q＝[4 個數字]</text>
+        <path d="M320 74 L132 112" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 74 V112" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 74 L508 112" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="336" y="102" class="ts">內積・÷ √4＝2</text>
+        <rect x="55" y="116" width="150" height="38" class="box"/>
+        <text x="130" y="140" class="tn mid" style="fill:var(--ink)">k(BOS)</text>
+        <rect x="245" y="116" width="150" height="38" class="box"/>
+        <text x="320" y="140" class="tn mid" style="fill:var(--ink)">k(e)</text>
+        <rect x="435" y="116" width="150" height="38" class="box"/>
+        <text x="510" y="140" class="tn mid" style="fill:var(--ink)">k(m)</text>
+        <text x="8" y="188" class="td">logit</text>
+        <text x="130" y="188" class="mid" style="font:15px var(--mono);fill:var(--ink)">+2.7</text>
+        <text x="320" y="188" class="mid" style="font:15px var(--mono);fill:var(--ink)">+0.5</text>
+        <text x="510" y="188" class="mid" style="font:15px var(--mono);fill:var(--ink)">−1.2</text>
+        <rect x="55" y="204" width="530" height="34" class="tint-attn" rx="8"/>
+        <text x="320" y="226" class="ts mid" style="fill:var(--c-attn);font-weight:650">softmax —— 輸出加起來必須＝1</text>
+        <text x="130" y="266" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">w=0.85</text>
+        <text x="320" y="266" class="mid" style="font:15px var(--mono);fill:var(--ink2)">w=0.13</text>
+        <text x="510" y="266" class="mid" style="font:15px var(--mono);fill:var(--ink2)">w=0.02</text>
+        <rect x="75" y="276" width="94" height="13" rx="2.5" class="bar"/>
+        <rect x="265" y="276" width="14" height="13" rx="2.5" class="bar"/>
+        <rect x="455" y="276" width="3" height="13" rx="1.5" class="bar"/>
+        <text x="8" y="322" class="td">拿多少</text>
+        <rect x="55" y="306" width="150" height="36" class="box"/>
+        <text x="130" y="329" class="tn mid" style="fill:var(--ink)">v(BOS)</text>
+        <rect x="245" y="306" width="150" height="36" class="box"/>
+        <text x="320" y="329" class="tn mid" style="fill:var(--ink)">v(e)</text>
+        <rect x="435" y="306" width="150" height="36" class="box"/>
+        <text x="510" y="329" class="tn mid" style="fill:var(--ink)">v(m)</text>
+        <path d="M130 342 V372 H304" class="wire-attn"/>
+        <path d="M510 342 V372 H336" class="wire-attn"/>
+        <path d="M320 342 V366" class="wire-attn"/>
+        <text x="320" y="402" class="mid" style="font:15px var(--mono);fill:var(--ink)"><tspan fill="var(--c-attn)">0.85</tspan>·v(BOS) ＋ <tspan fill="var(--c-attn)">0.13</tspan>·v(e) ＋ <tspan fill="var(--c-attn)">0.02</tspan>·v(m)</text>
+        <path d="M320 412 V438" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="230" y="442" width="180" height="42" class="tint-attn"/>
+        <text x="320" y="468" class="tn mid" style="fill:var(--ink)">head_out（4 個數字）</text>
+        <text x="424" y="458" class="td">過去 3 個或 300 個字母，</text>
+        <text x="424" y="476" class="td">出來永遠是 4 個數字</text>
+        <text x="320" y="530" class="t mid" style="font-weight:650">序列長度，在這一步消失了</text>
+        <text x="320" y="552" class="td mid">（q 只有一個、k/v 有一串——這個不對稱是整張圖的骨架）</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・head 內部</span><span>三行核心</span></div>
+        <div class="codebody">
+<div class="codesep"><b>三張紙條</b>・都是同一個字母自己算出來的</div>
+<pre class="py" data-hl="118-120:attn">
+118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
+</pre>
+<div class="codesep"><b>整張圖</b>・內積 → softmax → 加權混合</div>
+<pre class="py" data-hl="129-131:attn">
+129	attn_logits = [sum(q_h[j] * k_h[t][j]
+	↪     for j in range(head_dim)) / head_dim**0.5
+	↪     for t in range(len(k_h))]
+	# ★ attn_logits：跟每一格前文的對頻分數
+130	attn_weights = softmax(attn_logits)
+	# ★ attn_weights：分好的注意力比例，加總＝1
+131	head_out = [sum(attn_weights[t] * v_h[t][j]
+	↪     for t in range(len(v_h)))
+	↪     for j in range(head_dim)]
+	# ★ head_out：按比例搬回來的 4 個數字
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4a・一個 head（核心）</span>
+    <ul>
+      <li><b>q 只有一個，k/v 有一串</b>——這個不對稱是整張圖的骨架（圖 9 收）。三張紙條是誰、從哪來，4a-0 剛講完——這裡直接看數字怎麼流。</li>
+      <li>÷√4 就是 ÷2：維度越高內積越大，除掉避免 softmax 太極端。</li>
+      <li><b>softmax 輸出加起來＝1</b>：「注意力」這名字就從這來——一組必須分完的比例，多看這裡就得少看那裡。</li>
+      <li>進去是 4 維的 q，過去有 3 個或 300 個字母，出來永遠 4 個數字——<b>序列長度在這裡消失了</b>。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 10 圖4b 四個 head ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4b</span>為什麼要切成四個 head</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="20" class="td">生成 emma 的第 4 個字母時（已有 e, m, m）・同一時刻、同一層，四個 head 各自跑一遍圖 4a・示意分佈</text>
+        <text x="210" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">BOS</text>
+        <text x="320" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">e</text>
+        <text x="430" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">m</text>
+        <rect x="512" y="38" width="56" height="28" class="tint-now" rx="6"/>
+        <text x="540" y="58" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">m</text>
+
+        <text x="0" y="112" style="font:600 14px var(--mono);fill:var(--ink)">head 0</text>
+        <text x="0" y="132" class="td">盯著剛剛那個字母</text>
+        <rect x="165" y="98" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="275" y="98" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="385" y="98" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="495" y="98" width="85" height="24" rx="3" class="bar"/>
+        <line x1="0" y1="152" x2="641" y2="152" class="axis" opacity=".5"/>
+
+        <text x="0" y="200" style="font:600 14px var(--mono);fill:var(--ink)">head 1</text>
+        <text x="0" y="220" class="td">盯著開頭——</text>
+        <text x="0" y="236" class="td">我在名字的哪裡？</text>
+        <rect x="165" y="186" width="78" height="24" rx="3" class="bar"/>
+        <rect x="275" y="186" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="385" y="186" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="495" y="186" width="6" height="24" rx="1.5" class="bar"/>
+        <line x1="0" y1="240" x2="641" y2="240" class="axis" opacity=".5"/>
+
+        <text x="0" y="288" style="font:600 14px var(--mono);fill:var(--ink)">head 2</text>
+        <text x="0" y="308" class="td">盯著第一個字母</text>
+        <rect x="165" y="274" width="6" height="24" rx="1.5" class="bar"/>
+        <rect x="275" y="274" width="76" height="24" rx="3" class="bar"/>
+        <rect x="385" y="274" width="4" height="24" rx="1.5" class="bar"/>
+        <rect x="495" y="274" width="4" height="24" rx="1.5" class="bar"/>
+        <line x1="0" y1="328" x2="641" y2="328" class="axis" opacity=".5"/>
+
+        <text x="0" y="376" style="font:600 14px var(--mono);fill:var(--ink)">head 3</text>
+        <text x="0" y="396" class="td">分散——整體長度感</text>
+        <rect x="165" y="362" width="25" height="24" rx="3" class="bar"/>
+        <rect x="275" y="362" width="20" height="24" rx="3" class="bar"/>
+        <rect x="385" y="362" width="23" height="24" rx="3" class="bar"/>
+        <rect x="495" y="362" width="22" height="24" rx="3" class="bar"/>
+
+        <text x="0" y="452" class="t" style="font-weight:600">切 head 完全免費——權重都還是 16×16，差別只在 softmax 套在哪</text>
+        <rect x="0" y="470" width="300" height="70" class="box" rx="10"/>
+        <text x="16" y="496" class="ts" style="fill:var(--ink);font-weight:600">單頭・16 維</text>
+        <text x="16" y="522" class="tn" style="font-size:12.5px">softmax(h₀＋h₁＋h₂＋h₃)　被迫共用</text>
+        <rect x="330" y="470" width="311" height="70" class="tint-attn" rx="10"/>
+        <text x="346" y="496" class="ts" style="fill:var(--ink);font-weight:600">四頭・各 4 維</text>
+        <text x="346" y="522" class="tn" style="font-size:12.5px">softmax(h₀)…softmax(h₃)　各看各的</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・multi-head</span><span>「切」就是一行切片</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="79:now">
+79	head_dim = n_embd // n_head # derived dimension …
+</pre>
+<div class="codesep"><b>沒有魔法</b>・把 16 個數字分成 4 組，各自跑圖 4a</div>
+<pre class="py" data-hl="124:attn,126-128:now,132:attn">
+124	for h in range(n_head):
+125	    hs = h * head_dim   # ★ hs：切片起點（0、4、8、12）
+126	    q_h = q[hs:hs+head_dim]
+127	    k_h = [ki[hs:hs+head_dim] for ki in keys[li]]
+128	    v_h = [vi[hs:hs+head_dim] for vi in values[li]]
+	# ki／vi：cache 裡每一格前文的 k、v
+⋯
+132	    x_attn.extend(head_out)
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4b・四個 head</span>
+    <ul>
+      <li><b>單頭做不到這件事</b>：16 個輸出維度被迫共用同一組注意力權重，只能「全看剛剛那個」或「全看開頭」，或糊成一團平均。</li>
+      <li>切 head <b>不花任何參數、不花任何計算量</b>；16 維內積在數學上恰好等於四段內積的和——差別 100% 來自 softmax 這個非線性套在哪裡。</li>
+      <li>代價：每個 head 只有 4 維，衡量「像不像」的解析度低很多。<b>取捨＝一個高解析度的問題 vs 四個低解析度的問題。</b></li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 11 圖4c 接線圖 ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4c</span>接線圖 — head 怎麼裝回 Block</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="240" y="24" class="tn mid">主幹 x（16）</text>
+        <path d="M240 34 H560 V482 H262" class="wire-bus" marker-end="url(#ar-bus)" opacity=".65"/>
+        <text x="330" y="28" class="td">原封不動繞過去</text>
+        <path d="M240 34 V64" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="190" y="68" width="100" height="32" class="box"/>
+        <text x="240" y="89" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <path d="M240 100 V112" class="wire-bus"/>
+        <path d="M100 112 H380" class="wire-bus"/>
+        <path d="M100 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <path d="M240 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <path d="M380 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="60" y="122" width="80" height="36" class="box"/>
+        <text x="100" y="145" class="tn mid" style="fill:var(--ink)">Wq</text>
+        <rect x="200" y="122" width="80" height="36" class="box"/>
+        <text x="240" y="145" class="tn mid" style="fill:var(--ink)">Wk</text>
+        <rect x="340" y="122" width="80" height="36" class="box"/>
+        <text x="380" y="145" class="tn mid" style="fill:var(--ink)">Wv</text>
+        <path d="M100 158 V186" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M240 158 V186" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M380 158 V186" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="112" y="178" class="td">q(16)</text>
+        <text x="252" y="178" class="td">k(16)</text>
+        <text x="392" y="178" class="td">v(16)</text>
+        <path d="M420 140 H464" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <text x="442" y="132" class="td mid" style="fill:var(--c-kv)">存入</text>
+        <rect x="470" y="112" width="126" height="58" class="tint-kv" rx="10"/>
+        <rect x="476" y="118" width="114" height="46" fill="none" stroke="var(--c-kv)" stroke-width="1.2" rx="7"/>
+        <text x="533" y="138" class="ts mid" style="fill:var(--c-kv);font-weight:600">KV cache</text>
+        <text x="533" y="156" class="td mid">k, v 的歷史</text>
+        <rect x="40" y="190" width="400" height="30" rx="8" fill="#1f1f1e" stroke="#6a6965" stroke-dasharray="5 4"/>
+        <text x="240" y="210" class="ts mid">切成 4 段、各 4 維——只是切片，沒有魔法</text>
+        <path d="M88 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M192 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M296 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M400 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="45" y="246" width="86" height="52" class="tint-attn"/>
+        <text x="88" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 0</text>
+        <text x="88" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
+        <rect x="149" y="246" width="86" height="52" class="tint-attn"/>
+        <text x="192" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 1</text>
+        <text x="192" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
+        <rect x="253" y="246" width="86" height="52" class="tint-attn"/>
+        <text x="296" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 2</text>
+        <text x="296" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
+        <rect x="357" y="246" width="86" height="52" class="tint-attn"/>
+        <text x="400" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 3</text>
+        <text x="400" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
+        <path d="M533 170 V272 H447" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+        <text x="541" y="230" class="td" style="fill:var(--c-kv)">讀</text>
+        <text x="244" y="320" class="td mid">四個 head 彼此完全不講話</text>
+        <path d="M88 298 V330" class="wire-attn"/>
+        <path d="M192 298 V330" class="wire-attn"/>
+        <path d="M296 298 V330" class="wire-attn"/>
+        <path d="M400 298 V330" class="wire-attn"/>
+        <rect x="45" y="334" width="398" height="30" class="box"/>
+        <text x="244" y="354" class="tn mid" style="fill:var(--ink)">4＋4＋4＋4 接起來＝16</text>
+        <path d="M244 364 V390" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="184" y="394" width="120" height="40" class="tint-attn"/>
+        <text x="244" y="419" class="tn mid" style="fill:var(--ink)">Wo</text>
+        <text x="316" y="418" class="ts" style="fill:var(--c-attn)">← 唯一讓四個 head 交流的地方</text>
+        <path d="M244 434 V464" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <circle cx="244" cy="482" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
+        <text x="244" y="489" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
+        <path d="M244 497 V524" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="244" y="548" class="ts mid">進入 MLP</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・attention 區塊全文</span><span>129–131 見圖 4a</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="116:bus,121-122:kv,126:now,133:attn,134:bus">
+116	x_residual = x
+117	x = rmsnorm(x)
+118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
+121	keys[li].append(k)   # 這一格的 k、v 存檔（圖 9 收）
+122	values[li].append(v)
+123	x_attn = []
+124	for h in range(n_head):
+125	    hs = h * head_dim
+126	    q_h = q[hs:hs+head_dim]   # 「切」就這一行
+⋯
+132	    x_attn.extend(head_out)
+133	x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])
+	# Wo：唯一讓四個 head 交流的地方
+134	x = [a + b for a, b in zip(x, x_residual)]
+	# 旁路在這裡 ⊕ 回來
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4c・接線</span>
+    <ul>
+      <li>上半部（x → Wq/Wk/Wv → 切片）<b>4a-0 都看過了</b>——這張圖只看下半：怎麼接回主幹（拼回 16 → Wo → ⊕）。</li>
+      <li>「切成 4 個 head」在程式裡就是 <b>q[hs:hs+head_dim] 一行切片</b>。很多教材把 multi-head 畫得很神祕，其實就是把 16 個數字分成 4 組。</li>
+      <li><b>Wo 是翻譯層</b>：head 寫在第 8 格的數字，跟主幹第 8 格的意義毫無關係——那只是切片的記帳方式。Wo 把「四個 head 各說各話」翻譯成主幹聽得懂的語言。</li>
+      <li>Wo 也是四個 head <b>第一次能被聯合判斷</b>的地方。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 12 圖5 MLP ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 5</span>MLP — 64 條 if-then 規則</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="260" y="22" class="tn mid">主幹 x（16）</text>
+        <path d="M260 32 H540 V480 H278" class="wire-bus" marker-end="url(#ar-bus)" opacity=".65"/>
+        <text x="350" y="26" class="td">原封不動繞過去</text>
+        <path d="M260 32 V58" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="210" y="62" width="100" height="32" class="box"/>
+        <text x="260" y="83" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <path d="M260 94 V120" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <polygon points="200,124 320,124 420,190 100,190" class="tint-mlp"/>
+        <text x="260" y="152" class="t mid" style="font-weight:600">fc1（16 → 64）</text>
+        <text x="260" y="176" class="ts mid">64 個「偵測器」</text>
+        <text x="436" y="148" class="td">每一列問一個問題：</text>
+        <text x="436" y="166" class="td">「你身上有沒有 X？」</text>
+        <rect x="100" y="200" width="320" height="32" class="box"/>
+        <text x="260" y="221" class="mid" style="font:13px var(--mono);fill:var(--ink2)">−1.2　+3.4　−0.8　+0.1　⋯</text>
+        <path d="M260 232 V256" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <rect x="100" y="260" width="320" height="34" class="tint-now"/>
+        <text x="260" y="282" class="t mid" style="font-weight:600">relu ── 門檻</text>
+        <text x="436" y="270" class="td">沒有 → 輸出 0（閉嘴）</text>
+        <text x="436" y="288" class="td">有　 → 按強度通過</text>
+        <rect x="100" y="308" width="320" height="32" class="box"/>
+        <text x="260" y="329" class="mid" style="font:13px var(--mono);fill:var(--ink2)"><tspan fill="#5c5b55">0</tspan>　　+3.4　　<tspan fill="#5c5b55">0</tspan>　　+0.1　⋯</text>
+        <path d="M260 340 V364" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <polygon points="100,368 420,368 320,434 200,434" class="tint-mlp"/>
+        <text x="260" y="396" class="t mid" style="font-weight:600">fc2（64 → 16）</text>
+        <text x="260" y="420" class="ts mid">64 條「回應」</text>
+        <text x="436" y="392" class="td">偵測到 X，就往主幹</text>
+        <text x="436" y="410" class="td">加上這個方向</text>
+        <path d="M260 434 V462" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <circle cx="260" cy="480" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
+        <text x="260" y="487" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
+        <path d="M260 495 V518" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="303" y="551" class="t mid" style="font-weight:600">拿掉 relu，兩個矩陣塌成一個 16×16——存在意義 100% 來自 relu</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・MLP</span><span>撐胖 → 篩選 → 壓瘦</span></div>
+        <div class="codebody">
+<div class="codesep"><b>relu 的全部</b>・微分不是 0 就是 1</div>
+<pre class="py" data-hl="50:now">
+50	def relu(self): return Value(max(0, self.data),
+	↪     (self,), (float(self.data > 0),))
+</pre>
+<div class="codesep"><b>撐胖 4 倍的兩張表</b>・64 要放得下夠多條規則</div>
+<pre class="py" data-hl="87-88:mlp">
+87	state_dict[f'layer{i}.mlp_fc1'] = matrix(4 * n_embd, n_embd)
+88	state_dict[f'layer{i}.mlp_fc2'] = matrix(n_embd, 4 * n_embd)
+	# fc1＝64 題的問卷；fc2＝64 條回應
+</pre>
+<div class="codesep"><b>MLP 區塊本體</b>・三行＋殘差</div>
+<pre class="py" data-hl="138:mlp,139:now,140:mlp,141:bus">
+136	x_residual = x
+137	x = rmsnorm(x)
+138	x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139	x = [xi.relu() for xi in x]
+140	x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+141	x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 5・MLP</span>
+    <ul>
+      <li>還記得預 3 的問卷嗎？<b>fc1 就是一份 64 題的問卷</b>——64 個偵測器，每一列問一題。</li>
+      <li><b>為什麼要先撐胖再壓瘦？</b>拿掉 relu，兩個矩陣相乘會塌成一個 16×16 矩陣，整段完全白做——這段的存在意義 100% 來自那個 relu（<b>預 4 欠的完整論證，在這裡還</b>）。</li>
+      <li>把 MLP 看成<b>查表式的記憶體</b>：64 條 if-then 規則平行檢查，觸發的加總起來寫回主幹。中間要夠寬，是因為要放得下夠多條規則。</li>
+      <li>以英文名字想像：某個神經元專門偵測「剛剛連續兩個子音」，一觸發就往主幹加上「接下來該是母音了」的方向。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 13 圖6 殘差 ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 6</span>殘差 — 整個模型其實是一個總和</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="320" y="34" class="ts mid">沒有任何一段「取代」主幹——全部都是往上疊加，它是一個總和</text>
+        <text x="320" y="60" class="td mid">每一段都可以棄權（輸出 ≈ 0 → 原封不動流過），所以層數多不會傷害模型</text>
+        <text x="24" y="98" class="tn">embedding</text>
+        <text x="600" y="98" class="tn end">lm_head</text>
+        <rect x="20" y="108" width="580" height="44" rx="8" fill="rgba(57,135,229,.10)" stroke="var(--c-bus)" stroke-width="2"/>
+        <line x1="26" y1="122" x2="594" y2="122" stroke="rgba(57,135,229,.22)"/>
+        <line x1="26" y1="130" x2="594" y2="130" stroke="rgba(57,135,229,.22)"/>
+        <line x1="26" y1="138" x2="594" y2="138" stroke="rgba(57,135,229,.22)"/>
+        <text x="34" y="135" class="ts" style="fill:var(--c-bus);font-weight:600">16 線道的匯流排</text>
+        <path d="M600 130 H616" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <path d="M160 152 V246" class="wire-attn"/>
+        <path d="M160 246 H164" class="wire-attn" marker-end="url(#ar-attn)" opacity="0"/>
+        <text x="148" y="205" class="ts end" style="fill:var(--c-attn)">讀</text>
+        <path d="M240 246 V158" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="252" y="205" class="ts" style="fill:var(--c-attn)">＋加回去</text>
+        <rect x="125" y="250" width="150" height="60" class="tint-attn"/>
+        <text x="200" y="276" class="tn mid" style="fill:var(--ink)">attn0</text>
+        <text x="200" y="298" class="ts mid">算修正量</text>
+        <path d="M400 152 V246" class="wire-mlp"/>
+        <text x="388" y="205" class="ts end" style="fill:var(--c-mlp)">讀</text>
+        <path d="M480 246 V158" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <text x="492" y="205" class="ts" style="fill:var(--c-mlp)">＋加回去</text>
+        <rect x="365" y="250" width="150" height="60" class="tint-mlp"/>
+        <text x="440" y="276" class="tn mid" style="fill:var(--ink)">mlp0</text>
+        <text x="440" y="298" class="ts mid">算修正量</text>
+        <text x="320" y="348" class="ts mid">每一段都是：讀匯流排 → 算修正量 → <tspan style="font-weight:650" fill="var(--ink)">加</tspan>回去，絕不覆蓋</text>
+
+        <rect x="20" y="380" width="600" height="146" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="40" y="412" class="ts">展開來看，餵給 lm_head 的向量<tspan fill="var(--ink)">字面上</tspan>就是：</text>
+        <text x="70" y="448" style="font:15px var(--mono);fill:var(--ink)">x_final ＝ <tspan fill="var(--c-bus)">嵌入（字母＋位置）</tspan></text>
+        <text x="70" y="478" style="font:15px var(--mono);fill:var(--ink)">　　　　＋ <tspan fill="var(--c-attn)">attention 的修正</tspan></text>
+        <text x="70" y="508" style="font:15px var(--mono);fill:var(--ink)">　　　　＋ <tspan fill="var(--c-mlp)">MLP 的修正</tspan></text>
+        <text x="320" y="552" class="td mid">想多層？就是在這條匯流排上再插兩個加號——架構一個字都不用改</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py</span><span>梯度的高速公路</span></div>
+        <div class="codebody">
+<div class="codesep"><b>加法的 local grad 是 (1, 1)</b>・反向傳播原封不動通過</div>
+<pre class="py" data-hl="41:now">
+39	def __add__(self, other):   # ★ other：另一個加數
+40	    other = other if isinstance(other, Value)
+	↪         else Value(other)
+41	    return Value(self.data + other.data,
+	↪         (self, other), (1, 1))
+	# (1, 1)＝加法對兩邊的微分——反向傳播原封不動通過
+</pre>
+<div class="codesep"><b>整個 Block ＝掛在迴圈上的兩個加號</b></div>
+<pre class="py" data-hl="134:bus,141:bus">
+114	for li in range(n_layer):   # 多層＝多跑一圈、多兩個加號
+⋯
+134	    x = [a + b for a, b in zip(x, x_residual)]
+⋯
+141	    x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 6・殘差（最深刻的一張）</span>
+    <ul>
+      <li>它是一個<b>總和</b>，不是一連串變形。每一段都可以棄權——沒話說就輸出接近 0，主幹原封不動流過，所以層數多不會傷害模型。</li>
+      <li><b>梯度有一條高速公路</b>：__add__ 的 local grad 就是 (1, 1)，反向傳播經過殘差時原封不動。</li>
+      <li>為什麼要多層？把 n_layer 從 1 改成 2，就只是在匯流排上<b>再插兩個加號</b>，架構一個字都不用改。</li>
+      <li><b>全場最好用的一句話</b>：Attention 決定「去哪裡拿資訊」，MLP 決定「拿到之後要想什麼」，殘差確保「兩者都只是往共用主幹上添加，而不是覆蓋」。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 14 圖7 lm_head ═══════════ -->
+<section class="slide std" data-station="4">
+  <header>
+    <h1><span class="figno">圖 7</span>lm_head — 向量變回字母</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <rect x="178" y="14" width="250" height="40" class="tint-bus"/>
+        <text x="303" y="39" class="tn mid" style="fill:var(--ink)">最終的主幹向量 x（16 個數字）</text>
+        <path d="M303 54 V82" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="318" y="74" class="ts">跟 lm_head 的 27 列逐一內積</text>
+        <text x="300" y="106" class="td">logits（27 個分數，一個 token 一個）</text>
+        <rect x="60" y="114" width="170" height="34" class="box"/>
+        <text x="145" y="136" class="tn mid" style="fill:var(--ink)">看板「a」</text>
+        <text x="258" y="136" class="ts mid">⊙</text>
+        <rect x="300" y="122" width="161" height="18" rx="3" class="bar-bus"/>
+        <text x="469" y="136" class="tn">+1.8</text>
+        <rect x="60" y="154" width="170" height="34" class="box"/>
+        <text x="145" y="176" class="tn mid" style="fill:var(--ink)">看板「e」</text>
+        <text x="258" y="176" class="ts mid">⊙</text>
+        <rect x="300" y="162" width="109" height="18" rx="3" class="bar-bus"/>
+        <text x="417" y="176" class="tn">+0.4</text>
+        <rect x="60" y="194" width="170" height="34" class="tint-now"/>
+        <text x="145" y="216" class="tn mid" style="fill:var(--ink)">看板「m」</text>
+        <text x="258" y="216" class="ts mid">⊙</text>
+        <rect x="300" y="202" width="210" height="18" rx="3" class="bar-bus"/>
+        <text x="518" y="216" class="tn" style="fill:var(--ink);font-weight:600">+3.1</text>
+        <text x="145" y="248" class="ts mid">⋮</text>
+        <rect x="60" y="262" width="170" height="34" class="box"/>
+        <text x="145" y="284" class="tn mid" style="fill:var(--ink)">看板「z」</text>
+        <text x="258" y="284" class="ts mid">⊙</text>
+        <rect x="300" y="270" width="19" height="18" rx="3" class="bar-bus"/>
+        <text x="327" y="284" class="tn">−2.0</text>
+        <text x="303" y="326" class="ts mid">誰的方向跟我最像，分數就最高——是查字典，不是思考</text>
+
+        <rect x="0" y="348" width="606" height="96" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="30" y="386" style="font:15px var(--mono);fill:var(--ink)">logit_i ＝ lm_head[i]・x ＝ <tspan fill="var(--c-now)">|看板 i|</tspan> × |x| × <tspan fill="var(--c-bus)">cos(夾角)</tspan></text>
+        <text x="330" y="420" class="ts mid" style="fill:var(--c-now)">↑ 先天票數（bias 藏在長度裡）</text>
+        <text x="540" y="420" class="ts mid" style="fill:var(--c-bus)">↑ 像不像</text>
+
+        <rect x="0" y="464" width="606" height="82" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="464" width="4" height="82" class="f-bus"/>
+        <text x="26" y="496" class="t" style="font-weight:600">它不是再想一次——它是「開口」</text>
+        <text x="26" y="526" class="ts">純線性・單一位置・沒有 relu・看不到別的 token。翻譯只需要一本字典。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・出口</span><span>架構上就沒有能力思考</span></div>
+        <div class="codebody">
+<div class="codesep"><b>兩張同形的表（27 × 16）</b>・lm_head 是 wte 的鏡像</div>
+<pre class="py" data-hl="81:bus">
+81	state_dict = {'wte': matrix(vocab_size, n_embd),
+	↪ 'wpe': matrix(block_size, n_embd),
+	↪ 'lm_head': matrix(vocab_size, n_embd)}
+	# lm_head 與 wte 同形（27 × 16）——鏡像
+</pre>
+<div class="codesep"><b>「翻譯」的全部</b>・就一行內積，沒有 relu</div>
+<pre class="py" data-hl="143:bus">
+94	def linear(x, w):
+95	    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+⋯
+143	logits = linear(x, state_dict['lm_head'])
+	# 最後一份問卷：27 題，每題問「你是字母 i 嗎？」
+144	return logits
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 7・lm_head</span>
+    <ul>
+      <li>MLP 算完後主幹上那 16 個數字仍是<b>內部語言</b>——第 8 維不代表「字母 m」，它沒有名字。lm_head 是唯一把內部語言翻回外部符號的地方。</li>
+      <li>列的長度本身是先驗：常見字母把自己的向量拉長，不管 x 指哪邊都先拿基礎分——<b>bias 藏在長度裡</b>。</li>
+      <li><b>正因為它笨，前面才被逼得聰明</b>：訓練壓力全要穿過 lm_head，唯一能讓 loss 下降的方式，就是逼 Attention＋MLP 把向量準備到「只差一次內積就能讀出答案」。</li>
+      <li>比喻：MLP 是在腦中想清楚；lm_head 是<b>張嘴的那一瞬間</b>——出口只有 27 個字母，必須挑一個。壓縮發生在這裡，思考不在這裡。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 15 圖8 抽樣 ═══════════ -->
+<section class="slide std" data-station="5">
+  <header>
+    <h1><span class="figno">圖 8</span>抽樣 — 唯一的隨機</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <rect x="30" y="16" width="160" height="36" class="box"/>
+        <text x="110" y="39" class="tn mid" style="fill:var(--ink)">27 個 logits</text>
+        <path d="M110 52 V74" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="78" width="160" height="36" class="box"/>
+        <text x="110" y="101" class="tn mid" style="fill:var(--ink)">÷ temperature</text>
+        <text x="110" y="136" class="td mid">0.5 → 拉大差距・保守</text>
+        <text x="110" y="154" class="td mid">1.5 → 壓平分佈・隨機</text>
+        <path d="M110 162 V184" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="188" width="160" height="36" class="box"/>
+        <text x="110" y="211" class="tn mid" style="fill:var(--ink)">softmax</text>
+        <path d="M110 224 V246" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="250" width="160" height="40" class="tint-rand"/>
+        <text x="110" y="275" class="ts mid" style="fill:var(--ink);font-weight:600">加權隨機抽一個</text>
+        <text x="110" y="316" class="ts mid" style="fill:var(--c-rand)">★ 全流程唯一的隨機性</text>
+        <path d="M110 328 V352" class="wire-rand" marker-end="url(#ar-rand)"/>
+        <text x="110" y="380" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">一個字母</text>
+
+        <text x="260" y="30" class="ts">只有 BOS 時——模型認為第一個字母是（示意）</text>
+        <text x="272" y="62" class="tn mid">a</text>
+        <rect x="292" y="46" width="250" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="96" class="tn mid">m</text>
+        <rect x="292" y="80" width="185" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="130" class="tn mid">j</text>
+        <rect x="292" y="114" width="148" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="164" class="tn mid">k</text>
+        <rect x="292" y="148" width="117" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="192" class="tn mid">⋮</text>
+        <text x="272" y="224" class="tn mid">x</text>
+        <rect x="292" y="208" width="4" height="22" rx="2" class="bar-bus"/>
+        <text x="310" y="224" class="td">← 幾乎沒有名字以 x 開頭</text>
+
+        <text x="260" y="286" class="ts">看過 e, m, m, a 之後</text>
+        <text x="272" y="318" class="tn mid" style="font-size:11.5px">BOS</text>
+        <rect x="292" y="302" width="290" height="22" rx="3" class="bar-rand"/>
+        <text x="292" y="348" class="ts" style="fill:var(--c-rand)">「名字結束了」——它非常確定</text>
+        <text x="272" y="382" class="tn mid">n</text>
+        <rect x="292" y="366" width="9" height="22" rx="2" class="bar-grey"/>
+        <text x="272" y="414" class="tn mid">l</text>
+        <rect x="292" y="398" width="6" height="22" rx="2" class="bar-grey"/>
+
+        <text x="320" y="500" class="t mid" style="font-weight:650">沒人教它母音子音、沒人教名字該多長</text>
+        <text x="320" y="530" class="ts mid">分佈完全來自「猜下一個字母」的副產品——這就是「學習」看得見的樣子</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・抽樣</span><span>隨機只在 choices 一行</span></div>
+        <div class="codebody">
+<div class="codesep"><b>溫度</b>・只是把分數除一下</div>
+<pre class="py" data-hl="187:rand">
+187	temperature = 0.5 # in (0, 1], control the …
+</pre>
+<div class="codesep"><b>抽籤</b>・按 softmax 出來的比例加權隨機</div>
+<pre class="py" data-hl="195-196:rand">
+193	for pos_id in range(block_size):
+194	    logits = gpt(token_id, pos_id, keys, values)
+195	    probs = softmax([l / temperature for l in logits])
+	# 溫度只是把分數除一下
+196	    token_id = random.choices(range(vocab_size),
+	↪         weights=[p.data for p in probs])[0]
+	# 全流程唯一的隨機性，就這一行
+197	    if token_id == BOS:
+198	        break
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 8・抽樣</span>
+    <ul>
+      <li>模型從沒被告知「字母分母音子音」、沒被告知「名字通常幾個字母」——分佈完全是「猜下一個字母」這件事的<b>副產品</b>。</li>
+      <li>前面全是確定性的乘加；同一個模型每次跑出不同名字，原因只在這一格。</li>
+      <li>溫度 0.5 拉大差距更保守、1.5 壓平更隨機——它只是在 softmax 前把分數除一下。（temperature 在圖 1 的配碼露過臉，這裡才是主場。）</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 16 圖9 自迴歸 ═══════════ -->
+<section class="slide std" data-station="1,2,3,4,5">
+  <header>
+    <h1><span class="figno">圖 9</span>自迴歸 — 把全部串起來</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="70" y="24" class="td mid">輪 1</text>
+        <text x="195" y="24" class="td mid">輪 2</text>
+        <text x="320" y="24" class="td mid">輪 3</text>
+        <text x="445" y="24" class="td mid">輪 4</text>
+        <text x="570" y="24" class="td mid">輪 5</text>
+        <text x="70" y="54" class="mid" style="font:15px var(--mono);fill:var(--ink)">BOS</text>
+        <text x="195" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">e</text>
+        <text x="320" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="445" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="570" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">a</text>
+        <text x="70" y="72" class="td mid" style="font-size:11px">pos 0</text>
+        <text x="195" y="72" class="td mid" style="font-size:11px">pos 1</text>
+        <text x="320" y="72" class="td mid" style="font-size:11px">pos 2</text>
+        <text x="445" y="72" class="td mid" style="font-size:11px">pos 3</text>
+        <text x="570" y="72" class="td mid" style="font-size:11px">pos 4</text>
+        <rect x="32" y="84" width="76" height="34" class="box"/>
+        <text x="70" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="157" y="84" width="76" height="34" class="box"/>
+        <text x="195" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="282" y="84" width="76" height="34" class="box"/>
+        <text x="320" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="407" y="84" width="76" height="34" class="box"/>
+        <text x="445" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="532" y="84" width="76" height="34" class="box"/>
+        <text x="570" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <path d="M70 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M195 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M445 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M570 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="70" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">e</text>
+        <text x="195" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="320" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="445" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">a</text>
+        <text x="570" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-rand)">BOS</text>
+        <path d="M84 158 L179 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <path d="M209 158 L304 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <path d="M334 158 L429 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <path d="M459 158 L554 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <text x="570" y="184" class="ts mid" style="fill:var(--c-rand)">抽到 BOS → 停止</text>
+        <text x="255" y="184" class="td mid">抽出的字母餵回下一輪</text>
+
+        <line x1="0" y1="208" x2="641" y2="208" class="axis"/>
+        <text x="0" y="238" class="ts">KV cache 逐輪長大——過去的不用重算：</text>
+        <text x="44" y="276" class="td end">輪 1</text>
+        <rect x="56" y="256" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="102" y="276" class="tn mid" style="fill:var(--ink)">k₀ v₀</text>
+        <text x="44" y="316" class="td end">輪 2</text>
+        <rect x="56" y="296" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="316" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="296" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="202" y="316" class="tn mid" style="fill:var(--ink)">k₁ v₁</text>
+        <text x="44" y="356" class="td end">輪 3</text>
+        <rect x="56" y="336" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="356" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="336" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="202" y="356" class="tn mid">k₁ v₁</text>
+        <rect x="256" y="336" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="302" y="356" class="tn mid" style="fill:var(--ink)">k₂ v₂</text>
+        <text x="44" y="396" class="td end">輪 4</text>
+        <rect x="56" y="376" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="396" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="376" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="202" y="396" class="tn mid">k₁ v₁</text>
+        <rect x="256" y="376" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="302" y="396" class="tn mid">k₂ v₂</text>
+        <rect x="356" y="376" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="402" y="396" class="tn mid" style="fill:var(--ink)">k₃ v₃</text>
+        <rect x="480" y="284" width="14" height="14" class="tint-now" rx="3"/>
+        <text x="502" y="296" class="td">新算（只有最右邊這組）</text>
+        <rect x="480" y="312" width="14" height="14" class="tint-kv" rx="3"/>
+        <text x="502" y="324" class="td">直接沿用，不重算</text>
+
+        <text x="320" y="472" class="mid" style="font-size:16px;fill:var(--ink2)">最終輸出：<tspan style="font:700 26px var(--mono)" fill="var(--ink)">emma</tspan></text>
+        <text x="320" y="508" class="ts mid">一次前向＝一個字母；五輪，拼出一個名字</text>
+        <text x="320" y="536" class="td mid">沒有 cache 的話，每輪都要重算整段——長度平方級的浪費</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・生成一個名字</span><span>圖 1 的迴圈，這次看狀態</span></div>
+        <div class="codebody">
+<div class="codesep"><b>每輪只把「新的」k, v 加進 cache</b>（gpt() 內部）</div>
+<pre class="py" data-hl="121-122:kv">
+121	keys[li].append(k)   # 每輪只把「新的」加進 cache
+122	values[li].append(v)
+</pre>
+<div class="codesep"><b>一輪一個字母</b>・cache 每個名字歸零重來</div>
+<pre class="py" data-hl="190:kv,196:rand,199:now">
+190	keys, values = [[] for _ in range(n_layer)],
+	↪     [[] for _ in range(n_layer)]
+	# 每個名字歸零重來
+191	token_id = BOS
+192	sample = []
+193	for pos_id in range(block_size):
+194	    logits = gpt(token_id, pos_id, keys, values)
+195	    probs = softmax([l / temperature for l in logits])
+196	    token_id = random.choices(range(vocab_size),
+	↪         weights=[p.data for p in probs])[0]
+197	    if token_id == BOS:
+198	        break
+199	    sample.append(uchars[token_id])
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 9・自迴歸（收攏全局）</span>
+    <ul>
+      <li><b>一次前向只產生一個字母</b>——最多人搞錯的地方：ChatGPT 一個字一個字吐，不是打字動畫，是它真的一次只算得出一個 token。</li>
+      <li><b>KV cache 的意義</b>：每輪只有當下這個字母的 k、v 是新的，過去的直接沿用。沒有 cache 每輪重算整段，長度平方級的浪費。</li>
+      <li>這也是為什麼 <b>q 只有一個而 k/v 有一串</b>——回頭呼應 4a-0／4a（4a-0 埋的那句：k、v 留給後人查，q 用完即丟）。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 17 圖10 訓練 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">圖 10</span>訓練 — 唯一的目標是猜下一個字母</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:12.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="20" class="td">訓練資料一筆：「emma」</text>
+        <rect x="30" y="32" width="70" height="40" class="tint-now" rx="8"/>
+        <text x="65" y="58" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <rect x="128" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="163" y="58" class="tn mid" style="fill:var(--ink)">e</text>
+        <rect x="226" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="261" y="58" class="tn mid" style="fill:var(--ink)">m</text>
+        <rect x="324" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="359" y="58" class="tn mid" style="fill:var(--ink)">m</text>
+        <rect x="422" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="457" y="58" class="tn mid" style="fill:var(--ink)">a</text>
+        <rect x="520" y="32" width="70" height="40" class="tint-now" rx="8"/>
+        <text x="555" y="58" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <path d="M65 76 Q114 112 159 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M163 76 Q212 112 257 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M261 76 Q310 112 355 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M359 76 Q408 112 453 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M457 76 Q506 112 551 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <text x="114" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="212" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="310" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="408" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="506" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="320" y="152" class="t mid" style="font-weight:600">每個位置都問一次：「下一個字母是什麼？」</text>
+        <text x="320" y="176" class="td mid">一筆「emma」＝ 5 個學習訊號，不是 1 個</text>
+
+        <rect x="140" y="196" width="360" height="58" class="box" rx="10"/>
+        <text x="320" y="220" class="tn mid" style="fill:var(--ink)">loss ＝ −log P(正確答案)</text>
+        <text x="320" y="242" class="td mid">每個位置各算一次，再平均</text>
+        <path d="M320 254 V274" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="140" y="278" width="360" height="58" class="tint-now" rx="10"/>
+        <text x="320" y="302" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">loss.backward()</text>
+        <text x="320" y="324" class="ts mid">每個參數：「我往哪動一點，loss 會變小？」</text>
+        <path d="M320 336 V356" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="140" y="360" width="360" height="58" class="box" rx="10"/>
+        <text x="320" y="384" class="t mid" style="font-weight:600">Adam — 4,192 個數字各挪一小步</text>
+        <text x="320" y="406" class="td mid">梯度的移動平均 ÷ √梯度平方的移動平均</text>
+        <path d="M500 389 H604 V52 H596" class="wire dash" marker-end="url(#ar-grey)"/>
+        <text transform="rotate(-90 620 240)" x="620" y="240" class="td mid">重複 1,000 步</text>
+
+        <rect x="0" y="452" width="641" height="88" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="452" width="4" height="88" class="f-now"/>
+        <text x="26" y="486" class="t" style="font-weight:600">訓練從頭到尾只有一個任務——猜下一個字母</text>
+        <text x="26" y="516" class="ts">母音子音、名字長度……全部是「順便」學會的。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・訓練一步的全部</span><span>Adam 沒有黑魔法</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="165:bus,167:now,172:now">
+156	doc = docs[step % len(docs)]   # ★ step：第幾步
+157	tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]
+158	n = min(block_size, len(tokens) - 1)   # ★ n：幾個學習訊號
+⋯
+163	for pos_id in range(n):
+164	    token_id, target_id = tokens[pos_id],
+	↪         tokens[pos_id + 1]
+	# ★ target_id：正確答案＝下一個字母
+165	    logits = gpt(token_id, pos_id, keys, values)
+166	    probs = softmax(logits)
+167	    loss_t = -probs[target_id].log()
+	# ★ loss_t／loss：猜錯多少（正解機率取 −log）
+168	    losses.append(loss_t)
+169	loss = (1 / n) * sum(losses) # final average loss …
+⋯
+172	loss.backward()   # 每個參數都問：往哪動，loss 變小？
+⋯
+175	lr_t = learning_rate * (1 - step / num_steps) # …
+	# ★ lr_t／num_steps：越練越小步／共 1,000 步
+176	for i, p in enumerate(params):   # ★ p：4,192 個逐一走訪
+177	    m[i] = beta1 * m[i] + (1 - beta1) * p.grad
+	# ★ m／v：Adam 兩本帳（v 純粹撞名！）；p.grad＝梯度
+178	    v[i] = beta2 * v[i] + (1 - beta2) * p.grad ** 2
+⋯
+181	    p.data -= lr_t * m_hat / (v_hat ** 0.5 + eps_adam)
+182	    p.grad = 0
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 10・訓練</span>
+    <ul>
+      <li>訓練從頭到尾只有一個任務——<b>猜下一個字母</b>。沒人教母音子音、沒人教名字長度，全部是順便學會的。</li>
+      <li>losses 是<b>整個名字每個位置各算一次再平均</b>：一筆資料提供 5 個學習訊號，不是 1 個。</li>
+      <li>Adam 沒有黑魔法：就是「梯度的移動平均 ÷ 梯度平方的移動平均開根號」。</li>
+      <li><b>撞名提醒</b>：Adam 的 m／v 這個 v 跟 attention 的 v 純粹撞名——作者省字母重用了，先點破，聽眾就不會亂連結。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 18 總結 ═══════════ -->
+<section class="slide hero" data-station="">
+  <div class="heroBox">
+    <div class="kicker">整個 Transformer，三句話</div>
+    <div style="margin-top:34px">
+      <div style="display:flex;align-items:baseline;gap:22px;justify-content:center;margin:20px 0">
+        <b style="font:650 30px var(--sans);color:var(--c-attn);width:230px;text-align:right">Attention 搬運</b>
+        <span style="font-size:21px;color:var(--ink2);width:420px;text-align:left">決定「去哪裡拿資訊」</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:22px;justify-content:center;margin:20px 0">
+        <b style="font:650 30px var(--sans);color:var(--c-mlp);width:230px;text-align:right">MLP 加工</b>
+        <span style="font-size:21px;color:var(--ink2);width:420px;text-align:left">決定「拿到之後要想什麼」</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:22px;justify-content:center;margin:20px 0">
+        <b style="font:650 30px var(--sans);color:var(--c-bus);width:230px;text-align:right">殘差 疊加</b>
+        <span style="font-size:21px;color:var(--ink2);width:420px;text-align:left">兩者都只是往主幹上添加，而不是覆蓋</span>
+      </div>
+    </div>
+    <svg viewBox="0 0 900 136" style="width:820px;height:124px;margin-top:26px">
+      <text x="40" y="66" class="tn mid" style="font-size:15px">BOS</text>
+      <path d="M62 62 H92" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="96" y="42" width="118" height="40" class="box"/><text x="155" y="67" class="ts mid">Tokenizer</text>
+      <path d="M214 62 H240" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="244" y="42" width="126" height="40" class="tint-bus"/><text x="307" y="67" class="ts mid">Embedding</text>
+      <path d="M370 62 H396" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="400" y="30" width="150" height="64" class="box"/>
+      <text x="475" y="55" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+      <text x="475" y="79" class="ts mid" style="fill:var(--c-mlp)">＋ MLP</text>
+      <path d="M550 62 H576" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="580" y="42" width="110" height="40" class="tint-bus"/><text x="635" y="67" class="ts mid">lm_head</text>
+      <path d="M690 62 H716" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="67" class="ts mid">抽樣 ★</text>
+      <path d="M806 62 H836" class="wire-rand" marker-end="url(#ar-rand)"/>
+      <text x="852" y="68" class="th" style="font-family:var(--mono);fill:var(--c-now)">a</text>
+      <path d="M763 90 V106 H40 V80" class="wire dash" marker-end="url(#ar-grey)"/>
+      <text x="450" y="128" class="td mid">自迴歸</text>
+    </svg>
+    <div class="hint" style="margin-top:28px">4,192 個數字・200 行純 Python——現在，每一格你都算得出來</div>
+  </div>
+  <aside class="notes"><span class="ntag">總結</span>
+    <ul>
+      <li>收全場：三個顏色跟著三個角色走了一整場——橘色搬運、綠色加工、藍色主幹。</li>
+      <li>多層 Transformer＝同一件事再做一次；大模型＝同一件事做大很多倍。</li>
+    </ul>
+  </aside>
+</section>
+
+<!-- ═══════════ 19 補充 / Q&A ═══════════ -->
+<section class="slide hero" data-station="">
+  <div class="heroBox">
+    <div class="kicker">補充・講完之後有興趣再談</div>
+    <h1 style="font-size:38px">往下挖的三條路</h1>
+    <div class="cards">
+      <div class="card">
+        <h3>真實權重長什麼樣</h3>
+        <p>攤開訓練好的 checkpoint：看 wpe 的長度與夾角、看四個 head 在同一時刻的實際注意力分佈。</p>
+        <p class="mono" style="margin-top:10px">scripts/dump_position.py<br>scripts/dump_attention.py</p>
+      </div>
+      <div class="card">
+        <h3>換成中文資料集</h3>
+        <p>一字一 token 的 tokenizer 在中文上 vocab 直接跳到 700+，block_size 反而變小——同一份程式碼，參數分佈全變了樣。</p>
+        <p class="mono" style="margin-top:10px">microgpt.py（金庸人名）</p>
+      </div>
+      <div class="card">
+        <h3>訓練得更久會怎樣</h3>
+        <p>loss 繼續下降，但模型開始背答案——生成結果直接命中訓練集原文。overfitting 活生生的樣子。</p>
+        <p class="mono" style="margin-top:10px">EXPERIMENTS.md</p>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:40px;font-size:22px;color:var(--ink)">Q &amp; A</div>
+  </div>
+  <aside class="notes"><span class="ntag">補充</span>
+    <ul>
+      <li>這三題都有數字撐著，才適合說「模型自己學會了沒人教它的東西」。</li>
+      <li>中文實驗：名字只有 2–5 個字，block_size 變小、vocab 爆增——參數量的分佈完全變樣。</li>
+    </ul>
+  </aside>
+</section>
+
+<div id="pageno"></div>
+</div>
+
+<script>
+/* ---------- 迷你導覽 ---------- */
+const STATIONS=['Tokenizer','Embedding','Block','lm_head','抽樣'];
+document.querySelectorAll('.map').forEach(nav=>{
+  const on=(nav.closest('.slide').dataset.station||'').split(',').filter(Boolean).map(Number);
+  nav.innerHTML=STATIONS.map((n,i)=>
+    `<span class="chip${on.includes(i+1)?' on':''}"><b>${i+1}</b>${n}</span>`
+  ).join('<i class="tick"></i>');
+});
+
+/* ---------- 程式碼渲染：行號溝＋語法高亮＋data-hl 語意標記 ---------- */
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function paint(s){
+  s=esc(s);
+  s=s.replace(/(#.*$)|((?:[frbu]{1,2})?(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"))|\b(def|class|return|for|in|if|elif|else|while|break|import|lambda|not|and|or|None|True|False|from|as|with)\b|\b(\d+(?:\.\d+)?(?:e-?\d+)?)\b|\b(linear|softmax|rmsnorm|gpt|matrix|relu|log|exp|backward|range|len|zip|sum|max|min|sorted|set|enumerate|print|append|extend|index|choices|gauss)\b/g,
+    (m,c,st,kw,nu,fn)=> c?`<span class="${c.includes('★')?'anno':'cm'}">${c}</span>`
+      : st?`<span class="st">${st}</span>`
+      : kw?`<span class="kw">${kw}</span>`
+      : nu?`<span class="nu">${nu}</span>`
+      : `<span class="fn">${fn}</span>`);
+  return s.replace(/^(\s*)↪/,'$1<span class="fold">↪</span>');
+}
+document.querySelectorAll('pre.py').forEach(pre=>{
+  const hl={};
+  (pre.dataset.hl||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(seg=>{
+    const [range,cls]=seg.split(':');
+    const [a,b]=range.split('-').map(Number);
+    for(let i=a;i<=(b||a);i++)hl[i]=cls;
+  });
+  const lines=pre.textContent.replace(/^\n+|\n+$/g,'').split('\n');
+  let lastHl='',inComment=false;
+  pre.innerHTML=lines.map(line=>{
+    const t=line.indexOf('\t');
+    const no=t<0?'':line.slice(0,t);
+    const code=t<0?line:line.slice(t+1);
+    const n=parseInt(no,10);
+    const cont=!no&&/^\s*↪/.test(code);
+    let cls='';
+    if(n&&hl[n]){cls=' hl-'+hl[n];lastHl=cls;}
+    else if(cont&&lastHl){cls=lastHl;}
+    else{lastHl='';}
+    let html;
+    if(cont&&inComment){
+      const m=code.match(/^(\s*)↪ ?([\s\S]*)$/);
+      html=`${m[1]}<span class="fold">↪ </span><span class="cm">${esc(m[2])}</span>`;
+    }else{html=paint(code);}
+    if(!cont)inComment=code.includes('#');
+    return `<div class="row${no==='⋯'?' elide':''}${cls}"><span class="no">${no}</span><span class="cd">${html}</span></div>`;
+  }).join('');
+});
+
+/* ---------- 舞台縮放＋導航 ---------- */
+const stage=document.getElementById('stage');
+const slides=[...document.querySelectorAll('.slide')];
+let cur=0;
+function go(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,j)=>s.classList.toggle('active',j===cur));
+  document.getElementById('pageno').textContent=(cur+1)+' / '+slides.length;
+  history.replaceState(null,'','#'+(cur+1));
+}
+function fit(){
+  const s=Math.min(innerWidth/1280,innerHeight/720);
+  stage.style.transform=`translate(-50%,-50%) scale(${s})`;
+}
+addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)){e.preventDefault();go(cur+1);}
+  else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();go(cur-1);}
+  else if(e.key==='Home'){e.preventDefault();go(0);}
+  else if(e.key==='End'){e.preventDefault();go(slides.length-1);}
+  else if(e.key==='n'){document.body.classList.toggle('notes-on');}
+  else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();}
+});
+stage.addEventListener('click',e=>{
+  if(e.target.closest('.notes'))return;
+  go(e.clientX>innerWidth/2?cur+1:cur-1);
+});
+addEventListener('hashchange',()=>go((parseInt(location.hash.slice(1))||1)-1));
+addEventListener('resize',fit);
+go((parseInt(location.hash.slice(1))||1)-1);
+fit();
+document.body.style.visibility='visible';
+</script>
+</body>
+</html>

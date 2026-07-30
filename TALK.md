@@ -39,6 +39,262 @@
 > 值得指出：**只有一層。** 完整的 Transformer 不需要「很多層」才成立 ——
 > 一層就已經包含了 attention、MLP、殘差這三件事的全部。多層只是把同一件事再做一次。
 
+**配碼（microgpt_en.py）**
+
+```
+75   n_layer = 1     # depth of the transformer …        # ★ n_layer：疊幾層
+76   n_embd = 16     # width of the network …            # ★ n_embd：x 的寬度＝16
+77   block_size = 16 # maximum context length …          # ★ block_size：最多看幾格（圖 3b 主場）
+78   n_head = 4      # number of attention heads         # ★ n_head：attention 分幾頭
+79   head_dim = n_embd // n_head # derived dimension …   # ★ head_dim：每頭分到 16÷4＝4 維
+80   matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in range(nin)] for _ in range(nout)]
+     # ★ matrix：造表工具；★ Value：「一個會記帳的數字」（先這樣理解，圖 10 收帳）
+81   state_dict = {'wte': matrix(vocab_size, n_embd), 'wpe': matrix(block_size, n_embd), 'lm_head': matrix(vocab_size, n_embd)}
+     # ★ state_dict：全部知識的收納櫃；★ vocab_size：27，字母加一個特殊符號（圖 2 細講）
+82   for i in range(n_layer):
+83       state_dict[f'layer{i}.attn_wq'] = matrix(n_embd, n_embd)
+⋯
+87       state_dict[f'layer{i}.mlp_fc1'] = matrix(4 * n_embd, n_embd)
+⋯
+89   params = [p for mat in state_dict.values() for row in mat for p in row] # …
+     # ★ params：攤平成一條 list 的全部 4,192 個數字
+90   print(f"num params: {len(params)}")
+```
+
+**★ 先講變數**：五個超參數 `n_layer`／`n_embd`／`block_size`／`n_head`／`head_dim`
+（左圖那五張表的長寬就是它們）；`matrix`＝造表工具；`Value`＝會記帳的數字（帳圖 10 講）；
+`state_dict`＝知識收納櫃；`params`＝攤平的 4,192 個數字；`vocab_size`＝27（由來圖 2 馬上講）。
+
+---
+
+## 預習五連發 — 進架構之前的心理準備
+
+> 受眾設定：對 Machine Learning 很有熱忱、但覺得它還很難的人。
+> 這五小節不講新架構，只發三顆定心丸：
+> **(預 1) 全場只有一個主角。(預 2–預 4) 主角只會三招——一招一節，有圖有程式。(預 5) 句型收納。**
+> 建議位置：圖 0（尺度感）之後、圖 1（地圖）之前。
+> 節奏預算：預 1 約 2.5 分、預 2 約 2 分、預 3 約 3.5 分、預 4 約 3 分（含半招 rmsnorm）、預 5 不到 1 分——
+> 開場到圖 1 約 13–14 分鐘（60–90 分鐘的場可行；45 分鐘場請用文末的降級模式）。
+> 五節共用同一個道具：那個「第 3 格的 m」的 x——預 1 介紹角色，預 2–4 是同一個角色的三個技能，預 5 收工。
+
+> **配碼慣例（全檔適用）**：每節的「配碼」區塊＝這一節投影片右欄要放的程式碼。
+> 行號＝`microgpt_en.py` 的真實行號，內容逐字（整行省略以 `⋯` 表示；過長的行尾原註解可截短為 `…`）。
+> 行尾 **`# ★ …`** 的註解是講稿加註（**源碼裡沒有**），標示這個變數**在演講中第一次被正式介紹**——
+> 投影片上要跟著印，講的時候看到 ★ 就先停下來，用一句話介紹這個變數再往下。
+> 若變數在更早的節先露過臉，那一節的「★ 先講變數」會標「先不停留，圖 N 主場」。
+> 沒有行號的行（`#` 說明、└ 括線）是圖解註記，不是源碼。
+
+### 預 1 — 全場只有一個主角：一個 16 維向量
+
+```
+  它長這樣——就是一個裝著 16 個小數的 Python list：
+
+     x = [ 0.13, -0.82, 0.55, … , -0.07 ]     ← 共 16 個
+           └────────────┬────────────┘
+              這 16 個數字，濃縮了「這個字母、
+              以及它前面所有字母」到此刻的理解
+
+  整個程式 = 對同一個 x 不停「加料」。以生成 emma 走到第 3 步為例：
+
+     出生：wte 查表          「我是字母 m」                    （圖 3）
+       │   ＋ wpe
+       ▼
+     知道位置                「我是第 3 格的 m」               （圖 3）
+       │   ＋ attention 算出來的修正
+       ▼
+     拌入前文                「我前面是 e、m」                 （圖 4）
+       │   ＋ MLP 算出來的修正
+       ▼
+     想清楚了                「下一個八成是 a」                 （圖 5）
+
+  ★ 注意每一步的動詞都是「＋」——三個加號，加料是字面上的加法（圖 6 收這條線）
+```
+
+**講稿要點**
+
+- 別被「16 維向量」四個字嚇到：**它就是一個長度 16 的 list**，沒有更多了。
+- 整個模型跑一輪 = 這個 list 被加料**三次**（＋位置、＋attention 的修正、＋MLP 的修正）。
+  你等一下看到的每一張圖，都只是在回答「這一步往 x 裡加了什麼料」。
+- 加完三次料、**進出口（lm_head）之前**，兩件事已經同時濃縮在這 16 個數字裡：
+  「這個字此刻該表達的意義」和「它對下一個字母的預測」——
+  而且圖 7 會揭曉：這兩件事其實是**同一件事**。
+- 尾鉤：**這個 x 從頭到尾只會被三種方式對待。**下一節開始，一招一節。
+
+**配碼**：無——這一節只有圖。x 的程式碼本體（就是一個 Python list）在預 2 第一次亮相。
+
+### 預 2 — 第 1 招：向量＋向量（把兩份理解疊在一起）
+
+> 框架先一句話：**這個模型從頭到尾只會三招。**接下來一招一節，
+> 每招都拿同一個道具示範——那個「第 3 格的 m」。
+
+```
+   「我是字母 m」         [ 0.3, -0.1,  0.7, … ]     ← wte 查出來的一列
+ ＋「我在第 3 格」        [ 0.1,  0.4, -0.2, … ]     ← wpe 查出來的一列
+ ──────────────────────────────────────────────
+   「我是第 3 格的 m」    [ 0.4,  0.3,  0.5, … ]     ← 兩張便利貼疊起來
+
+  同一招的第二用途：把「修正量」疊上去（attention／MLP 算出來的料）
+
+     x ＋ 修正量 ─▶ 更新後的 x        殘差就是 x += 修正，不是 x = 修正
+                                    （疊上去、不覆蓋——圖 6 收這條線）
+```
+
+**講稿要點**
+
+- 相加的意義：**把兩份理解疊在一起**——字母的意義＋位置的感覺＝帶著位置的字母意義。
+- 對寫過程式的人一句話：殘差就是 `x += 修正`，不是 `x = 修正`。
+  全場沒有任何一步會「洗掉」x。
+- 句型順帶學：`zip`＝兩個 list 並排走；list comprehension＝對每一格做同一件事。
+  逐格相加，就這麼多。
+- 尾鉤：加法只會**疊**、不會**變**——想從「第 3 格的 m」變出「我在找母音」這種新理解，
+  得靠第 2 招。
+
+**配碼（microgpt_en.py）**
+
+```
+111      x = [t + p for t, p in zip(tok_emb, pos_emb)] # …    # ★ x、tok_emb、pos_emb
+⋯
+134          x = [a + b for a, b in zip(x, x_residual)]       # ★ x_residual
+⋯
+141          x = [a + b for a, b in zip(x, x_residual)]
+```
+
+**★ 先講變數**：`x`＝主角本人（那個 16 維 list）；`tok_emb`＝wte 查出來的字母向量、
+`pos_emb`＝wpe 查出來的位置向量（出生地 L109-110，圖 3 再看）；
+`x_residual`＝加料前先留一份的 x 備份——「疊上去」的技術名字叫**殘差**（圖 6 主場）。
+
+### 預 3 — 第 2 招：向量 × 矩陣（用一張學來的表，問一組問題）
+
+```
+  W 是一份「16 題的問卷」，每一列一題：
+
+               ┌ 列 1 「你身上有多少 A？」 ──▶ 答案 a₁
+    x (16) ──▶ ├ 列 2 「你身上有多少 B？」 ──▶ 答案 a₂
+               │   ⋮                            ⋮
+               └ 列 16「你身上有多少 P？」 ──▶ 答案 a₁₆
+
+    出來＝16 個答案＝換了一組角度重新看的 x
+
+  一題怎麼評分（內積）：x 跟「那一列」逐項相乘、再加總——像對答案
+
+  全場總共 7 份問卷，題目不同、動作永遠一樣（先混臉熟就好）：
+    × Wq「我在找什麼？」    × fc1「64 題健檢」    × lm_head「27 題：你是誰？」
+      （圖 4a-0）             （圖 5）              （圖 7）
+```
+
+**講稿要點**
+
+- 相乘的意義：**拿 x 去回答一份問卷**。答完得到一串新數字＝從另一組角度看同一個 x。
+  「16 維向量 × 一張矩陣能表達什麼」——取決於那份問卷**問什麼**，而問卷是訓練學出來的。
+- 內積＝一題的評分方式：逐項對答案、加總。等一下 attention 的「像不像」也是同一個動作。
+- 這一節**不深講**任何一份問卷的題目（各自的主場：圖 4a-0、圖 5、圖 7）。
+- 句型順帶學：`linear` 兩行＝每一列評分一次；雙層 list comprehension＝造一張表。
+- 尾鉤：答完的分數**正負混雜、大小不一**——誰來過濾？第 3 招。
+
+**配碼（microgpt_en.py）**
+
+```
+94   def linear(x, w):                     # ★ linear：第 2 招的本體，全場出現 7 次
+95       return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+         └──── 跟一列逐項相乘再加總＝內積 ────┘ └─ 每列一次 ─┘
+⋯
+80   matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in range(nin)] for _ in range(nout)]
+     # 雙層 comprehension＝造一張 nout × nin 的表（外層每列、內層每欄）
+```
+
+**★ 先講變數**：`linear(x, w)`＝把 x 交給問卷 w 作答的函數（`wo`＝其中一列、
+`wi`/`xi`＝對答案時的逐項）；7 次出現＝q、k、v、Wo、fc1、fc2、lm_head，每次都是這招。
+
+### 預 4 — 第 3 招：非線性（主角是 relu）
+
+```
+  relu＝一道門檻：不夠強的訊號，閉嘴
+
+    進來    −1.2    +3.4    −0.8    +0.1
+              │       │       │       │
+            ──┴───────┴───────┴───────┴──    負的一律歸零，正的原樣通過
+              │       │       │       │
+    出去      0     +3.4      0     +0.1
+
+  為什麼非有它不可（一句話版，完整論證圖 5 還債）：
+    沒有 relu，fc1 × fc2 可以事先乘成一張 16×16 的表——疊一百層等於一層
+```
+
+**講稿要點**
+
+- **relu 就是神經網路裡的 if。**沒有 if，程式只是一條算式；有了 if，才會「分情況」。
+  （圖 5 會把 MLP 讀成「64 條 if-then 規則」——就是這個 if。）
+- 相加是疊、相乘是換角度，都還是線性的——**非線性是唯一能製造「分情況」的地方**。
+- 非線性家族還有個兄弟 softmax（把一排分數擠成加總＝1 的比例，attention 與抽樣那邊見）；
+  加上下面附贈的半招 rmsnorm——**「只會三招」的承諾沒有破功**，多出來的都是配角。
+
+再附贈半招——**rmsnorm，音控台**。它不改變 x 說什麼，只管音量：
+
+```
+  半招｜rmsnorm＝音控台：只調音量、不動方向
+
+     [ 3.2, -1.6,  4.8, … ]   ← 加料疊久了、問卷答多了，音量會漂
+               │   ÷ 整體音量（16 個數字的均方根）
+               ▼
+     [ 0.8, -0.4,  1.2, … ]   ← 方向沒變，音量回到標準
+```
+
+- **為什麼需要音控**：第 1 招一直疊、第 2 招會放大縮小——**x 的音量會漂移**。
+  音量一漂，內積評分就沒有共同的尺度，softmax 還會被極端值綁架。
+- 所以**每次拿 x 去作答之前，先過一次音控**：進主幹前（圖 3）、attention 作答前（圖 4）、
+  MLP 作答前（圖 5）——位置永遠一樣：**作答前**。
+- rmsnorm **零參數**：4,192 個數字裡沒有半個屬於它。它不是知識，是水電。
+- 尾鉤：三招齊了。同一件事要重複 N 次（每層、每個 head、每一格），程式怎麼寫？
+
+**配碼（microgpt_en.py）**
+
+```
+50       def relu(self): return Value(max(0, self.data), (self,), (float(self.data > 0),))
+         # ★ self.data：Value 的數值本體；後面兩個括號＝記帳用（微分 0 或 1，圖 10 收）
+⋯
+103  def rmsnorm(x):                            # ★ rmsnorm：音控台（半招，零參數）
+104      ms = sum(xi * xi for xi in x) / len(x)     # ms：目前的平均音量（均方）
+105      scale = (ms + 1e-5) ** -0.5                # scale：調回標準音量的倍率
+106      return [xi * scale for xi in x]            # 只動音量，不動方向
+⋯
+139          x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
+```
+
+**★ 先講變數**：`self.data`——一個 `Value` 就是「一個會記帳的數字」（圖 0 出場過），
+`.data` 是它的數值本體；帳記什麼、給誰看，圖 10 才講。
+`rmsnorm`＝音控台：`ms` 量出目前音量、`scale` 算出倍率、逐格乘回去——三行、零參數。
+
+### 預 5 — 收納：句型到此為止
+
+```
+  最後一個句型｜for 迴圈＝「同一件事做 N 次」——配碼三行就是全部用法
+
+  三個「只有」：
+     句型，只有這幾種：＋、問卷（×）、門檻（relu）、for、zip、comprehension
+     招式，只有三招
+     數字，只有 4,192 個——訓練＝把它們各挪一小步（圖 10）
+```
+
+**講稿要點**
+
+- **200 行裡沒有任何一行用到預 2–預 5 以外的 Python。**看懂這幾頁，今晚所有程式碼你都看得懂。
+- 互動哏：之後每張圖都可以問「這一步是第幾招？」——先劇透：
+  Attention＝用三招去「搬」前文；MLP＝用三招來「想」（圖 4 正式開講）。
+- 承諾：全檔最兇的一行藏在 attention 裡，**輪到它之前會先拆給你看**（圖 4a-0），不會咬人。
+
+**配碼（microgpt_en.py）**
+
+```
+114      for li in range(n_layer):              # ★ li：第幾層（這裡 N=1）
+⋯
+124          for h in range(n_head):            # ★ h：第幾個 head（N=4）
+⋯
+193          for pos_id in range(block_size):   # ★ pos_id：第幾格（跟 wpe 查表用同一個號碼）
+```
+
+**★ 先講變數**：`li`＝第幾層、`h`＝第幾個 head、`pos_id`＝現在在第幾格——
+三個 for 就是「每層、每個 head、每一格，同一件事各做一遍」。
+
 ---
 
 ## 圖 1 — Overview：一次前向，只產生一個字母
@@ -70,12 +326,35 @@
 
 **講稿要點**
 
+- 回收預 1：預 1 看的是 x 的**內在履歷**，這一張是**工廠的外觀**——五站流水線。
 - 中間**全程 16 維不變**。模型不是「越算越大」，而是同一個 16 維向量被反覆修改。
 - **①和④是一對鏡像**：wte 是「id → 向量」，lm_head 是「向量 → 每個 id 的分數」。
   整個模型 = 把字變成向量 → 在向量空間裡想事情 → 把向量變回字。
 - ⑤是**全流程唯一有隨機性的地方**。前面全是確定性的乘加。
   同一個模型每次跑出不同名字，原因只在這一格。
 - 雙線框的 KV cache 是**跨輪留下來的狀態**，不是流過去的資料 —— 顏色要跟主線區分。
+
+**配碼（microgpt_en.py・推論迴圈＝整條流水線）**
+
+```
+189  for sample_idx in range(20):                          # ★ sample_idx：第幾個名字（要生 20 個）
+190      keys, values = [[] for _ in range(n_layer)], [[] for _ in range(n_layer)]
+         # ★ keys、values：KV cache 本體——兩個只進不出的 list（圖 9 主場）
+191      token_id = BOS                                    # ★ token_id：現在手上這個字母的編號
+192      sample = []                                       # ★ sample：已經生出來的字母們
+193      for pos_id in range(block_size):
+194          logits = gpt(token_id, pos_id, keys, values)  # ★ gpt：整個模型＝一個函數；★ logits：27 個分數
+195          probs = softmax([l / temperature for l in logits])
+             # ★ probs：27 個機率；temperature 圖 8 主場，先不停留
+196          token_id = random.choices(range(vocab_size), weights=[p.data for p in probs])[0]
+197          if token_id == BOS:
+198              break
+199          sample.append(uchars[token_id])
+```
+
+**★ 先講變數**：`keys`／`values`＝過去每格算好的 k、v（圖 9 收）；`token_id`＝現在手上的字母編號；
+`gpt`＝整個模型本體（一個函數，圖 3 進門）；`logits`＝27 個分數、`probs`＝27 個機率；
+`sample`＝收集輸出。先露臉但不停留：`temperature`（圖 8 主場）、`BOS`／`uchars`（下一張圖 2 馬上講）。
 
 ---
 
@@ -104,6 +383,23 @@
 BOS 同時當開頭和結尾，生成時抽到它就停手（`microgpt_en.py:197-198`）。
 **「模型怎麼知道要停？」的答案就是：停止也是一個它要學會預測的 token。**
 
+**配碼（microgpt_en.py）**
+
+```
+24   uchars = sorted(set(''.join(docs))) # unique characters …   # ★ uchars：字元表；★ docs：全部 32,033 個名字
+25   BOS = len(uchars) # token id for a special Beginning …      # ★ BOS：開頭兼結尾的特殊符號＝26
+26   vocab_size = len(uchars) + 1 # total number of unique …     # 圖 0 那個 27 的由來
+⋯
+157      tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]   # ★ tokens：一筆名字變成的編號串
+⋯
+196          token_id = random.choices(range(vocab_size), weights=[p.data for p in probs])[0]
+197          if token_id == BOS:
+198              break
+```
+
+**★ 先講變數**：`docs`＝整個資料集（一行一個名字）；`uchars`＝出現過的字元排序表；
+`BOS`＝第 27 個 token，開頭兼結尾；`tokens`＝「emma」變成的 [26, 4, 12, 12, 0, 26]（`doc`＝這一筆名字）。
+
 ---
 
 ## 圖 3 — Embedding：從符號進入語意空間
@@ -127,12 +423,26 @@ BOS 同時當開頭和結尾，生成時抽到它就停手（`microgpt_en.py:197
 ```
 
 **講稿要點**：這是「符號」變成「意義」的轉折點（`microgpt_en.py:109-112`）。
+這也是**預 2 第 1 招的第一次正式上場**——L111 那個「＋」。
 加上 `wpe` 是模型唯一知道「我在第幾個字母」的管道 ——
 把它拿掉，`emma` 和 `amme` 對模型完全相同。
 
 > `wpe` 不是公式，**它就是普通參數**：跟 `wte` 一樣放進 `state_dict`、
 > 一樣被攤平進 `params`、訓練迴圈一視同仁地更新。
 > 「第 0 格」和「第 3 格」的意思是模型自己從資料裡學出來的。
+
+**配碼（microgpt_en.py・gpt() 的第一站）**
+
+```
+108  def gpt(token_id, pos_id, keys, values):
+109      tok_emb = state_dict['wte'][token_id] # token embedding    # 預 2 見過：wte 的一列
+110      pos_emb = state_dict['wpe'][pos_id] # position embedding
+111      x = [t + p for t, p in zip(tok_emb, pos_emb)] # …          # 第 1 招，正式上場
+112      x = rmsnorm(x) # note: not redundant due to …              # 預 4 的音控台，正式上工
+```
+
+（`rmsnorm` 預 4 介紹過。全場它上工三次：這裡、attention 作答前（L117）、MLP 作答前（L137）——
+永遠是「作答前」。源碼註解那句 not redundant：殘差旁路帶的是沒過音控的 x，所以這裡再過一次不多餘。）
 
 ---
 
@@ -161,6 +471,17 @@ BOS 同時當開頭和結尾，生成時抽到它就停手（`microgpt_en.py:197
 **講稿收尾**：「你聽過『這個模型 context 是 128K』—— 在最小的模型裡，那件事就長這樣：
 一張只有 16 列的表。」
 （現代模型改用 RoPE，正是因為旋轉角度可以外推到訓練時沒看過的長度。）
+
+**配碼（microgpt_en.py）**
+
+```
+77   block_size = 16 # maximum context length of the attention window (note: the longest name is 15 characters)
+⋯
+81   state_dict = {'wte': matrix(vocab_size, n_embd), 'wpe': matrix(block_size, n_embd), 'lm_head': matrix(vocab_size, n_embd)}
+     # wpe 就只有 block_size＝16 列
+⋯
+110      pos_emb = state_dict['wpe'][pos_id] # position embedding   # pos_id 超過 15 → 這行直接 IndexError
+```
 
 ---
 
@@ -238,7 +559,118 @@ BOS 同時當開頭和結尾，生成時抽到它就停手（`microgpt_en.py:197
 > 小字但誠實：上面兩張畫的是**推論時**的樣子。**訓練時**整個名字一次餵進去，
 > 每一格都會各自走一遍 MLP —— 但即使那樣，各格之間仍然完全不交談。
 
-> 接下來三張圖，全部都在拆解上面那個 Attention 方框裡到底發生了什麼。
+> 接下來四小節（4a-0 → 4a → 4b → 4c），全部都在拆解上面那個 Attention 方框裡到底發生了什麼。
+
+**配碼（microgpt_en.py・一個 Block 的全部，先看骨架）**
+
+```
+114      for li in range(n_layer):
+115          # 1) Multi-head Attention block
+116          x_residual = x
+117          x = rmsnorm(x)
+118          q = linear(x, state_dict[f'layer{li}.attn_wq'])   # q？——下一節 4a-0 專門介紹，先看結構
+⋯
+133          x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])   # ★ x_attn：四個 head 的輸出接起來（16 維）
+134          x = [a + b for a, b in zip(x, x_residual)]
+135          # 2) MLP block
+136          x_residual = x
+137          x = rmsnorm(x)
+138          x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139          x = [xi.relu() for xi in x]
+140          x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+141          x = [a + b for a, b in zip(x, x_residual)]
+```
+
+**★ 先講變數**：`x_attn`＝attention 這半的最終輸出、要拼回 16 維的那條 list（拼法圖 4c）。
+`q` 先露臉不停留——4a-0 主場。
+
+**配碼（攤開那一頁：橫的讀全部、縱的只吃自己）**
+
+```
+121          keys[li].append(k)
+122          values[li].append(v)
+⋯
+129              attn_logits = [sum(q_h[j] * k_h[t][j] for j in range(head_dim)) / head_dim**0.5 for t in range(len(k_h))]
+130              attn_weights = softmax(attn_logits)
+131              head_out = [sum(attn_weights[t] * v_h[t][j] for t in range(len(v_h))) for j in range(head_dim)]
+⋯
+138          x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139          x = [xi.relu() for xi in x]
+140          x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+```
+
+---
+
+## 圖 4a-0 — 先認識 q、k、v：同一個 x 的三種角度
+
+**場景**：拆開 Attention 方框之前，先把三個新角色介紹完。
+這一節**零數字**——動機在這裡，數字下一張（圖 4a）才登場。
+
+```
+        rmsnorm 後的 x（16 個數字）＝這一格的「m」此刻的理解
+                      │
+         ┌────────────┼────────────┐
+         ▼            ▼            ▼
+       × Wq         × Wk         × Wv     ← 三份不同的 16 題問卷（第 2 招連用三次）
+         │            │            │
+         ▼            ▼            ▼
+       q (16)       k (16)       v (16)   ← 之後各切 4 段，每個 head 拿 4 個（圖 4c）
+    「我想找什麼」  「我是什麼」  「找到我，我給你什麼」
+      （搜尋詞）    （書背標題）    （書的內容）
+         │            │            │
+         │            └─ k、v 存進 KV cache：前文每一格都留過一份 ─┘
+         └── q 只服務這一輪，用完即丟
+```
+
+```
+  一個 head 的七步，每一步只為了一個效果：
+
+   ┌───────────┬────────────────┬─────────────────────────────┐
+   │ 轉化       │ 形狀            │ 想得到什麼                    │
+   ├───────────┼────────────────┼─────────────────────────────┤
+   │ rmsnorm   │ 16 → 16        │ 先把音量歸一，別讓誰壓過誰       │
+   │ × Wq      │ 16 → 16（切 4） │ 抽出「搜尋詞」（上圖）           │
+   │ × Wk      │ 16 → 16（切 4） │ 掛出「書背標題」（上圖）         │
+   │ × Wv      │ 16 → 16（切 4） │ 備好「書的內容」（上圖）         │
+   │ q·k 內積   │ 每格前文 1 分   │ 我跟每一格前文有多對頻           │
+   │ softmax   │ 分數 → 比例     │ 擠成加總＝1 的注意力（第 3 招）  │
+   │ Σ wₜ·vₜ   │ 比例 × v → 4   │ 按比例把前文內容拌回「我」       │
+   └───────────┴────────────────┴─────────────────────────────┘
+
+   （x 的來歷：wte＋wpe＋前文——預 1／圖 3 講過，這裡不重來）
+```
+
+```
+  魔王句，兌現預 5 的承諾——先拆好（microgpt_en.py:129）：
+
+     attn_logits = [ sum(q_h[j] * k_h[t][j] for j in range(head_dim)) / head_dim**0.5
+                     for t in range(len(k_h)) ]
+       ＝ 對過去每一格 t：搜尋詞 q 跟它的書背 k 逐項對答案（內積），再 ÷√4
+
+     q_h、k_h ＝ q、k 切給這個 head 的那 4 維（怎麼切：圖 4b／4c）
+     圖 4a 馬上一格一格走一遍——它不會咬人
+```
+
+**講稿要點**
+
+- 三張紙條都是**同一個 x 自己算出來的**（配碼 L118-120），不是外面發的。
+- 為什麼要三個角度、不拿 x 直接比 x？——「我在找的」跟「我是誰」通常不是同一件事：
+  m 在找母音，但它自己是子音。三份問卷，各司其職。
+- k、v 是「留給後人查的」，q 是「當下用完就丟的」——這個不對稱，圖 9 的 KV cache 會收。
+
+**配碼（microgpt_en.py）**
+
+```
+118          q = linear(x, state_dict[f'layer{li}.attn_wq'])   # ★ q：搜尋詞（16 維）
+119          k = linear(x, state_dict[f'layer{li}.attn_wk'])   # ★ k：書背標題
+120          v = linear(x, state_dict[f'layer{li}.attn_wv'])   # ★ v：書的內容
+⋯
+129              attn_logits = [sum(q_h[j] * k_h[t][j] for j in range(head_dim)) / head_dim**0.5 for t in range(len(k_h))]
+                 # ★ q_h、k_h：q、k 切給這個 head 的 4 維（魔王句本尊，左圖拆過）
+```
+
+**★ 先講變數**：`q`／`k`／`v`＝同一個 x 回答三份不同問卷的結果（搜尋詞／書背標題／書的內容）；
+`q_h`／`k_h`＝切給單一 head 的那 4 維切片。
 
 ---
 
@@ -278,14 +710,31 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 
 **講稿要點**
 
-1. **q 只有一個，k/v 有一串。** 這個不對稱是整張圖的骨架。
-   q =「我想找什麼」、k =「我是什麼」（書背標題）、v =「找到我給你什麼」（書的內容）。
-   三張紙條都是同一個字母自己算出來的（`microgpt_en.py:118-120`）。
+1. **q 只有一個，k/v 有一串**——這個不對稱是整張圖的骨架（圖 9 的 KV cache 會收）。
+   三張紙條是誰、從哪來，4a-0 剛講完——這裡直接看數字怎麼流。
 2. **÷ √4 就是 ÷ 2。** 維度越高內積越大，除掉避免 softmax 太極端。
 3. **softmax 的輸出加起來 = 1。** 「注意力」這個名字就從這來 ——
    它是一組必須分完的比例，多看這裡就得少看那裡。
 4. **序列長度在這裡消失了。** 進去是 4 維的 q，過去有 3 個字母或 300 個字母，
    出來永遠是 4 個數字。
+
+**配碼（microgpt_en.py・head 內部三行）**
+
+```
+118          q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119          k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120          v = linear(x, state_dict[f'layer{li}.attn_wv'])
+⋯
+129              attn_logits = [sum(q_h[j] * k_h[t][j] for j in range(head_dim)) / head_dim**0.5 for t in range(len(k_h))]
+                 # ★ attn_logits：跟每一格前文的「對頻分數」（+2.7／+0.5／−1.2）
+130              attn_weights = softmax(attn_logits)   # ★ attn_weights：分好的注意力比例，加總＝1
+131              head_out = [sum(attn_weights[t] * v_h[t][j] for t in range(len(v_h))) for j in range(head_dim)]
+                 # ★ head_out：按比例搬回來的 4 個數字
+132              x_attn.extend(head_out)
+```
+
+**★ 先講變數**：`attn_logits`＝比對分數（每格前文一個）；`attn_weights`＝softmax 後的注意力比例；
+`head_out`＝這個 head 搬運的成果（4 維）。
 
 ---
 
@@ -315,6 +764,22 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
     所以差別完全來自 softmax 這個非線性。）
 - 代價：每個 head 只有 4 維，衡量「像不像」的解析度低很多。
   **取捨 = 一個高解析度的問題 vs 四個低解析度的問題。**
+
+**配碼（microgpt_en.py・「切」就是一行切片）**
+
+```
+79   head_dim = n_embd // n_head # derived dimension of each head
+⋯
+124          for h in range(n_head):
+125              hs = h * head_dim                                # ★ hs：這個 head 的切片起點（0、4、8、12）
+126              q_h = q[hs:hs+head_dim]
+127              k_h = [ki[hs:hs+head_dim] for ki in keys[li]]    # ki／vi：cache 裡每一格前文的 k、v
+128              v_h = [vi[hs:hs+head_dim] for vi in values[li]]
+⋯
+132              x_attn.extend(head_out)
+```
+
+**★ 先講變數**：`hs`＝head start，第 h 個 head 從第幾格開始切（h×4）。
 
 ---
 
@@ -350,11 +815,33 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 
 **講稿要點**
 
+- 上半部（x → Wq/Wk/Wv → 切片）**4a-0 都看過了**——這張圖只看下半：**怎麼接回主幹**
+  （拼回 16 → Wo → ⊕ 回匯流排）。
 - 「切成 4 個 head」在程式裡就是 `q[hs:hs+head_dim]` 一行切片（`microgpt_en.py:126`）。
   很多教材把 multi-head 畫得很神祕，其實就是把 16 個數字分成 4 組。
 - **Wo 是翻譯層。** head 寫在第 8 格的數字，跟主幹第 8 格的意義毫無關係 ——
   那只是切片的記帳方式。Wo 把「四個 head 各說各話」翻譯成主幹聽得懂的語言。
   它也是四個 head 第一次能被聯合判斷的地方。
+
+**配碼（microgpt_en.py・attention 區塊全文）**
+
+```
+116          x_residual = x
+117          x = rmsnorm(x)
+118          q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119          k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120          v = linear(x, state_dict[f'layer{li}.attn_wv'])
+121          keys[li].append(k)                                # 這一格的 k、v 存檔（圖 9 收）
+122          values[li].append(v)
+123          x_attn = []
+124          for h in range(n_head):
+125              hs = h * head_dim
+126              q_h = q[hs:hs+head_dim]                       # 「切」就這一行
+⋯
+132              x_attn.extend(head_out)
+133          x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])   # Wo：唯一讓四個 head 交流的地方
+134          x = [a + b for a, b in zip(x, x_residual)]             # 旁路在這裡 ⊕ 回來
+```
 
 ---
 
@@ -392,12 +879,29 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 
 **講稿要點**
 
+- 還記得預 3 的問卷嗎？**fc1 就是一份 64 題的問卷**——64 個偵測器，每一列問一題。
 - **為什麼要先撐胖再壓瘦？** 如果拿掉 relu，兩個矩陣相乘會塌成一個 16×16 矩陣，
-  整段完全白做。**這段的存在意義 100% 來自那個 relu。**
+  整段完全白做。**這段的存在意義 100% 來自那個 relu**（預 4 欠的完整論證，在這裡還）。
 - 把 MLP 看成**查表式的記憶體**：64 條 if-then 規則平行檢查，觸發的加總起來寫回主幹。
-  中間要夠寬，是因為要放得下夠多條規則。
+  中間要夠寬，是因為要放得下夠多條規則。（預 4 說的「relu 就是 if」——這裡就是那 64 個 if。）
 - 以英文名字想像：某個神經元可能專門偵測「剛剛連續兩個子音」，
   一觸發就往主幹加上「接下來該是母音了」的方向。
+
+**配碼（microgpt_en.py・MLP）**
+
+```
+50       def relu(self): return Value(max(0, self.data), (self,), (float(self.data > 0),))
+⋯
+87       state_dict[f'layer{i}.mlp_fc1'] = matrix(4 * n_embd, n_embd)   # 64 題的問卷
+88       state_dict[f'layer{i}.mlp_fc2'] = matrix(n_embd, 4 * n_embd)   # 64 條回應
+⋯
+136          x_residual = x
+137          x = rmsnorm(x)
+138          x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139          x = [xi.relu() for xi in x]
+140          x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+141          x = [a + b for a, b in zip(x, x_residual)]
+```
 
 ---
 
@@ -436,6 +940,21 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 > Attention 決定「去哪裡拿資訊」，MLP 決定「拿到之後要想什麼」，
 > 殘差確保「兩者都只是往一條共用的主幹上添加，而不是覆蓋」。
 
+**配碼（microgpt_en.py・梯度的高速公路）**
+
+```
+39       def __add__(self, other):                       # ★ other：另一個加數（Value 或普通數字）
+40           other = other if isinstance(other, Value) else Value(other)
+41           return Value(self.data + other.data, (self, other), (1, 1))
+             # (1, 1)＝加法對兩邊的微分——反向傳播原封不動通過
+⋯
+114      for li in range(n_layer):    # 想多層？迴圈多跑一圈＝匯流排上多插兩個加號
+⋯
+134          x = [a + b for a, b in zip(x, x_residual)]
+⋯
+141          x = [a + b for a, b in zip(x, x_residual)]
+```
+
 ---
 
 ## 圖 7 — lm_head：向量變回字母
@@ -469,6 +988,7 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 
 **講稿要點**
 
+- 最後一份問卷：**27 題，每一題問「你是字母 i 嗎？」**——lm_head 的每一列就是一題（一塊看板）。
 - **它是翻譯，不是思考。** MLP 算完之後，主幹上那 16 個數字仍然是模型的**內部語言** ——
   第 8 維不代表「字母 m」，它沒有名字，只有模型自己懂。
   lm_head 是全流程唯一把內部語言翻回**外部符號**的地方。翻譯不需要智慧，只需要一本字典。
@@ -490,6 +1010,19 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 > MLP 是在腦中想清楚；lm_head 是**張嘴的那一瞬間** ——
 > 想法再豐富，出口只有 27 個字母，必須挑一個。
 > 壓縮發生在這裡，思考不發生在這裡。
+
+**配碼（microgpt_en.py・出口）**
+
+```
+81   state_dict = {'wte': matrix(vocab_size, n_embd), 'wpe': matrix(block_size, n_embd), 'lm_head': matrix(vocab_size, n_embd)}
+     # lm_head 與 wte 同形（27 × 16）——鏡像
+⋯
+94   def linear(x, w):
+95       return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+⋯
+143      logits = linear(x, state_dict['lm_head'])   # 「翻譯」的全部：就一行內積，沒有 relu
+144      return logits
+```
 
 ---
 
@@ -527,6 +1060,21 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 **講稿要點**：模型從沒被告知「字母有分母音子音」、沒被告知「名字通常幾個字母」。
 它排出來的分佈完全來自「猜下一個字母」這一件事的副產品。
 **這就是「學習」看得見的樣子。**
+（`temperature` 在圖 1 的配碼露過臉，這裡才是主場。）
+
+**配碼（microgpt_en.py・抽樣）**
+
+```
+187  temperature = 0.5 # in (0, 1], control the "creativity" of generated text, low to high
+⋯
+193      for pos_id in range(block_size):
+194          logits = gpt(token_id, pos_id, keys, values)
+195          probs = softmax([l / temperature for l in logits])   # 溫度只是把分數除一下
+196          token_id = random.choices(range(vocab_size), weights=[p.data for p in probs])[0]
+             # 全流程唯一的隨機性，就這一行
+197          if token_id == BOS:
+198              break
+```
 
 ---
 
@@ -566,7 +1114,26 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 - **KV cache 的意義**：每一輪只有「當下這個字母」的 k、v 是新的，過去的直接沿用
   （`microgpt_en.py:121-122` 的 `append`）。
   沒有 cache 的話每輪都要重算整段，長度平方級的浪費。
-- 這也是為什麼 **q 只有一個而 k/v 有一串** —— 回頭呼應圖 4a。
+- 這也是為什麼 **q 只有一個而 k/v 有一串** —— 回頭呼應 4a-0／4a
+  （4a-0 埋的那句：k、v 留給後人查，q 用完即丟）。
+
+**配碼（microgpt_en.py・生成一個名字）**
+
+```
+121          keys[li].append(k)     # 每輪只把「新的」k、v 加進 cache（gpt() 內部）
+122          values[li].append(v)
+⋯
+190      keys, values = [[] for _ in range(n_layer)], [[] for _ in range(n_layer)]   # 每個名字歸零重來
+191      token_id = BOS
+192      sample = []
+193      for pos_id in range(block_size):
+194          logits = gpt(token_id, pos_id, keys, values)
+195          probs = softmax([l / temperature for l in logits])
+196          token_id = random.choices(range(vocab_size), weights=[p.data for p in probs])[0]
+197          if token_id == BOS:
+198              break
+199          sample.append(uchars[token_id])
+```
 
 ---
 
@@ -607,31 +1174,75 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 - Adam 那一段（`microgpt_en.py:176-182`）沒有任何黑魔法，
   就是「梯度的移動平均 ÷ 梯度平方的移動平均開根號」。
 
+**配碼（microgpt_en.py・訓練一步的全部）**
+
+```
+156      doc = docs[step % len(docs)]                    # ★ step／num_steps：第幾步／共 1,000 步
+157      tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]
+158      n = min(block_size, len(tokens) - 1)            # ★ n：這筆資料有幾個「猜下一個」的位置
+⋯
+163      for pos_id in range(n):
+164          token_id, target_id = tokens[pos_id], tokens[pos_id + 1]   # ★ target_id：正確答案＝下一個字母
+165          logits = gpt(token_id, pos_id, keys, values)
+166          probs = softmax(logits)
+167          loss_t = -probs[target_id].log()            # ★ loss_t／loss：猜錯多少（正解機率取 −log）
+168          losses.append(loss_t)
+169      loss = (1 / n) * sum(losses) # final average loss …
+⋯
+172      loss.backward()                                 # 每個參數都問：往哪動一點，loss 會變小？
+⋯
+175      lr_t = learning_rate * (1 - step / num_steps) # …   # ★ lr_t：越練越小步
+176      for i, p in enumerate(params):                  # ★ p：4,192 個數字，一個一個來
+177          m[i] = beta1 * m[i] + (1 - beta1) * p.grad
+             # ★ m／v：Adam 的兩本流水帳（這個 v 跟 attention 的 v 只是撞名，無關！）
+             # ★ p.grad：梯度＝「往哪動 loss 會變小」的答案
+178          v[i] = beta2 * v[i] + (1 - beta2) * p.grad ** 2
+⋯
+181          p.data -= lr_t * m_hat / (v_hat ** 0.5 + eps_adam)
+182          p.grad = 0
+```
+
+**★ 先講變數**：`step`／`num_steps`＝訓練進度；`n`＝這筆有幾個學習訊號；
+`target_id`＝正確答案；`loss_t`／`loss`＝猜錯的代價；`lr_t`＝步伐（線性遞減）；
+`p`＝逐一走訪的每個參數、`p.grad`＝它的梯度（圖 0 的 Value 帳本在此收帳）；
+`m`／`v`＝Adam 的兩本流水帳——**提醒：這個 `v` 跟 attention 的 `v` 純粹撞名**，
+作者為了省字母重用了，講的時候先點破，聽眾就不會回頭亂連結。
+
 ---
 
 ## 建議的演講順序
 
-| # | 圖 | 訊息 |
+| # | 節 | 訊息 |
 |---|---|---|
 | 1 | 圖 0 | 四千個數字、一層，全部可以手算 |
-| 2 | 圖 1 | 全景，先給地圖 |
-| 3 | 圖 2 | Tokenizer 沒有魔法 |
-| 4 | 圖 3 | 符號 → 意義，位置是學出來的 |
-| 5 | 圖 3b | context length 上限的真面目 |
-| 6 | 圖 4 | **Attention 搬運、MLP 加工**（先給語感再進細節） |
-| 7 | 圖 4a | **一個 head**（核心） |
-| 8 | 圖 4b | 為什麼要四個 head |
-| 9 | 圖 4c | 接線 |
-| 10 | 圖 5 | MLP = 64 條規則 |
-| 11 | 圖 6 | 殘差 = 總和（最深刻的一張） |
-| 12 | 圖 7 | lm_head 只是反查表 |
-| 13 | 圖 8 | 唯一的隨機性 |
-| 14 | 圖 9 | 自迴歸，收攏全局 |
-| 15 | 圖 10 | 這一切是怎麼學來的 |
+| 2 | 預 1 | 全場只有一個主角：16 維向量 x，被加料三次 |
+| 3 | 預 2 | 第 1 招：向量＋向量＝把兩份理解疊起來 |
+| 4 | 預 3 | 第 2 招：向量×矩陣＝拿 x 去回答一份問卷 |
+| 5 | 預 4 | 第 3 招：非線性＝神經網路裡的 if（主角 relu；附半招 rmsnorm＝音控） |
+| 6 | 預 5 | 收納：句型到此為止，三個「只有」 |
+| 7 | 圖 1 | 全景，先給地圖（工廠外觀 vs 預 1 的內在履歷） |
+| 8 | 圖 2 | Tokenizer 沒有魔法 |
+| 9 | 圖 3 | 符號 → 意義，位置是學出來的（第 1 招上場） |
+| 10 | 圖 3b | context length 上限的真面目 |
+| 11 | 圖 4 | **Attention 搬運、MLP 加工**（先給語感再進細節） |
+| 12 | 圖 4a-0 | 先認識 q/k/v：三份問卷、三種角度（零數字） |
+| 13 | 圖 4a | **一個 head**（核心，只看數字） |
+| 14 | 圖 4b | 為什麼要四個 head |
+| 15 | 圖 4c | 接線：怎麼裝回主幹 |
+| 16 | 圖 5 | MLP＝64 題的問卷、64 條 if-then 規則 |
+| 17 | 圖 6 | 殘差＝總和（最深刻的一張） |
+| 18 | 圖 7 | lm_head＝最後一份問卷（27 題），翻譯不思考 |
+| 19 | 圖 8 | 唯一的隨機性 |
+| 20 | 圖 9 | 自迴歸，收攏全局 |
+| 21 | 圖 10 | 這一切是怎麼學來的 |
 
-**時間不夠時的刪減順序**：先砍圖 4c（接線細節），再砍圖 3b，再砍圖 10。
-圖 4、4a、4b、6、8 是五根柱子，不要動 ——
-尤其圖 4 不能為了省時間跳過，它是 4a/4b/4c 的前提。
+**時間不夠時怎麼辦（降級模式，不砍節）**：
+預 2／預 4／預 5 改成只講圖、不逐行講碼（各壓到 60–90 秒）；**預 3 完整保留**——
+它是「問卷」比喻的唯一定義處，圖 4a-0、圖 5、圖 7 都靠它回收。
+**圖 4a-0 不可砍**：它之於圖 4a，就像圖 4 之於 4a–4c——動機沒鋪好，數字就白算。
+真的還要砍節，順序照舊：先砍圖 4c（接線細節），再砍圖 3b，再砍圖 10。
+圖 4、4a、4b、6、8 是五根柱子，不要動——
+尤其圖 4 不能為了省時間跳過，它是 4a-0／4a／4b／4c 的前提。
 
 ---
 
