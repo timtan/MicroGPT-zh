@@ -209,6 +209,80 @@ body.notes-on .slide.active .notes{display:block}
   </aside>
 </section>
 
+<!-- ═══════════ 開場 任務定義 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">開場</span>它到底在做什麼</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:57fr 43fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <text x="0" y="20" class="th">資料就長這樣</text>
+        <text x="150" y="20" class="td">input.txt・一行一個名字・32,033 個</text>
+        <rect x="0" y="36" width="200" height="152" class="box"/>
+        <text x="22" y="62" class="tn">emma</text>
+        <text x="22" y="88" class="tn">olivia</text>
+        <text x="22" y="114" class="tn">ava</text>
+        <text x="22" y="140" class="tn">isabella</text>
+        <text x="22" y="168" class="td">⋯</text>
+        <text x="216" y="96" class="ts">沒有標註、沒有詞性、</text>
+        <text x="216" y="118" class="ts">沒有人教它什麼是名字</text>
+        <text x="216" y="140" class="td">——只有這些字串</text>
+
+        <line x1="0" y1="216" x2="640" y2="216" class="axis"/>
+
+        <text x="0" y="256" class="th">模型要做的，從頭到尾只有一件事</text>
+
+        <rect x="0" y="286" width="150" height="52" class="tint-now"/>
+        <text x="75" y="310" class="ts mid">看過的字母</text>
+        <text x="75" y="331" class="tn mid" style="fill:var(--c-now)">e  m</text>
+        <path d="M154 312 H192" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="196" y="286" width="110" height="52" class="tint-bus"/>
+        <text x="251" y="318" class="tb mid">模型</text>
+        <path d="M310 312 H348" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="356" y="272" class="td">下一個字母的機率（27 個）</text>
+
+        <text x="360" y="298" class="tn">a</text><rect x="380" y="286" width="196" height="15" rx="2.5" class="bar-bus"/><text x="586" y="298" class="td">41%</text>
+        <text x="360" y="322" class="tn">m</text><rect x="380" y="310" width="106" height="15" rx="2.5" class="bar-bus"/><text x="496" y="322" class="td">22%</text>
+        <text x="360" y="346" class="tn">e</text><rect x="380" y="334" width="44" height="15" rx="2.5" class="bar-bus"/><text x="434" y="346" class="td">9%</text>
+        <text x="360" y="368" class="td">⋮</text>
+        <text x="360" y="392" class="tn">z</text><rect x="380" y="380" width="3" height="15" rx="1.5" class="bar-grey"/><text x="393" y="392" class="td">0.1%</text>
+
+        <rect x="0" y="430" width="640" height="112" rx="10" fill="rgba(230,103,103,.08)" stroke="var(--c-rand)" stroke-width="1.4"/>
+        <text x="22" y="464" class="tb">它不會「決定」答案，它只給 27 個比例。</text>
+        <text x="22" y="492" class="ts">真正抽出一個字母的，是外面那一行</text>
+        <text x="330" y="492" class="tn" style="fill:var(--c-rand)">random.choices</text>
+        <text x="22" y="520" class="td">輸出是一個分佈，不是一個字——溫度、隨機性都建在這句話上（圖 8 主場）</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・資料就這兩行</span><span>num docs: 32033</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="19:now">
+14	# Let there be a Dataset `docs`:
+	↪ list[str] of documents (e.g. a list of names)
+19	docs = [line.strip() for line in open('input.txt')
+	↪        if line.strip()]
+	# ★ docs：整個資料集，一行一個名字
+20	random.shuffle(docs)
+21	print(f"num docs: {len(docs)}")
+</pre>
+        </div>
+        <div class="codesep"><b>全場的任務</b>：輸入前文 → 輸出下一個字母的 27 個機率</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">開場・釘死任務</span>
+    <ul>
+      <li><b>輸入是「前面已經有的字母」，輸出是「下一個字母的 27 個機率」——整場只有這一件事。</b>沒有「理解語意」、沒有「知道什麼是名字」，那些都是猜下一個字母的副產品。</li>
+      <li>輸出是<b>一個分佈，不是一個字</b>。先講清楚，後面 softmax、temperature、「同一個模型每次生出不同名字」才有共同地基。</li>
+      <li><b>訓練和推論是同一個函數的兩種用法</b>：等一下十幾張圖講的都是推論（拿現成的 4,192 個數字算一次）；訓練是在同一個函數外面繞一圈迴圈、回頭修那些數字（圖 10 展開）。先講這句，聽眾就不會一路帶著「那學習到底在哪裡」的懸念。</li>
+      <li>「沒有人教它母音子音、沒教它名字幾個字母」——這句話<b>留到圖 10 再兌現</b>。</li>
+    </ul>
+  </aside>
+</section>
 <!-- ═══════════ 2 圖0 模型有多小 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
@@ -302,6 +376,77 @@ body.notes-on .slide.active .notes{display:block}
       <li>四千個數字＋一個 200 行、零依賴的 Python 檔案，學會了「英文名字長什麼樣子」。每個數字都是真的、<b>可以手算</b>。</li>
       <li><b>只有一層。</b>完整的 Transformer 不需要「很多層」才成立——一層就包含 attention、MLP、殘差這三件事的全部；多層只是同一件事再做一次。</li>
       <li>對照：GPT-2 small = 124,000,000（3 萬倍）；現代大模型 ≈ 100,000,000,000+。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預0 兩種數字 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 0</span>程式裡只有兩種數字</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:60fr 40fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <rect x="0" y="0" width="308" height="392" rx="10" class="tint-bus"/>
+        <rect x="332" y="0" width="308" height="392" rx="10" class="tint-now"/>
+
+        <text x="24" y="38" class="tb" style="fill:var(--c-bus)">① 學來的（參數）</text>
+        <text x="356" y="38" class="tb" style="fill:var(--c-now)">② 算出來的（中間值）</text>
+
+        <text x="24" y="76" class="tn">wte  wpe  lm_head</text>
+        <text x="24" y="102" class="tn">Wq  Wk  Wv  Wo</text>
+        <text x="24" y="128" class="tn">fc1  fc2</text>
+        <text x="356" y="76" class="tn">x</text>
+        <text x="356" y="102" class="tn">q  k  v</text>
+        <text x="356" y="128" class="tn">logits  probs</text>
+
+        <line x1="24" y1="152" x2="284" y2="152" class="axis"/>
+        <line x1="356" y1="152" x2="616" y2="152" class="axis"/>
+
+        <text x="24" y="184" class="ts">共 4,192 個，就是圖 0 那張表</text>
+        <text x="24" y="212" class="ts">跑幾次都不變</text>
+        <text x="24" y="240" class="ts">住在 state_dict 裡</text>
+        <text x="24" y="268" class="ts">只有「訓練」會改它</text>
+
+        <text x="356" y="184" class="ts">每一輪從頭算，算完就丟</text>
+        <text x="356" y="212" class="ts">每個名字都重新算一遍</text>
+        <text x="356" y="240" class="ts">沒有任何一個被存下來</text>
+        <text x="356" y="268" class="ts" style="fill:var(--c-kv)">——除了 k、v（唯一的例外）</text>
+
+        <text x="24" y="326" class="tb">模型「會」的東西</text>
+        <text x="24" y="352" class="td">＝它的知識</text>
+        <text x="356" y="326" class="tb">模型「正在想」的東西</text>
+        <text x="356" y="352" class="td">＝它的思考過程</text>
+
+        <rect x="0" y="424" width="640" height="60" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)"/>
+        <text x="24" y="461" class="t">之後每看到一個新變數，只要問一句：<tspan class="tb">它是左邊還是右邊？</tspan></text>
+        <text x="24" y="524" class="td">state_dict[...] 開頭的都是左邊，其他幾乎都是右邊。訓練＝把左邊調好；推論＝拿左邊算出右邊。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・兩邊各一行</span><span>左：4,192　右：每輪重生</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="89:bus,111:now">
+89	params = [p for mat in state_dict.values()
+	↪ for row in mat for p in row]
+	# ★ ① 學來的：4,192 個，跑再多次都不變
+⋯
+111	    x = [t + p for t, p in zip(tok_emb, pos_emb)]
+	# ★ ② 算出來的：每一輪重生一次
+</pre>
+        </div>
+        <div class="codesep">先埋一個伏筆：<b>keys／values</b> 是右邊的東西，卻活過了一輪——為什麼，圖 9 收。</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 0・新手最常糊掉的一組</span>
+    <ul>
+      <li>一句話：<b>左邊是模型會的東西，右邊是它現在正在想的東西。</b>訓練＝把左邊那 4,192 個調好；推論＝拿左邊去算出右邊。</li>
+      <li>之後每看到新變數就問：<b>左邊還是右邊？</b>state_dict 開頭的是左邊，其餘幾乎都是右邊。</li>
+      <li>先埋例外：keys／values 是右邊卻活過一輪（圖 9 收）。</li>
+      <li>尾鉤：右邊那一整欄，其實<b>從頭到尾只有一個主角</b>——下一頁就是它。</li>
     </ul>
   </aside>
 </section>
@@ -649,6 +794,234 @@ body.notes-on .slide.active .notes{display:block}
       <li>相加是疊、相乘是換角度，都還是線性的——非線性是唯一能製造「分情況」的地方。另外還有 softmax（attention／抽樣見）和 rmsnorm，它們都是配角，「只有三種運算」仍然成立。</li>
       <li><b>rmsnorm 為什麼存在</b>：相加一直疊、相乘會放大縮小，x 的音量會漂移；音量一漂，內積沒有共同尺度、softmax 被極端值綁架。所以每次做內積前先過音控。零參數＝它不是知識，是水電。</li>
       <li>收尾一句：<b>運算只有三種、數字只有 4,192 個</b>。之後每張圖都可以問「這一步用的是哪一種運算？」——Attention＝用這三種搬前文、MLP＝用這三種想。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預5 Value ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 5</span>Value：讓訓練有可能發生的水電</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:56fr 44fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <text x="0" y="22" class="td">一般的數字</text>
+        <rect x="0" y="38" width="150" height="52" class="box"/>
+        <text x="75" y="71" class="tn mid" style="font-size:17px">0.13</text>
+
+        <text x="0" y="140" class="td">一個 Value</text>
+        <rect x="0" y="156" width="150" height="52" class="tint-bus"/>
+        <text x="75" y="189" class="tn mid" style="font-size:17px">0.13</text>
+        <text x="75" y="228" class="td mid">.data</text>
+        <text x="166" y="188" class="t">＋</text>
+
+        <rect x="196" y="146" width="330" height="72" rx="8" class="tint-now"/>
+        <text x="216" y="176" class="ts">一張便條：</text>
+        <text x="216" y="200" class="ts" style="fill:var(--c-now)">「我是從誰、用什麼運算算出來的」</text>
+        <text x="360" y="242" class="td mid">_children ／ _local_grads</text>
+
+        <line x1="0" y1="286" x2="640" y2="286" class="axis"/>
+
+        <text x="0" y="330" class="tb">前向（算出答案）</text>
+        <path d="M186 324 H236" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="248" y="330" class="t">跟普通小數完全一樣，<tspan class="tb">你可以無視它</tspan></text>
+
+        <text x="0" y="382" class="tb">反向（訓練）</text>
+        <path d="M186 376 H236" class="wire-now" marker-end="url(#ar-now)"/>
+        <text x="248" y="382" class="t">順著便條回頭走，才問得出</text>
+        <text x="248" y="408" class="ts">「每個參數往哪動一點，loss 會變小」</text>
+        <text x="248" y="432" class="td">（圖 10 才拆）</text>
+
+        <rect x="0" y="470" width="640" height="76" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)"/>
+        <text x="22" y="504" class="tb">Value 不是模型的一部分，它是讓訓練有可能發生的基礎設施。</text>
+        <text x="22" y="532" class="ts">接下來到圖 9 為止，你都可以把它當成普通的 float 讀。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・只看這三行就夠</span><span>L30–72・全檔 1/3</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="34:bus,41:now">
+33	def __init__(self, data, children=(),
+	↪              local_grads=()):
+34	    self.data = data      # ★ 數值本體
+	# 前向只用得到 .data
+⋯
+41	    return Value(self.data + other.data,
+	↪                 (self, other), (1, 1))
+	# ★ 加法：算出和，順手記下便條
+	#   「我從這兩個來、微分是 (1,1)」
+</pre>
+        </div>
+        <div class="codesep">純 Python、零依賴的代價：PyTorch 幫你做的記帳，這裡自己寫了 <b>40 行</b>。</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 5・讓聽眾安心忽略它</span>
+    <ul>
+      <li>這頁的目的<b>不是</b>講 autograd（那是圖 10），而是讓聽眾能安心<b>忽略</b>它——不講，他們會被 Value(...) 卡住一整場。</li>
+      <li>為什麼它在原始碼排這麼前面（L30–72，將近全檔三分之一）：matrix() 造出來的每個參數都是 Value，不先定義它第 80 行就跑不動。<b>行數多 ≠ 重要——模型本體只有 L108–144 那三十幾行。</b></li>
+      <li>純 Python 零依賴的代價就在這裡：PyTorch 幫你做的記帳，這個檔案自己寫了 40 行。</li>
+      <li>尾鉤：便條上記了什麼、怎麼回頭走——<b>圖 10 收帳</b>。現在不欠解釋，只欠好奇。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 圖0.5a 檔案地圖 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">圖 0.5a</span>前 100 行，都還沒進入 Transformer</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:56fr 44fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <rect x="0" y="16" width="640" height="220" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)" stroke-dasharray="6 4"/>
+        <text x="20" y="44" class="td">基礎準備（infrastructure）——都是水電，沒有一行是 Transformer</text>
+
+        <text x="20" y="82" class="tn" style="fill:var(--ink3)">L9–27</text>
+        <text x="112" y="82" class="t">① 資料 ＋ tokenizer</text>
+        <text x="330" y="82" class="ts">文字 → 整數</text>
+        <text x="500" y="82" class="td">圖 2 主場</text>
+
+        <text x="20" y="118" class="tn" style="fill:var(--ink3)">L30–72</text>
+        <text x="112" y="118" class="t">② Value / autograd</text>
+        <text x="330" y="118" class="ts">讓數字會記帳</text>
+        <text x="500" y="118" class="td">預 5 剛講</text>
+
+        <text x="20" y="154" class="tn" style="fill:var(--ink3)">L75–90</text>
+        <text x="112" y="154" class="t">③ state_dict ＋ params</text>
+        <text x="330" y="154" class="ts">4,192 個知識</text>
+        <text x="500" y="154" class="td">圖 0 看過</text>
+
+        <text x="20" y="190" class="tn" style="fill:var(--ink3)">L94–106</text>
+        <text x="112" y="190" class="t">④ 三個工具函數</text>
+        <text x="330" y="190" class="tn" style="font-size:12.5px">linear／softmax／rmsnorm</text>
+        <text x="500" y="212" class="td">預 3b／預 4 講掉兩個</text>
+
+        <rect x="0" y="256" width="640" height="52" class="tint-bus"/>
+        <text x="20" y="288" class="tn" style="fill:var(--ink3)">L108–144</text>
+        <text x="112" y="288" class="tb">⑤ def gpt(...)</text>
+        <text x="330" y="288" class="ts">模型本體，只有三十幾行</text>
+
+        <rect x="0" y="320" width="640" height="46" class="box"/>
+        <text x="20" y="348" class="tn" style="fill:var(--ink3)">L150–199</text>
+        <text x="112" y="348" class="t">⑥ 訓練迴圈／推論迴圈</text>
+        <text x="330" y="348" class="ts">在 gpt() 外面繞圈（圖 9、圖 10）</text>
+
+        <text x="0" y="410" class="th">還沒講過的只剩 softmax</text>
+        <text x="0" y="446" class="ts">把一排任意大小的分數，擠成「加起來剛好 1」的比例</text>
+
+        <text x="0" y="486" class="tn">+2.7</text><text x="84" y="486" class="tn">+0.5</text><text x="168" y="486" class="tn">−1.2</text>
+        <text x="250" y="486" class="td">正負混雜、大小不一</text>
+        <path d="M30 496 V518" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M108 496 V518" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M186 496 V518" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="250" y="512" class="td">取 exp（一律變正）、再各自除以總和</text>
+        <text x="0" y="544" class="tn" style="fill:var(--c-attn)">0.85</text><text x="84" y="544" class="tn" style="fill:var(--c-attn)">0.13</text><text x="168" y="544" class="tn" style="fill:var(--c-attn)">0.02</text>
+        <text x="250" y="544" class="ts">加總 = 1，可以當機率用</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・三個工具函數</span><span>L94–106</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="97:attn,103:bus">
+94	def linear(x, w):        # 預 3b 講過
+95	    return [sum(wi * xi for wi, xi in zip(wo, x))
+	↪            for wo in w]
+97	def softmax(logits):     # ★ 分數 → 比例
+98	    max_val = max(val.data for val in logits)
+	# 減掉最大值：只為了 exp 不爆掉，不影響結果
+99	    exps = [(val - max_val).exp() for val in logits]
+100	    total = sum(exps)
+101	    return [e / total for e in exps]
+103	def rmsnorm(x):          # 預 4 講過：音控台
+</pre>
+        </div>
+        <div class="codesep">softmax 全場上工兩次：<b>attention 分注意力</b>（圖 4a）、<b>出口算機率</b>（圖 8）。</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 0.5a・檔案地圖</span>
+    <ul>
+      <li>「200 行的 GPT」容易讓人以為模型有 200 行。<b>模型本體只有 L108–144。</b>其他都是資料、記帳、初始化、迴圈。</li>
+      <li>四段基礎準備裡，③已經在圖 0 看過、②預 5 剛講、①圖 2 主場，④只剩 softmax 沒講——順手補完。</li>
+      <li>softmax 就是開場那頁「輸出是一組比例」的實作；max_val 只是數值穩定技巧，不影響結果。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 圖0.5b gpt() 簽名 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">圖 0.5b</span>怎麼呼叫 gpt()：四個參數是什麼</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:60fr 40fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <text x="0" y="40" class="tn" style="font-size:18px;fill:var(--ink)">logits = gpt( token_id, pos_id, keys, values )</text>
+        <path d="M201 52 V72" class="wire-now"/>
+        <path d="M301 52 V72" class="wire-bus"/>
+        <path d="M379 52 V72" class="wire-kv"/>
+        <path d="M458 52 V72" class="wire-kv"/>
+        <path d="M379 72 H458" class="wire-kv"/>
+
+        <circle cx="10" cy="112" r="5" class="f-now"/>
+        <text x="30" y="118" class="tn" style="fill:var(--c-now)">token_id</text>
+        <text x="150" y="118" class="ts">現在手上這「一個」字母的編號</text>
+        <text x="150" y="142" class="td">0–26　（圖 2）</text>
+
+        <circle cx="10" cy="186" r="5" class="f-bus"/>
+        <text x="30" y="192" class="tn" style="fill:var(--c-bus)">pos_id</text>
+        <text x="150" y="192" class="ts">我是第幾格</text>
+        <text x="150" y="216" class="td">0–15　（圖 3）</text>
+
+        <circle cx="10" cy="260" r="5" class="f-kv"/>
+        <text x="30" y="266" class="tn" style="fill:var(--c-kv)">keys, values</text>
+        <text x="150" y="266" class="ts">前文留下的 k、v</text>
+        <text x="150" y="290" class="td">唯一「跨輪次還活著」的東西　（圖 9 主場）</text>
+
+        <text x="0" y="330" class="ts">回傳 <tspan class="tn">logits</tspan> ＝ 27 個分數，下一個字母各一個</text>
+        <text x="430" y="330" class="td">（圖 7 主場）</text>
+
+        <line x1="0" y1="358" x2="640" y2="358" class="axis"/>
+
+        <rect x="0" y="386" width="640" height="160" rx="10" fill="rgba(201,133,0,.08)" stroke="var(--c-now)" stroke-width="1.4"/>
+        <text x="22" y="420" class="tb" style="fill:var(--c-now)">★ 最該點破的一件事</text>
+        <text x="22" y="454" class="tb">gpt() 沒有吃一串字，它只吃「一個」字母。</text>
+        <text x="22" y="484" class="ts">那「前面的 em」跑哪去了？──在 keys／values 裡。</text>
+        <text x="22" y="516" class="ts">一次呼叫 ＝ 一個字母進去、27 個分數出來；</text>
+        <text x="22" y="538" class="ts">前文不在參數列，前文在 cache 裡。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・簽名與回傳</span><span>模型本體 L108–144</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="108:bus,144:bus">
+108	def gpt(token_id, pos_id, keys, values):
+	# ★ gpt：模型本體，就這一個函數
+109	    tok_emb = state_dict['wte'][token_id]
+110	    pos_emb = state_dict['wpe'][pos_id]
+⋯
+144	    return logits
+	# 27 個分數，如此而已
+⋯
+194	logits = gpt(token_id, pos_id, keys, values)
+	# ★ 外面的迴圈這樣呼叫它（圖 1 全景）
+</pre>
+        </div>
+        <div class="codesep">回收預 0：四個參數裡，<b>keys／values</b> 是「算出來的」那一欄中<b>唯一活過一輪</b>的東西。</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 0.5b・把四個參數的帳先還掉</span>
+    <ul>
+      <li>不先講這頁，圖 1 一開場 gpt(token_id, pos_id, keys, values) 就會同時欠四筆帳（分別要到圖 2／圖 3／圖 9 才還）。</li>
+      <li>回收預 0：keys／values 是「算出來的」那一欄裡唯一活過一輪的東西——這就是預 0 埋的例外。</li>
+      <li>很多人以為模型每次讀進整句話。<b>不是</b>——它一次只讀一個 token，前文早被壓成 k、v 冰在 cache 裡。這句講清楚，圖 9 的自迴歸與 KV cache 幾乎不用再解釋。</li>
+      <li>尾鉤：知道怎麼呼叫它了，下一頁看它裡面有幾站。</li>
     </ul>
   </aside>
 </section>
