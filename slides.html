@@ -221,7 +221,7 @@ body.notes-on .slide.active .notes{display:block}
         <defs><linearGradient id="fadeG" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stop-color="#4a4947"/><stop offset="1" stop-color="#4a4947" stop-opacity="0"/>
         </linearGradient></defs>
-        <text x="0" y="24" class="th">整個模型的全部知識 = 5 張數字表</text>
+        <text x="0" y="24" class="th">整個模型的全部知識 = 5 個矩陣</text>
 
         <text x="0" y="76" class="t" style="font-family:var(--mono)">wte</text>
         <text x="0" y="96" class="td">27 × 16・字母 → 向量（查表）</text>
@@ -276,7 +276,7 @@ body.notes-on .slide.active .notes{display:block}
 80	matrix = lambda nout, nin, std=0.08:
 	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
 	↪  for _ in range(nout)]
-	# ★ matrix：造表工具；Value＝會記帳的數字（圖 10 收帳）
+	# ★ matrix：造一個矩陣；Value＝會記帳的數字（圖 10 收帳）
 81	state_dict = {'wte': matrix(vocab_size, n_embd),
 	↪ 'wpe': matrix(block_size, n_embd),
 	↪ 'lm_head': matrix(vocab_size, n_embd)}
@@ -328,7 +328,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="24" y="394" class="ts">「此刻的意義」與「對下一個字母的預測」</text>
         <text x="24" y="418" class="ts">已同時濃縮在這 16 個數字裡</text>
         <text x="24" y="446" class="td">——圖 7 會揭曉：這兩件事其實是同一件事</text>
-        <text x="0" y="524" class="ts" style="fill:var(--c-now)">★ 每一步的動詞都是「＋」——三個加號（圖 6 收這條線）</text>
+        <text x="0" y="524" class="ts" style="fill:var(--c-now)">每一步的動詞都是「＋」——三個加號（圖 6 收這條線）</text>
 
         <text x="530" y="36" class="ts">整個程式＝對同一個 x 不停「加料」（生成 emma 走到第 3 步）：</text>
         <rect x="530" y="58" width="470" height="54" class="tint-bus" rx="10"/>
@@ -355,7 +355,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="988" y="367" class="td end">圖 5</text>
         <text x="765" y="440" class="ts mid">你等一下看到的每一張圖，都只是在回答：</text>
         <text x="765" y="466" class="t mid" style="font-weight:600">「這一步往 x 裡加了什麼料？」</text>
-        <text x="765" y="522" class="td mid">尾鉤：這個 x 從頭到尾，只會被三種方式對待——一招一節</text>
+        <text x="765" y="522" class="td mid">這個 x 從頭到尾，只會被三種運算對待——接下來一種一頁</text>
       </svg>
     </div>
   </div>
@@ -364,20 +364,20 @@ body.notes-on .slide.active .notes{display:block}
       <li>別被「16 維向量」四個字嚇到：<b>它就是一個長度 16 的 list</b>，沒有更多了。</li>
       <li>整個模型跑一輪＝這個 list 被加料<b>三次</b>（＋位置、＋attention 修正、＋MLP 修正）。</li>
       <li>加完三次、進 lm_head 之前：「此刻的意義」和「對下一個字母的預測」同時濃縮在這 16 個數字裡——圖 7 揭曉這兩件事是<b>同一件事</b>。</li>
-      <li>尾鉤：這個 x 從頭到尾只會被三種方式對待。下一節開始，一招一節。</li>
+      <li>尾鉤：這個 x 從頭到尾只會被三種運算對待。下一頁開始，一種一頁。</li>
     </ul>
   </aside>
 </section>
-<!-- ═══════════ 預2 第1招 加法 ═══════════ -->
+<!-- ═══════════ 預2 相加 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 2</span>第 1 招：向量＋向量 — 把兩份理解疊在一起</h1>
+    <h1><span class="figno">預 2</span>① 相加：向量＋向量 — 把兩份理解疊在一起</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--code-fs:13px">
     <div class="pane left">
       <svg viewBox="0 0 606 560">
-        <text x="0" y="26" class="td">這個模型從頭到尾只會三招。接下來一招一節，都拿同一個道具示範。</text>
+        <text x="0" y="26" class="td">這個模型從頭到尾只有三種運算。接下來一種一頁，都用同一個例子示範。</text>
         <text x="20" y="78" class="t">「我是字母 m」</text>
         <text x="230" y="78" style="font:15px var(--mono);fill:var(--ink2)">[ 0.3, -0.1,  0.7, … ]</text>
         <text x="470" y="78" class="td">← wte 的一列</text>
@@ -391,7 +391,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="230" y="187" style="font:15px var(--mono);fill:var(--ink)">[ 0.4,  0.3,  0.5, … ]</text>
         <text x="470" y="187" class="td">兩張便利貼疊起來</text>
 
-        <text x="0" y="258" class="ts">同一招的第二用途：把「修正量」疊上去（attention／MLP 算出來的料）</text>
+        <text x="0" y="258" class="ts">相加的第二個用途：把「修正量」疊上去（attention／MLP 算出來的料）</text>
         <rect x="40" y="282" width="90" height="40" class="tint-bus" rx="8"/>
         <text x="85" y="307" class="tn mid" style="fill:var(--ink)">x</text>
         <text x="152" y="307" class="t mid" style="fill:var(--c-now);font-weight:650">＋</text>
@@ -406,12 +406,12 @@ body.notes-on .slide.active .notes{display:block}
         <text x="24" y="404" style="font:600 17px var(--mono);fill:var(--ink)">殘差就是 x += 修正，不是 x = 修正</text>
         <text x="24" y="438" class="ts">疊上去、不覆蓋——全場沒有任何一步會「洗掉」x（圖 6 收這條線）</text>
 
-        <text x="303" y="536" class="td mid">尾鉤：加法只會疊、不會變——要變出「我在找母音」這種新理解，得靠第 2 招</text>
+        <text x="303" y="536" class="td mid">加法只會疊、不會變——要變出「我在找母音」這種新理解，得靠第二種運算：相乘</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・第 1 招的三次上場</span><span>zip＝兩個 list 並排走</span></div>
+        <div class="codehead"><span>microgpt_en.py・相加的三次上場</span><span>zip＝兩個 list 並排走</span></div>
         <div class="codebody">
 <pre class="py" data-hl="111:bus,134:bus,141:bus">
 111	x = [t + p for t, p in zip(tok_emb, pos_emb)] # …
@@ -426,95 +426,160 @@ body.notes-on .slide.active .notes{display:block}
       </div>
     </div>
   </div>
-  <aside class="notes"><span class="ntag">預 2・第 1 招</span>
+  <aside class="notes"><span class="ntag">預 2・相加</span>
     <ul>
       <li>相加的意義：<b>把兩份理解疊在一起</b>——字母的意義＋位置的感覺＝帶著位置的字母意義。</li>
       <li>對寫過程式的人：殘差就是 <b>x += 修正</b>，不是 x = 修正。全場沒有任何一步會「洗掉」x。</li>
       <li>句型順帶學：zip＝兩個 list 並排走；list comprehension＝對每一格做同一件事。</li>
-      <li>尾鉤：加法只會疊、不會變——想變出「我在找母音」這種新理解，得靠第 2 招。</li>
+      <li>尾鉤：加法只會疊、不會變——想變出「我在找母音」這種新理解，得靠第二種運算：相乘。</li>
     </ul>
   </aside>
 </section>
-<!-- ═══════════ 預3 第2招 乘法 ═══════════ -->
+<!-- ═══════════ 預3a 內積 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 3</span>第 2 招：向量 × 矩陣 — 拿 x 去回答一份問卷</h1>
+    <h1><span class="figno">預 3a</span>② 相乘（一）：兩個向量的內積</h1>
     <nav class="map"></nav>
   </header>
-  <div class="cols" style="--code-fs:13px">
+  <div class="cols solo">
     <div class="pane left">
-      <svg viewBox="0 0 606 560">
-        <text x="0" y="26" class="ts">W 是一份「16 題的問卷」，每一列一題：</text>
-        <rect x="0" y="88" width="104" height="44" class="tint-bus" rx="8"/>
-        <text x="52" y="115" class="tn mid" style="fill:var(--ink)">x（16）</text>
-        <path d="M104 110 H140" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <rect x="146" y="44" width="304" height="204" class="box" rx="10"/>
-        <text x="166" y="80" class="ts">列 1 「你身上有多少 A？」</text>
-        <path d="M436 75 H466" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="474" y="80" class="tn">答案 a₁</text>
-        <text x="166" y="122" class="ts">列 2 「你身上有多少 B？」</text>
-        <path d="M436 117 H466" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="474" y="122" class="tn">答案 a₂</text>
-        <text x="166" y="164" class="ts" style="fill:var(--ink3)">　⋮</text>
-        <text x="474" y="164" class="tn" style="fill:var(--ink3)">⋮</text>
-        <text x="166" y="206" class="ts">列 16「你身上有多少 P？」</text>
-        <path d="M436 201 H466" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="474" y="206" class="tn">答案 a₁₆</text>
-        <text x="303" y="286" class="ts mid">出來＝16 個答案＝<tspan fill="var(--ink)" font-weight="600">換了一組角度重新看的 x</tspan></text>
+      <svg viewBox="0 0 1140 560">
+        <text x="0" y="30" class="ts">兩個向量，各 16 個數字。這一頁只做一件事：把它們的內積算完一次。</text>
 
-        <rect x="0" y="312" width="590" height="42" class="box" rx="8"/>
-        <text x="295" y="339" class="ts mid">內積＝一題的評分：逐項相乘、再加總——像對答案</text>
+        <rect x="0" y="56" width="700" height="44" class="tint-bus" rx="10"/>
+        <text x="24" y="84" class="t" style="font-weight:600">x</text>
+        <text x="60" y="84" style="font:16px var(--mono);fill:var(--ink)">= [  0.4,   0.3,   0.5,  … ]</text>
+        <text x="700" y="84" class="td">← 主角，那個「第 3 格的 m」</text>
+        <rect x="0" y="110" width="700" height="44" class="box" rx="10"/>
+        <text x="24" y="138" class="t" style="font-weight:600">w</text>
+        <text x="60" y="138" style="font:16px var(--mono);fill:var(--ink)">= [  0.2,  -0.1,   0.9,  … ]</text>
+        <text x="700" y="138" class="td">← 另一個 16 維向量</text>
 
-        <text x="0" y="396" class="ts">全場總共 7 份問卷，題目不同、動作永遠一樣（先混臉熟）：</text>
-        <rect x="0" y="414" width="188" height="92" class="tint-attn" rx="10"/>
-        <text x="16" y="444" style="font:600 15px var(--mono);fill:var(--ink)">× Wq</text>
-        <text x="16" y="470" class="ts">「我在找什麼？」</text>
-        <text x="16" y="494" class="td">圖 4a-0</text>
-        <rect x="202" y="414" width="188" height="92" class="tint-mlp" rx="10"/>
-        <text x="218" y="444" style="font:600 15px var(--mono);fill:var(--ink)">× fc1</text>
-        <text x="218" y="470" class="ts">「64 題健檢」</text>
-        <text x="218" y="494" class="td">圖 5</text>
-        <rect x="404" y="414" width="188" height="92" class="tint-bus" rx="10"/>
-        <text x="420" y="444" style="font:600 15px var(--mono);fill:var(--ink)">× lm_head</text>
-        <text x="420" y="470" class="ts">「27 題：你是誰？」</text>
-        <text x="420" y="494" class="td">圖 7</text>
+        <text x="0" y="200" class="t" style="font-weight:600">內積＝逐項相乘，再全部加總</text>
 
-        <text x="303" y="546" class="td mid">尾鉤：答完的分數正負混雜、大小不一——誰來過濾？第 3 招</text>
+        <text x="70" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.4×0.2</text>
+        <text x="160" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="266" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.3×(−0.1)</text>
+        <text x="360" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="450" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.5×0.9</text>
+        <text x="540" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋ …</text>
+        <text x="70" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.08</text>
+        <text x="266" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">−0.03</text>
+        <text x="450" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.45</text>
+        <path d="M620 258 H700" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="708" y="234" width="150" height="46" class="tint-bus" rx="10"/>
+        <text x="783" y="265" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">1.23</text>
+        <text x="874" y="258" class="t">← 只有一個數字</text>
+        <text x="874" y="282" class="td">兩個 16 維向量進去，出來一個數</text>
+
+        <line x1="0" y1="320" x2="1140" y2="320" class="axis"/>
+
+        <text x="0" y="358" class="t" style="font-weight:600">Python 就是這一行</text>
+        <rect x="0" y="376" width="700" height="52" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="24" y="409" style="font:16px var(--mono);fill:var(--ink)">sum(wi * xi for wi, xi in zip(w, x))</text>
+        <text x="60" y="446" class="td">逐項相乘</text>
+        <path d="M96 430 V416" class="wire" opacity=".6"/>
+        <text x="330" y="446" class="td">zip：兩個 list 並排走，一次給你一組 (wi, xi)</text>
+        <path d="M356 430 V416" class="wire" opacity=".6"/>
+        <text x="24" y="476" class="td">sum(…)＝把它們全部加起來</text>
+
+        <rect x="760" y="360" width="380" height="120" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="760" y="360" width="4" height="120" class="f-bus"/>
+        <text x="784" y="392" class="t" style="font-weight:600">這個數字代表什麼</text>
+        <text x="784" y="422" class="ts">兩個向量有多同方向：</text>
+        <text x="784" y="448" class="ts">同方向 → 大正數・無關 → 接近 0</text>
+        <text x="784" y="470" class="ts">反方向 → 負數</text>
+
+        <text x="0" y="536" class="td">下一頁：一個內積只給一個數字，但主幹上要的是 16 個數字——所以要做 16 次。</text>
       </svg>
     </div>
-    <div class="pane right">
-      <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・問卷的本體</span><span>雙層 comprehension＝造表</span></div>
-        <div class="codebody">
-<pre class="py" data-hl="94-95:bus">
-94	def linear(x, w):   # ★ linear：第 2 招的本體，出現 7 次
-95	    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
-	# 前半＝跟一列逐項相乘再加總（內積）；後半＝每列做一次
-</pre>
-<div class="codesep"><b>問卷是怎麼生出來的</b>・雙層 list comprehension＝造一張表</div>
-<pre class="py">
-80	matrix = lambda nout, nin, std=0.08:
-	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
-	↪  for _ in range(nout)]
-	# 外層每列、內層每欄——一張 nout × nin 的表
-</pre>
-        </div>
-      </div>
-    </div>
   </div>
-  <aside class="notes"><span class="ntag">預 3・第 2 招（問卷比喻的定義處）</span>
+  <aside class="notes"><span class="ntag">預 3a・內積</span>
     <ul>
-      <li>相乘的意義：<b>拿 x 去回答一份問卷</b>。答完得到一串新數字＝從另一組角度看同一個 x。「16 維 × 矩陣能表達什麼」取決於問卷<b>問什麼</b>——而問卷是訓練學出來的。</li>
-      <li>內積＝一題的評分：逐項對答案、加總。等一下 attention 的「像不像」也是同一個動作。</li>
-      <li>這一節不深講任何一份問卷的題目（主場各自在圖 4a-0、圖 5、圖 7）。7 次 linear＝q、k、v、Wo、fc1、fc2、lm_head。</li>
-      <li>尾鉤：答完的分數正負混雜、大小不一——誰來過濾？第 3 招。</li>
+      <li>很多人不是不會，只是<b>很久沒算數學了</b>。所以這一頁用真數字算完一次，不趕。</li>
+      <li>整個內積就一句話：<b>兩個 16 維向量進去、一個數字出來</b>。這個數字＝兩個向量有多同方向。</li>
+      <li>先埋：等一下 attention 判斷「我跟前面那一格像不像」，用的就是這一行程式。</li>
+      <li>尾鉤：一個內積只給一個數字，但主幹上要的是 16 個數字——所以要做 16 次，那就是矩陣。</li>
     </ul>
   </aside>
 </section>
-<!-- ═══════════ 預4 第3招 非線性 ═══════════ -->
+<!-- ═══════════ 預3b 矩陣 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 4</span>第 3 招：非線性 — 神經網路裡的 if（主角 relu）</h1>
+    <h1><span class="figno">預 3b</span>② 相乘（二）：矩陣就是一疊向量</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <text x="0" y="26" class="ts">Python 裡沒有「矩陣」這種型別——<tspan fill="var(--ink)" font-weight="600">矩陣就是 list 裡面裝 list</tspan>，一列一個向量。</text>
+
+        <rect x="0" y="44" width="560" height="222" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="20" y="76" style="font:15px var(--mono);fill:var(--ink)">w = [ [ 0.2, -0.1,  0.9, … ],</text>
+        <text x="74" y="110" style="font:15px var(--mono);fill:var(--ink)">[ 0.7,  0.3, -0.4, … ],</text>
+        <text x="88" y="144" style="font:15px var(--mono);fill:var(--ink3)">⋮</text>
+        <text x="74" y="178" style="font:15px var(--mono);fill:var(--ink)">[-0.5,  0.8,  0.1, … ] ]</text>
+        <text x="360" y="76" class="td">← 第 0 列，16 個數字</text>
+        <text x="360" y="110" class="td">← 第 1 列</text>
+        <text x="360" y="178" class="td">← 第 15 列</text>
+        <path d="M520 62 H540 V190 H520" class="wire-bus"/>
+        <text x="20" y="222" class="ts" style="fill:var(--c-bus)">每一列自己就是一個 16 維向量——這裡總共 16 個</text>
+        <text x="20" y="248" class="td">（幾列由矩陣自己決定：fc1 有 64 列、lm_head 有 27 列）</text>
+
+        <text x="600" y="66" class="t" style="font-weight:600">x 跟「每一列」各做一次預 3a 的內積</text>
+        <rect x="600" y="86" width="140" height="40" class="tint-bus" rx="8"/>
+        <text x="670" y="112" class="tn mid" style="fill:var(--ink)">x（16 個數）</text>
+        <path d="M740 106 H772" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="790" y="152" class="ts">x · 第 0 列</text>
+        <path d="M900 147 H950" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="962" y="152" class="tn" style="fill:var(--ink)">0.87</text>
+        <text x="790" y="186" class="ts">x · 第 1 列</text>
+        <path d="M900 181 H950" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="962" y="186" class="tn" style="fill:var(--ink)">−1.20</text>
+        <text x="790" y="216" class="ts" style="fill:var(--ink3)">　⋮</text>
+        <text x="962" y="216" class="tn" style="fill:var(--ink3)">⋮</text>
+        <text x="790" y="248" class="ts">x · 第 15 列</text>
+        <path d="M900 243 H950" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="962" y="248" class="tn" style="fill:var(--ink)">0.34</text>
+        <rect x="770" y="270" width="330" height="40" class="tint-bus" rx="8"/>
+        <text x="935" y="296" class="ts mid" style="fill:var(--ink)">16 列 → 16 個數字 ＝ 又是一個 16 維向量</text>
+
+        <line x1="0" y1="342" x2="1140" y2="342" class="axis"/>
+
+        <text x="0" y="378" class="t" style="font-weight:600">程式：外層跑每一列，內層就是預 3a 那一行</text>
+        <rect x="0" y="396" width="820" height="76" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="24" y="424" style="font:15px var(--mono);fill:var(--ink)">def linear(x, w):</text>
+        <text x="24" y="452" style="font:15px var(--mono);fill:var(--ink)">    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]</text>
+        <path d="M300 458 V478" class="wire-bus"/>
+        <text x="150" y="496" class="td">預 3a：跟一列做內積</text>
+        <path d="M478 458 V478" class="wire-bus"/>
+        <text x="404" y="496" class="td">wo 逐一取出每一列</text>
+        <text x="24" y="528" class="td" style="font-family:var(--mono)">matrix = lambda nout, nin, …: [[… for _ in range(nin)] for _ in range(nout)]</text>
+        <text x="24" y="550" class="td">造矩陣也是巢狀 list：外層跑 nout 次＝幾列，內層跑 nin 次＝一列有幾個數字</text>
+
+        <rect x="860" y="396" width="280" height="120" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="860" y="396" width="4" height="120" class="f-attn"/>
+        <text x="884" y="426" class="ts" style="fill:var(--ink);font-weight:600">全場用 7 次，動作都一樣</text>
+        <text x="884" y="456" class="tn" style="font-size:12.5px">× Wq（圖 4a-0）</text>
+        <text x="884" y="480" class="tn" style="font-size:12.5px">× fc1（圖 5）・× lm_head（圖 7）</text>
+        <text x="884" y="504" class="td">差別只在矩陣裡那些列是什麼</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 3b・矩陣</span>
+    <ul>
+      <li>一句話：<b>矩陣就是一疊向量，相乘就是拿 x 跟每一列各做一次內積。</b></li>
+      <li>Python 沒有矩陣型別，就是 list 裡面裝 list——左圖那個寫法，跟右邊的數學是同一件事。</li>
+      <li>形狀怎麼看：矩陣有幾列，出來就是幾個數字。fc1 有 64 列，所以 16 個數字進去、64 個出來。</li>
+      <li>「16 維 × 矩陣能算出什麼」，取決於矩陣裡那些列是什麼——<b>而那些列是訓練學出來的</b>。</li>
+      <li>尾鉤：算出來的數字正負混雜、大小不一——誰來過濾？下一頁的第三種運算。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 預4 非線性 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">預 4</span>③ 非線性 — 神經網路裡的 if（主角 relu）</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--code-fs:13px">
@@ -538,27 +603,27 @@ body.notes-on .slide.active .notes{display:block}
         <text x="370" y="184" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
         <text x="490" y="184" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+0.1</text>
         <text x="310" y="216" class="td mid">負的一律歸零，正的原樣通過——沒有 if，程式只是一條算式</text>
-        <text x="303" y="248" class="ts mid">沒有 relu，fc1 × fc2 事先乘成一張 16×16——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan>（圖 5 還債）</text>
+        <text x="303" y="248" class="ts mid">沒有 relu，fc1 × fc2 事先乘成一個 16×16 矩陣——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan>（圖 5 還債）</text>
 
         <line x1="0" y1="274" x2="606" y2="274" class="axis"/>
 
-        <text x="0" y="306" class="ts">附贈半招｜<tspan fill="var(--ink)" font-weight="600">rmsnorm＝音控台</tspan>：只調音量、不動方向</text>
+        <text x="0" y="306" class="ts">另外還有一個 <tspan fill="var(--ink)" font-weight="600">rmsnorm＝音控台</tspan>：只調音量、不動方向</text>
         <text x="60" y="346" style="font:15px var(--mono);fill:var(--ink2)">[ 3.2, -1.6,  4.8, … ]</text>
-        <text x="330" y="346" class="td">← 加料疊久了、問卷答多了，音量會漂</text>
+        <text x="330" y="346" class="td">← 加料疊久了、乘過幾個矩陣，音量會漂</text>
         <path d="M150 358 V390" class="wire-bus" marker-end="url(#ar-bus)"/>
         <text x="168" y="380" class="ts">÷ 整體音量（16 個數字的均方根）</text>
         <text x="60" y="416" style="font:15px var(--mono);fill:var(--ink)">[ 0.8, -0.4,  1.2, … ]</text>
         <text x="330" y="416" class="td">← 方向沒變，音量回到標準</text>
         <rect x="0" y="446" width="590" height="60" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <text x="20" y="472" class="ts"><tspan fill="var(--ink)" font-weight="600">每次拿 x 去作答之前，先過一次音控</tspan>（進主幹前・attention 前・MLP 前）</text>
+        <text x="20" y="472" class="ts"><tspan fill="var(--ink)" font-weight="600">每次拿 x 去做內積之前，先過一次音控</tspan>（進主幹前・attention 前・MLP 前）</text>
         <text x="20" y="496" class="td">零參數：4,192 個數字裡沒有半個屬於它——它不是知識，是水電</text>
 
-        <text x="303" y="544" class="td mid">尾鉤：三招齊了。同一件事要重複 N 次（每層、每個 head、每一格），程式怎麼寫？</text>
+        <text x="303" y="544" class="td mid">三種運算到此為止——運算只有三種、數字只有 4,192 個。之後每一步都可以問：這是哪一種？</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・第 3 招＋半招</span><span>relu 的微分：0 或 1</span></div>
+        <div class="codehead"><span>microgpt_en.py・非線性＋音控</span><span>relu 的微分：0 或 1</span></div>
         <div class="codebody">
 <pre class="py" data-hl="50:now,139:now">
 50	def relu(self): return Value(max(0, self.data),
@@ -567,7 +632,7 @@ body.notes-on .slide.active .notes{display:block}
 ⋯
 139	x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
 </pre>
-<div class="codesep"><b>半招 rmsnorm</b>・三行、零參數</div>
+<div class="codesep"><b>rmsnorm</b>・三行、零參數</div>
 <pre class="py">
 103	def rmsnorm(x):   # ★ rmsnorm：音控台
 104	    ms = sum(xi * xi for xi in x) / len(x)   # ms：平均音量
@@ -578,72 +643,12 @@ body.notes-on .slide.active .notes{display:block}
       </div>
     </div>
   </div>
-  <aside class="notes"><span class="ntag">預 4・第 3 招＋半招</span>
+  <aside class="notes"><span class="ntag">預 4・非線性＋音控</span>
     <ul>
       <li><b>relu 就是神經網路裡的 if</b>——沒有 if，程式只是一條算式；有了 if 才會「分情況」。（圖 5 的「64 條 if-then 規則」就是這個 if。）</li>
-      <li>相加是疊、相乘是換角度，都還是線性的——非線性是唯一能製造「分情況」的地方。兄弟 softmax（attention／抽樣見）；加上半招 rmsnorm，「只會三招」沒有破功。</li>
-      <li><b>rmsnorm 為什麼存在</b>：第 1 招一直疊、第 2 招會放大縮小，x 的音量會漂移；音量一漂，內積評分沒有共同尺度、softmax 被極端值綁架。所以每次作答前先過音控。零參數＝它不是知識，是水電。</li>
-      <li>尾鉤：三招齊了——同一件事重複 N 次怎麼寫？</li>
-    </ul>
-  </aside>
-</section>
-<!-- ═══════════ 預5 收納 ═══════════ -->
-<section class="slide std" data-station="">
-  <header>
-    <h1><span class="figno">預 5</span>收納：句型到此為止</h1>
-    <nav class="map"></nav>
-  </header>
-  <div class="cols" style="--code-fs:13px">
-    <div class="pane left">
-      <svg viewBox="0 0 606 560">
-        <text x="0" y="30" class="t" style="font-weight:600">最後一個句型｜for 迴圈＝「同一件事做 N 次」</text>
-        <text x="0" y="56" class="td">右欄三行，就是全檔 for 的全部用法</text>
-
-        <rect x="0" y="92" width="150" height="60" class="tint-bus" rx="10"/>
-        <text x="75" y="129" class="t mid" style="font-weight:650">句型</text>
-        <text x="180" y="120" class="ts">只有這幾種：</text>
-        <text x="180" y="144" class="tn">＋、問卷（×）、門檻（relu）、for、zip、comprehension</text>
-        <rect x="0" y="176" width="150" height="60" class="tint-attn" rx="10"/>
-        <text x="75" y="213" class="t mid" style="font-weight:650">招式</text>
-        <text x="180" y="204" class="ts">只有三招</text>
-        <text x="180" y="228" class="td">加（疊理解）・乘（答問卷）・非線性（分情況）</text>
-        <rect x="0" y="260" width="150" height="60" class="tint-mlp" rx="10"/>
-        <text x="75" y="297" class="t mid" style="font-weight:650">數字</text>
-        <text x="180" y="288" class="ts">只有 4,192 個</text>
-        <text x="180" y="312" class="td">訓練＝把它們各挪一小步（圖 10）</text>
-
-        <rect x="0" y="356" width="590" height="86" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <rect x="0" y="356" width="4" height="86" class="f-now"/>
-        <text x="24" y="390" class="t" style="font-weight:600">之後每張圖都可以問：「這一步是第幾招？」</text>
-        <text x="24" y="420" class="ts">先劇透：Attention＝用三招去「搬」前文；MLP＝用三招來「想」（圖 4 開講）</text>
-
-        <rect x="0" y="462" width="590" height="70" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <rect x="0" y="462" width="4" height="70" class="f-rand"/>
-        <text x="24" y="492" class="ts"><tspan fill="var(--ink)" font-weight="600">承諾</tspan>：全檔最兇的一行藏在 attention 裡，</text>
-        <text x="24" y="518" class="ts">輪到它之前會先拆給你看（圖 4a-0）——不會咬人</text>
-      </svg>
-    </div>
-    <div class="pane right">
-      <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・迴圈只有三個</span><span>看懂這幾頁＝全檔看得懂</span></div>
-        <div class="codebody">
-<pre class="py">
-114	for li in range(n_layer):   # ★ li：第幾層（這裡 N=1）
-⋯
-124	for h in range(n_head):   # ★ h：第幾個 head（N=4）
-⋯
-193	for pos_id in range(block_size):
-	# ★ pos_id：第幾格——跟 wpe 查表用同一個號碼
-</pre>
-        </div>
-      </div>
-    </div>
-  </div>
-  <aside class="notes"><span class="ntag">預 5・收納</span>
-    <ul>
-      <li><b>200 行裡沒有任何一行用到預 2–預 5 以外的 Python。</b>看懂這幾頁，今晚所有程式碼你都看得懂。</li>
-      <li>互動哏：之後每張圖都可以問「這一步是第幾招？」——Attention＝用三招搬前文、MLP＝用三招想。</li>
-      <li>承諾：全檔最兇的一行藏在 attention 裡，輪到它之前先拆給你看（圖 4a-0）。</li>
+      <li>相加是疊、相乘是換角度，都還是線性的——非線性是唯一能製造「分情況」的地方。另外還有 softmax（attention／抽樣見）和 rmsnorm，它們都是配角，「只有三種運算」仍然成立。</li>
+      <li><b>rmsnorm 為什麼存在</b>：相加一直疊、相乘會放大縮小，x 的音量會漂移；音量一漂，內積沒有共同尺度、softmax 被極端值綁架。所以每次做內積前先過音控。零參數＝它不是知識，是水電。</li>
+      <li>收尾一句：<b>運算只有三種、數字只有 4,192 個</b>。之後每張圖都可以問「這一步用的是哪一種運算？」——Attention＝用這三種搬前文、MLP＝用這三種想。</li>
     </ul>
   </aside>
 </section>
@@ -917,7 +922,7 @@ body.notes-on .slide.active .notes{display:block}
 110	    pos_emb = state_dict['wpe'][pos_id] # position embedding
 	# 預 2 見過的兩張便利貼——這是它們的出生地
 111	    x = [t + p for t, p in zip(tok_emb, pos_emb)] # joint …
-	# 第 1 招，正式上場
+	# 預 2 的相加，正式上場
 112	    x = rmsnorm(x) # note: not redundant due to backward …
 	# 預 4 的音控台正式上工（旁路沒過音控，這裡不多餘）
 </pre>
@@ -927,7 +932,7 @@ body.notes-on .slide.active .notes{display:block}
   </div>
   <aside class="notes"><span class="ntag">圖 3・Embedding</span>
     <ul>
-      <li>這是「符號」變成「意義」的轉折點（109–112）——也是<b>預 2 第 1 招第一次正式上場</b>（L111 那個「＋」）。</li>
+      <li>這是「符號」變成「意義」的轉折點（109–112）——也是<b>預 2「相加」第一次正式上場</b>（L111 那個「＋」）。</li>
       <li>rmsnorm（預 4 的音控台）全場上工三次：這裡、attention 作答前、MLP 作答前——永遠在「作答前」。旁路帶的是沒過音控的 x，所以這裡再過一次不多餘。</li>
       <li>加上 wpe 是模型唯一知道「我在第幾個字母」的管道——拿掉它，<b>emma 和 amme 對模型完全相同</b>。</li>
       <li>wpe 不是公式，<b>就是普通參數</b>：跟 wte 一樣進 state_dict、一樣被攤平進 params、訓練迴圈一視同仁地更新。「第 0 格」「第 3 格」的意思是模型自己從資料裡學出來的。</li>
@@ -937,13 +942,13 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 6 圖3b context 上限 ═══════════ -->
 <section class="slide std" data-station="2">
   <header>
-    <h1><span class="figno">圖 3b</span>context length 上限，就是這張表的列數</h1>
+    <h1><span class="figno">圖 3b</span>context length 上限，就是 wpe 矩陣的列數</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--code-fs:13px">
     <div class="pane left">
       <svg viewBox="0 0 606 560">
-        <text x="0" y="26" class="ts">wpe 是一張只有 block_size = 16 列的表：</text>
+        <text x="0" y="26" class="ts">wpe 是一個只有 block_size = 16 列的矩陣：</text>
         <rect x="40" y="46" width="340" height="272" class="tint-bus" rx="10"/>
         <line x1="40" y1="86" x2="380" y2="86" stroke="rgba(57,135,229,.35)"/>
         <line x1="40" y1="126" x2="380" y2="126" stroke="rgba(57,135,229,.35)"/>
@@ -987,7 +992,7 @@ body.notes-on .slide.active .notes{display:block}
 	↪ of the attention window
 	↪ (note: the longest name is 15 characters)
 </pre>
-<div class="codesep"><b>表就這麼大</b>・16 列，一列一個位置</div>
+<div class="codesep"><b>矩陣就這麼大</b>・16 列，一列一個位置</div>
 <pre class="py" data-hl="81:bus">
 81	state_dict = {'wte': matrix(vocab_size, n_embd),
 	↪ 'wpe': matrix(block_size, n_embd),
@@ -1006,7 +1011,7 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">圖 3b・context 上限</span>
     <ul>
       <li>block_size 取訓練資料裡最長的名字（15 個字母）。第 17 個位置<b>不是效果變差，是物理上不存在</b>。</li>
-      <li>收尾：「你聽過『這個模型 context 是 128K』——在最小的模型裡，那件事就長這樣：<b>一張只有 16 列的表</b>。」</li>
+      <li>收尾：「你聽過『這個模型 context 是 128K』——在最小的模型裡，那件事就長這樣：<b>一個只有 16 列的矩陣</b>。」</li>
       <li>現代模型改用 RoPE，正是因為旋轉角度可以外推到訓練時沒看過的長度。</li>
     </ul>
   </aside>
@@ -1182,8 +1187,8 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M320 46 L146 84" class="wire" marker-end="url(#ar-grey)"/>
         <path d="M320 46 V84" class="wire" marker-end="url(#ar-grey)"/>
         <path d="M320 46 L494 84" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="504" y="66" class="td">三份不同的 16 題問卷</text>
-        <text x="504" y="82" class="td">（第 2 招連用三次）</text>
+        <text x="504" y="66" class="td">三個不同的 16×16 矩陣</text>
+        <text x="504" y="82" class="td">（相乘連用三次）</text>
         <rect x="106" y="88" width="80" height="30" class="box" rx="6"/>
         <text x="146" y="108" class="tn mid" style="fill:var(--ink)">× Wq</text>
         <rect x="280" y="88" width="80" height="30" class="box" rx="6"/>
@@ -1230,19 +1235,19 @@ body.notes-on .slide.active .notes{display:block}
         <line x1="0" y1="426" x2="620" y2="426" class="axis" opacity=".4"/>
         <text x="8" y="448" class="tn" style="font-size:12.5px">softmax</text>
         <text x="150" y="448" class="td">分數 → 比例</text>
-        <text x="280" y="448" class="ts" style="font-size:12.5px">擠成加總＝1 的注意力（第 3 招）</text>
+        <text x="280" y="448" class="ts" style="font-size:12.5px">擠成加總＝1 的注意力（非線性）</text>
         <line x1="0" y1="456" x2="620" y2="456" class="axis" opacity=".4"/>
         <text x="8" y="478" class="tn" style="font-size:12.5px">Σ wₜ·vₜ</text>
         <text x="150" y="478" class="td">比例 × v → 4</text>
         <text x="280" y="478" class="ts" style="font-size:12.5px">按比例把前文內容拌回「我」</text>
         <line x1="0" y1="488" x2="620" y2="488" class="axis"/>
         <text x="0" y="520" class="td">（x 的來歷：wte＋wpe＋前文——預 1／圖 3 講過，這裡不重來）</text>
-        <text x="0" y="546" class="ts" style="fill:var(--c-rand)">★ 左表第 3 步就是「魔王句」——右欄先拆好，圖 4a 一格一格走</text>
+        <text x="0" y="546" class="td">左表第 3 步是全檔最長的一行——右欄先拆好，圖 4a 一格一格走</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・三張紙條</span><span>兌現預 5 的承諾</span></div>
+        <div class="codehead"><span>microgpt_en.py・三張紙條</span><span>全檔最長的一行，先拆好</span></div>
         <div class="codebody">
 <div class="codesep"><b>三張紙條</b>・都是同一個 x 自己算出來的</div>
 <pre class="py" data-hl="118-120:attn">
@@ -1251,12 +1256,12 @@ body.notes-on .slide.active .notes{display:block}
 120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
 	# ★ q／k／v：搜尋詞／書背標題／書的內容
 </pre>
-<div class="codesep"><b>魔王句，先拆好</b>・對過去每格 t：q 跟它的 k 內積，再 ÷√4</div>
+<div class="codesep"><b>全檔最長的一行，先拆好</b>・對過去每格 t：q 跟它的 k 內積，再 ÷√4</div>
 <pre class="py" data-hl="129:attn">
 129	attn_logits = [sum(q_h[j] * k_h[t][j]
 	↪     for j in range(head_dim)) / head_dim**0.5
 	↪     for t in range(len(k_h))]
-	# ★ q_h、k_h：q、k 切給這個 head 的 4 維——魔王句本尊
+	# ★ q_h、k_h：q、k 切給這個 head 的 4 維
 </pre>
         </div>
       </div>
@@ -1265,9 +1270,9 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">圖 4a-0・q/k/v 前置（零數字）</span>
     <ul>
       <li>三張紙條都是<b>同一個 x 自己算出來的</b>（L118-120），不是外面發的。</li>
-      <li>為什麼要三個角度、不拿 x 直接比 x？——「我在找的」跟「我是誰」通常不是同一件事：m 在找母音，但它自己是子音。三份問卷，各司其職。</li>
+      <li>為什麼要三個角度、不拿 x 直接比 x？——「我在找的」跟「我是誰」通常不是同一件事：m 在找母音，但它自己是子音。三個矩陣，各司其職。</li>
       <li>k、v 是「留給後人查的」，q 是「當下用完就丟的」——這個不對稱，圖 9 的 KV cache 會收。</li>
-      <li>魔王句拆解＝兌現預 5 的承諾；圖 4a 馬上一格一格走，它不會咬人。</li>
+      <li>這是全檔最長的一行，先在右欄拆開；圖 4a 馬上帶著數字一格一格走一遍。</li>
     </ul>
   </aside>
 </section>
@@ -1579,7 +1584,7 @@ body.notes-on .slide.active .notes{display:block}
         <polygon points="200,124 320,124 420,190 100,190" class="tint-mlp"/>
         <text x="260" y="152" class="t mid" style="font-weight:600">fc1（16 → 64）</text>
         <text x="260" y="176" class="ts mid">64 個「偵測器」</text>
-        <text x="436" y="148" class="td">每一列問一個問題：</text>
+        <text x="436" y="148" class="td">每一列跟 x 做一次內積：</text>
         <text x="436" y="166" class="td">「你身上有沒有 X？」</text>
         <rect x="100" y="200" width="320" height="32" class="box"/>
         <text x="260" y="221" class="mid" style="font:13px var(--mono);fill:var(--ink2)">−1.2　+3.4　−0.8　+0.1　⋯</text>
@@ -1612,11 +1617,11 @@ body.notes-on .slide.active .notes{display:block}
 50	def relu(self): return Value(max(0, self.data),
 	↪     (self,), (float(self.data > 0),))
 </pre>
-<div class="codesep"><b>撐胖 4 倍的兩張表</b>・64 要放得下夠多條規則</div>
+<div class="codesep"><b>撐胖 4 倍的兩個矩陣</b>・64 要放得下夠多條規則</div>
 <pre class="py" data-hl="87-88:mlp">
 87	state_dict[f'layer{i}.mlp_fc1'] = matrix(4 * n_embd, n_embd)
 88	state_dict[f'layer{i}.mlp_fc2'] = matrix(n_embd, 4 * n_embd)
-	# fc1＝64 題的問卷；fc2＝64 條回應
+	# fc1＝64 列的矩陣；fc2＝64 條回應
 </pre>
 <div class="codesep"><b>MLP 區塊本體</b>・三行＋殘差</div>
 <pre class="py" data-hl="138:mlp,139:now,140:mlp,141:bus">
@@ -1633,7 +1638,7 @@ body.notes-on .slide.active .notes{display:block}
   </div>
   <aside class="notes"><span class="ntag">圖 5・MLP</span>
     <ul>
-      <li>還記得預 3 的問卷嗎？<b>fc1 就是一份 64 題的問卷</b>——64 個偵測器，每一列問一題。</li>
+      <li>回到預 3b：<b>fc1 就是一個 64 列的矩陣</b>——每一列都是一個偵測器，跟 x 做一次內積問一題。</li>
       <li><b>為什麼要先撐胖再壓瘦？</b>拿掉 relu，兩個矩陣相乘會塌成一個 16×16 矩陣，整段完全白做——這段的存在意義 100% 來自那個 relu（<b>預 4 欠的完整論證，在這裡還</b>）。</li>
       <li>把 MLP 看成<b>查表式的記憶體</b>：64 條 if-then 規則平行檢查，觸發的加總起來寫回主幹。中間要夠寬，是因為要放得下夠多條規則。</li>
       <li>以英文名字想像：某個神經元專門偵測「剛剛連續兩個子音」，一觸發就往主幹加上「接下來該是母音了」的方向。</li>
@@ -1770,7 +1775,7 @@ body.notes-on .slide.active .notes{display:block}
       <div class="codecard">
         <div class="codehead"><span>microgpt_en.py・出口</span><span>架構上就沒有能力思考</span></div>
         <div class="codebody">
-<div class="codesep"><b>兩張同形的表（27 × 16）</b>・lm_head 是 wte 的鏡像</div>
+<div class="codesep"><b>兩個同形狀的矩陣（27 × 16）</b>・lm_head 是 wte 的鏡像</div>
 <pre class="py" data-hl="81:bus">
 81	state_dict = {'wte': matrix(vocab_size, n_embd),
 	↪ 'wpe': matrix(block_size, n_embd),
@@ -1783,7 +1788,7 @@ body.notes-on .slide.active .notes{display:block}
 95	    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
 ⋯
 143	logits = linear(x, state_dict['lm_head'])
-	# 最後一份問卷：27 題，每題問「你是字母 i 嗎？」
+	# 最後一個矩陣：27 列，每列問「你是字母 i 嗎？」
 144	return logits
 </pre>
         </div>
