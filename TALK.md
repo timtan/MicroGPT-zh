@@ -99,7 +99,7 @@
 78   n_head = 4      # number of attention heads         # ★ n_head：attention 分幾頭
 79   head_dim = n_embd // n_head # derived dimension …   # ★ head_dim：每頭分到 16÷4＝4 維
 80   matrix = lambda nout, nin, std=0.08: [[Value(random.gauss(0, std)) for _ in range(nin)] for _ in range(nout)]
-     # ★ matrix：造一個矩陣；★ Value：「一個會記帳的數字」（先這樣理解，預 5 正式介紹、圖 10 收帳）
+     # ★ matrix：造一個矩陣；★ Value：「一個數字 ＋ 一張便條」（先這樣理解，預 5 正式介紹、圖 10 收）
 81   state_dict = {'wte': matrix(vocab_size, n_embd), 'wpe': matrix(block_size, n_embd), 'lm_head': matrix(vocab_size, n_embd)}
      # ★ state_dict：全部知識的收納櫃；★ vocab_size：27，字母加一個特殊符號（圖 2 細講）
 82   for i in range(n_layer):
@@ -113,7 +113,7 @@
 ```
 
 **★ 先講變數**：五個超參數 `n_layer`／`n_embd`／`block_size`／`n_head`／`head_dim`
-（左圖那五個矩陣的長寬就是它們）；`matrix`＝造矩陣的工具；`Value`＝會記帳的數字（預 5 專頁）；
+（左圖那五個矩陣的長寬就是它們）；`matrix`＝造矩陣的工具；`Value`＝數字＋一張便條（預 5 專頁）；
 `state_dict`＝知識收納櫃；`params`＝攤平的 4,192 個數字；`vocab_size`＝27（由來圖 2 馬上講）。
 
 ---
@@ -380,7 +380,7 @@
 
 ```
 50       def relu(self): return Value(max(0, self.data), (self,), (float(self.data > 0),))
-         # ★ self.data：Value 的數值本體；後面兩個括號＝記帳用（微分 0 或 1，圖 10 收）
+         # ★ self.data：Value 的數值本體；後面兩個括號＝便條，微分值寫在這裡（0 或 1，圖 10 收）
 ⋯
 103  def rmsnorm(x):                            # ★ rmsnorm：音控台（零參數）
 104      ms = sum(xi * xi for xi in x) / len(x)     # ms：目前的平均音量（均方）
@@ -390,8 +390,8 @@
 139          x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
 ```
 
-**★ 先講變數**：`self.data`——一個 `Value` 就是「一個會記帳的數字」（圖 0 出場過），
-`.data` 是它的數值本體；帳記什麼、給誰看，圖 10 才講。
+**★ 先講變數**：`self.data`——一個 `Value` 就是「一個數字，外加一張便條」（圖 0 出場過），
+`.data` 是它的數值本體；便條上寫什麼、給誰看，圖 10 才講。
 `rmsnorm`＝音控台：`ms` 量出目前音量、`scale` 算出倍率、逐格乘回去——三行、零參數。
 
 ### 預 5 — Value：讓訓練有可能發生的基礎設施
@@ -402,7 +402,7 @@
 ```
   一般的數字        0.13
 
-  一個 Value        0.13  ＋ 一張便條：「我是從誰、用什麼運算算出來的」
+  一個 Value        0.13  ＋ 一張便條：「我從誰來，對每個來源的微分值是多少」
                      ▲                        ▲
                   .data                  _children／_local_grads
                 （前向只用得到這個）      （只有 backward() 會去讀）
@@ -421,8 +421,8 @@
 - 為什麼它在原始碼裡排這麼前面（L30–72，將近全檔三分之一）：
   因為 `matrix()` 造出來的每個參數都是 `Value`，不先定義它，第 80 行就跑不動。
   **行數多 ≠ 重要——模型本體只有 L108–144 那三十幾行。**
-- 純 Python、零依賴的代價就在這裡：PyTorch 幫你做的記帳，這個檔案自己寫了 40 行。
-- 尾鉤：便條上記了什麼、怎麼回頭走——**圖 10 收帳**，現在不欠解釋，只欠好奇。
+- 純 Python、零依賴的代價就在這裡：PyTorch 幫你寫好的那張便條，這個檔案自己寫了 40 行。
+- 尾鉤：這些微分值怎麼一路接回去、算出每個參數該往哪動——**圖 10 收**，現在不欠解釋，只欠好奇。
 
 **配碼（microgpt_en.py・只看這三行就夠）**
 
@@ -431,10 +431,10 @@
 34           self.data = data                # ★ .data：數值本體，前向只用這個
 ⋯
 41           return Value(self.data + other.data, (self, other), (1, 1))
-             # 加法：算出和，順手記下「我從這兩個來、微分是 (1,1)」
+             # 加法：算出和，順手在便條寫下「我從這兩個來，微分值都是 1」
 ```
 
-**★ 先講變數**：`Value`＝會記帳的數字（圖 0 露過臉，這裡正式介紹）；
+**★ 先講變數**：`Value`＝數字＋便條（圖 0 露過臉，這裡正式介紹）；
 `.data`＝數值本體；`_children`／`_local_grads`＝那張便條（圖 10 主場）。
 
 ---
@@ -452,7 +452,7 @@
   ┌──── 基礎準備（infrastructure）：都是水電，沒有一行是 Transformer ────┐
   │                                                                    │
   │  L9–27    ① 資料 ＋ tokenizer      文字 → 整數        （圖 2 主場）  │
-  │  L30–72   ② Value / autograd       讓數字會記帳       （預 5 剛講）  │
+  │  L30–72   ② Value / autograd       讓數字帶著便條     （預 5 剛講）  │
   │  L75–90   ③ state_dict ＋ params   4,192 個知識       （圖 0 看過）  │
   │  L94–106  ④ 三個工具函數            linear／softmax／rmsnorm         │
   │                                     （預 3b／預 4 已經講掉兩個）      │
@@ -503,7 +503,7 @@
 - 回收預 0：四個參數裡，`token_id`／`pos_id` 是這一輪給的，
   `keys`／`values` 是**右邊那一欄裡唯一活過一輪的東西**——這就是預 0 埋的那個例外。
 - 「200 行的 GPT」容易讓人以為模型有 200 行。**模型本體只有 L108–144。**
-  其他都是資料、記帳、初始化、迴圈。
+  其他都是資料、autograd、初始化、迴圈。
 - 很多人以為模型每次讀進整句話。**不是**——它一次只讀一個 token，
   前文的貢獻早就被壓成 k、v 冰在 cache 裡。這句話講清楚，
   圖 9 的自迴歸和 KV cache 幾乎不用再解釋。
@@ -1458,7 +1458,7 @@ head 裡每個向量只有 **4 個數字**（16 ÷ 4），可以手算。
 | 6 | 預 3a | ② 相乘（一）：兩個向量的內積——逐項相乘再加總 |
 | 7 | 預 3b | ② 相乘（二）：矩陣就是一疊向量，Python 裡是巢狀 list |
 | 8 | 預 4 | ③ 非線性＝神經網路裡的 if（relu；另附 rmsnorm＝音控） |
-| 9 | 預 5 | Value＝會記帳的數字，是水電不是模型（前半場可以無視） |
+| 9 | 預 5 | Value＝數字＋便條，是水電不是模型（前半場可以無視） |
 | 10 | 圖 0.5 | 檔案地圖：前 100 行都是準備；`gpt()` 怎麼呼叫、四個參數是什麼 |
 | 11 | 圖 1 | 全景，先給地圖（工廠外觀 vs 預 1 的內在履歷） |
 | 12 | 圖 2 | Tokenizer 沒有魔法 |
