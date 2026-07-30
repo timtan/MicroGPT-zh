@@ -350,7 +350,7 @@ body.notes-on .slide.active .notes{display:block}
 80	matrix = lambda nout, nin, std=0.08:
 	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
 	↪  for _ in range(nout)]
-	# ★ matrix：造一個矩陣；Value＝會記帳的數字（圖 10 收帳）
+	# ★ matrix：造一個矩陣；Value＝數字＋一張便條（圖 10 收）
 81	state_dict = {'wte': matrix(vocab_size, n_embd),
 	↪ 'wpe': matrix(block_size, n_embd),
 	↪ 'lm_head': matrix(vocab_size, n_embd)}
@@ -773,7 +773,7 @@ body.notes-on .slide.active .notes{display:block}
 <pre class="py" data-hl="50:now,139:now">
 50	def relu(self): return Value(max(0, self.data),
 	↪     (self,), (float(self.data > 0),))
-	# ★ self.data：Value 的數值本體；括號＝記帳（圖 10 收）
+	# ★ self.data：數值本體；括號＝便條，寫微分值（圖 10 收）
 ⋯
 139	x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
 </pre>
@@ -818,7 +818,7 @@ body.notes-on .slide.active .notes{display:block}
 
         <rect x="196" y="146" width="330" height="72" rx="8" class="tint-now"/>
         <text x="216" y="176" class="ts">一張便條：</text>
-        <text x="216" y="200" class="ts" style="fill:var(--c-now)">「我是從誰、用什麼運算算出來的」</text>
+        <text x="216" y="200" class="ts" style="fill:var(--c-now)">「我從誰來，對每個來源的微分值多少」</text>
         <text x="360" y="242" class="td mid">_children ／ _local_grads</text>
 
         <line x1="0" y1="286" x2="640" y2="286" class="axis"/>
@@ -850,11 +850,11 @@ body.notes-on .slide.active .notes{display:block}
 ⋯
 41	    return Value(self.data + other.data,
 	↪                 (self, other), (1, 1))
-	# ★ 加法：算出和，順手記下便條
-	#   「我從這兩個來、微分是 (1,1)」
+	# ★ 加法：算出和，順手寫下便條
+	#   「我從這兩個來，微分值都是 1」
 </pre>
         </div>
-        <div class="codesep">純 Python、零依賴的代價：PyTorch 幫你做的記帳，這裡自己寫了 <b>40 行</b>。</div>
+        <div class="codesep">純 Python、零依賴的代價：PyTorch 幫你寫好的那張便條，這裡自己寫了 <b>40 行</b>。</div>
       </div>
     </div>
   </div>
@@ -862,8 +862,8 @@ body.notes-on .slide.active .notes{display:block}
     <ul>
       <li>這頁的目的<b>不是</b>講 autograd（那是圖 10），而是讓聽眾能安心<b>忽略</b>它——不講，他們會被 Value(...) 卡住一整場。</li>
       <li>為什麼它在原始碼排這麼前面（L30–72，將近全檔三分之一）：matrix() 造出來的每個參數都是 Value，不先定義它第 80 行就跑不動。<b>行數多 ≠ 重要——模型本體只有 L108–144 那三十幾行。</b></li>
-      <li>純 Python 零依賴的代價就在這裡：PyTorch 幫你做的記帳，這個檔案自己寫了 40 行。</li>
-      <li>尾鉤：便條上記了什麼、怎麼回頭走——<b>圖 10 收帳</b>。現在不欠解釋，只欠好奇。</li>
+      <li>純 Python 零依賴的代價就在這裡：PyTorch 幫你寫好的那張便條，這個檔案自己寫了 40 行。</li>
+      <li>尾鉤：這些微分值怎麼一路接回去、算出每個參數該往哪動——<b>圖 10 收</b>。現在不欠解釋，只欠好奇。</li>
     </ul>
   </aside>
 </section>
@@ -886,7 +886,7 @@ body.notes-on .slide.active .notes{display:block}
 
         <text x="20" y="118" class="tn" style="fill:var(--ink3)">L30–72</text>
         <text x="112" y="118" class="t">② Value / autograd</text>
-        <text x="330" y="118" class="ts">讓數字會記帳</text>
+        <text x="330" y="118" class="ts">讓數字帶著便條</text>
         <text x="500" y="118" class="td">預 5 剛講</text>
 
         <text x="20" y="154" class="tn" style="fill:var(--ink3)">L75–90</text>
@@ -945,7 +945,7 @@ body.notes-on .slide.active .notes{display:block}
   </div>
   <aside class="notes"><span class="ntag">圖 0.5a・檔案地圖</span>
     <ul>
-      <li>「200 行的 GPT」容易讓人以為模型有 200 行。<b>模型本體只有 L108–144。</b>其他都是資料、記帳、初始化、迴圈。</li>
+      <li>「200 行的 GPT」容易讓人以為模型有 200 行。<b>模型本體只有 L108–144。</b>其他都是資料、autograd、初始化、迴圈。</li>
       <li>四段基礎準備裡，③已經在圖 0 看過、②預 5 剛講、①圖 2 主場，④只剩 softmax 沒講——順手補完。</li>
       <li>softmax 就是開場那頁「輸出是一組比例」的實作；max_val 只是數值穩定技巧，不影響結果。</li>
     </ul>
