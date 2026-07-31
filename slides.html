@@ -278,7 +278,7 @@ body.notes-on .slide.active .notes{display:block}
     <ul>
       <li><b>輸入是「前面已經有的字母」，輸出是「下一個字母的 27 個機率」——整場只有這一件事。</b>沒有「理解語意」、沒有「知道什麼是名字」，那些都是猜下一個字母的副產品。</li>
       <li>輸出是<b>一個分佈，不是一個字</b>。先講清楚，後面 softmax、temperature、「同一個模型每次生出不同名字」才有共同地基。</li>
-      <li><b>訓練和推論是同一個函數的兩種用法</b>：等一下十幾張圖講的都是推論（拿現成的 4,192 個數字算一次）；訓練是在同一個函數外面繞一圈迴圈、回頭修那些數字（圖 10 展開）。先講這句，聽眾就不會一路帶著「那學習到底在哪裡」的懸念。</li>
+      <li><b>訓練和推論是同一個函數的兩種用法</b>：等一下十幾張圖講的都是推論（拿現成的 4,192 個數字算一次）；訓練是在同一個函數外面繞一圈迴圈、回頭修那些數字（圖 9.5、圖 10 展開）。先講這句，聽眾就不會一路帶著「那學習到底在哪裡」的懸念。</li>
       <li>「沒有人教它母音子音、沒教它名字幾個字母」——這句話<b>留到圖 10 再兌現</b>。</li>
     </ul>
   </aside>
@@ -350,7 +350,7 @@ body.notes-on .slide.active .notes{display:block}
 80	matrix = lambda nout, nin, std=0.08:
 	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
 	↪  for _ in range(nout)]
-	# ★ matrix：造一個矩陣；Value＝數字＋一張便條（圖 10 收）
+	# ★ matrix：造一個矩陣；Value＝數字＋一張便條（圖 9.5 收）
 81	state_dict = {'wte': matrix(vocab_size, n_embd),
 	↪ 'wpe': matrix(block_size, n_embd),
 	↪ 'lm_head': matrix(vocab_size, n_embd)}
@@ -487,13 +487,13 @@ body.notes-on .slide.active .notes{display:block}
         <text x="780" y="183" class="t mid" style="font-weight:600">「我是第 3 格的 m」</text>
         <text x="988" y="183" class="td end">圖 3</text>
         <path d="M765 204 V238" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="781" y="227" class="ts" style="fill:var(--c-now)">＋ attention 算出來的修正</text>
+        <text x="781" y="227" class="ts" style="fill:var(--c-now)">＋ 一份「前文的料」（怎麼來的，圖 4 才拆）</text>
         <rect x="530" y="242" width="470" height="54" class="tint-bus" rx="10"/>
         <text x="548" y="275" class="td">拌入前文</text>
         <text x="780" y="275" class="t mid" style="font-weight:600">「我前面是 e、m」</text>
         <text x="988" y="275" class="td end">圖 4</text>
         <path d="M765 296 V330" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="781" y="319" class="ts" style="fill:var(--c-now)">＋ MLP 算出來的修正</text>
+        <text x="781" y="319" class="ts" style="fill:var(--c-now)">＋ 一份「加工的料」（怎麼來的，圖 5 才拆）</text>
         <rect x="530" y="334" width="470" height="54" class="tint-bus" rx="10"/>
         <text x="548" y="367" class="td">想清楚了</text>
         <text x="780" y="367" class="t mid" style="font-weight:600">「下一個八成是 a」</text>
@@ -507,7 +507,7 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">預 1・主角</span>
     <ul>
       <li>別被「16 維向量」四個字嚇到：<b>它就是一個長度 16 的 list</b>，沒有更多了。</li>
-      <li>整個模型跑一輪＝這個 list 被加料<b>三次</b>（＋位置、＋attention 修正、＋MLP 修正）。</li>
+      <li>整個模型跑一輪＝這個 list 被加料<b>三次</b>（＋位置、＋前文的料、＋加工的料）。<b>這頁不解釋那兩份料哪來的</b>——它們是圖 4、圖 5 的主題，這裡只先讓聽眾看到「動詞永遠是加」。</li>
       <li>加完三次、進 lm_head 之前：「此刻的意義」和「對下一個字母的預測」同時濃縮在這 16 個數字裡——圖 7 揭曉這兩件事是<b>同一件事</b>。</li>
       <li>尾鉤：這個 x 從頭到尾只會被三種運算對待。下一頁開始，一種一頁。</li>
     </ul>
@@ -628,12 +628,14 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M356 430 V416" class="wire" opacity=".6"/>
         <text x="24" y="476" class="td">sum(…)＝把它們全部加起來</text>
 
-        <rect x="760" y="360" width="380" height="120" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <rect x="760" y="360" width="4" height="120" class="f-bus"/>
+        <rect x="760" y="360" width="380" height="176" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="760" y="360" width="4" height="176" class="f-bus"/>
         <text x="784" y="392" class="t" style="font-weight:600">這個數字代表什麼</text>
         <text x="784" y="422" class="ts">兩個向量有多同方向：</text>
         <text x="784" y="448" class="ts">同方向 → 大正數・無關 → 接近 0</text>
         <text x="784" y="470" class="ts">反方向 → 負數</text>
+        <text x="784" y="496" class="td">另一個因素：向量本身數字越大，</text>
+        <text x="784" y="516" class="td">內積也跟著變大（圖 7 會用到）</text>
 
         <text x="0" y="536" class="td">下一頁：一個內積只給一個數字，但主幹上要的是 16 個數字——所以要做 16 次。</text>
       </svg>
@@ -644,6 +646,7 @@ body.notes-on .slide.active .notes{display:block}
       <li>很多人不是不會，只是<b>很久沒算數學了</b>。所以這一頁用真數字算完一次，不趕。</li>
       <li>整個內積就一句話：<b>兩個 16 維向量進去、一個數字出來</b>。這個數字＝兩個向量有多同方向。</li>
       <li>先埋：等一下 attention 判斷「我跟前面那一格像不像」，用的就是這一行程式。</li>
+      <li>順手埋第二件事（<b>圖 7 會用到</b>）：內積大小由兩件事決定——<b>方向像不像</b>，以及<b>向量本身的數字有多大</b>。把 w 每個數字都乘兩倍，內積就跟著變兩倍，方向卻一點沒變。</li>
       <li>尾鉤：一個內積只給一個數字，但主幹上要的是 16 個數字——所以要做 16 次，那就是矩陣。</li>
     </ul>
   </aside>
@@ -748,7 +751,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="370" y="184" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
         <text x="490" y="184" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+0.1</text>
         <text x="310" y="216" class="td mid">負的一律歸零，正的原樣通過——沒有 if，程式只是一條算式</text>
-        <text x="303" y="248" class="ts mid">沒有 relu，fc1 × fc2 事先乘成一個 16×16 矩陣——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan>（圖 5 還債）</text>
+        <text x="303" y="248" class="ts mid">沒有 relu，做幾次內積都還是內積——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan>（圖 5 還債）</text>
 
         <line x1="0" y1="274" x2="606" y2="274" class="axis"/>
 
@@ -773,7 +776,7 @@ body.notes-on .slide.active .notes{display:block}
 <pre class="py" data-hl="50:now,139:now">
 50	def relu(self): return Value(max(0, self.data),
 	↪     (self,), (float(self.data > 0),))
-	# ★ self.data：數值本體；括號＝便條，寫微分值（圖 10 收）
+	# ★ self.data：數值本體；括號＝便條（圖 9.5 收）
 ⋯
 139	x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
 </pre>
@@ -831,7 +834,7 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M186 376 H236" class="wire-now" marker-end="url(#ar-now)"/>
         <text x="248" y="382" class="t">順著便條回頭走，才問得出</text>
         <text x="248" y="408" class="ts">「每個參數往哪動一點，loss 會變小」</text>
-        <text x="248" y="432" class="td">（圖 10 才拆）</text>
+        <text x="248" y="432" class="td">（圖 9.5 手算一次）</text>
 
         <rect x="0" y="470" width="640" height="76" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)"/>
         <text x="22" y="504" class="tb">Value 不是模型的一部分，它是讓訓練有可能發生的基礎設施。</text>
@@ -860,10 +863,10 @@ body.notes-on .slide.active .notes{display:block}
   </div>
   <aside class="notes"><span class="ntag">預 5・讓聽眾安心忽略它</span>
     <ul>
-      <li>這頁的目的<b>不是</b>講 autograd（那是圖 10），而是讓聽眾能安心<b>忽略</b>它——不講，他們會被 Value(...) 卡住一整場。</li>
+      <li>這頁的目的<b>不是</b>講 autograd（那是圖 9.5），而是讓聽眾能安心<b>忽略</b>它——不講，他們會被 Value(...) 卡住一整場。</li>
       <li>為什麼它在原始碼排這麼前面（L30–72，將近全檔三分之一）：matrix() 造出來的每個參數都是 Value，不先定義它第 80 行就跑不動。<b>行數多 ≠ 重要——模型本體只有 L108–144 那三十幾行。</b></li>
       <li>純 Python 零依賴的代價就在這裡：PyTorch 幫你寫好的那張便條，這個檔案自己寫了 40 行。</li>
-      <li>尾鉤：這些微分值怎麼一路接回去、算出每個參數該往哪動——<b>圖 10 收</b>。現在不欠解釋，只欠好奇。</li>
+      <li>尾鉤：這張便條怎麼一路接回去、算出每個參數該往哪動——<b>圖 9.5 會用五行乘法手算一次</b>。這裡明確說出「圖 9.5」，聽眾才願意先放下它。</li>
     </ul>
   </aside>
 </section>
@@ -1341,19 +1344,15 @@ body.notes-on .slide.active .notes{display:block}
         <text x="400" y="354" class="ts" style="fill:var(--c-rand)">查不到 → 直接 crash</text>
         <text x="400" y="374" class="td">不是效果變差，是物理上不存在</text>
 
-        <text x="0" y="428" class="ts">位置資訊的三種來法：</text>
-        <rect x="0" y="444" width="190" height="104" class="tint-bus" rx="10"/>
+        <text x="0" y="428" class="ts">「我在第幾格」有兩種給法：</text>
+        <rect x="0" y="444" width="290" height="104" class="tint-bus" rx="10"/>
         <text x="16" y="472" class="t" style="font-weight:600">學出來的</text>
-        <text x="16" y="496" class="ts">就是普通參數</text>
+        <text x="16" y="500" class="ts">就是普通參數，跟 wte 一樣訓練</text>
         <text x="16" y="530" class="td">GPT-2・本專案</text>
-        <rect x="205" y="444" width="190" height="104" class="box" rx="10"/>
-        <text x="221" y="472" class="t" style="font-weight:600">正弦函數</text>
-        <text x="221" y="496" class="ts">寫死 sin/cos，不訓練</text>
-        <text x="221" y="530" class="td">原始 Transformer 論文</text>
-        <rect x="410" y="444" width="190" height="104" class="box" rx="10"/>
-        <text x="426" y="472" class="t" style="font-weight:600">RoPE</text>
-        <text x="426" y="496" class="ts">把 q/k 旋轉一個角度</text>
-        <text x="426" y="530" class="td">Llama・現代模型</text>
+        <rect x="310" y="444" width="290" height="104" class="box" rx="10"/>
+        <text x="326" y="472" class="t" style="font-weight:600">寫死的公式</text>
+        <text x="326" y="500" class="ts">用 sin/cos 算出來，不訓練</text>
+        <text x="326" y="530" class="td">原始 Transformer 論文</text>
       </svg>
     </div>
     <div class="pane right">
@@ -1385,7 +1384,7 @@ body.notes-on .slide.active .notes{display:block}
     <ul>
       <li>block_size 取訓練資料裡最長的名字（15 個字母）。第 17 個位置<b>不是效果變差，是物理上不存在</b>。</li>
       <li>收尾：「你聽過『這個模型 context 是 128K』——在最小的模型裡，那件事就長這樣：<b>一個只有 16 列的矩陣</b>。」</li>
-      <li>現代模型改用 RoPE，正是因為旋轉角度可以外推到訓練時沒看過的長度。</li>
+      <li>兩種給法都不必展開細節，重點只有一個：<b>位置不是天生的，是額外餵進去的一份資料</b>。（現代模型還有第三種做法，但那要先講完 q/k 才講得通——留到最後有人問再說。）</li>
     </ul>
   </aside>
 </section>
@@ -1899,11 +1898,15 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="385" y="362" width="23" height="24" rx="3" class="bar"/>
         <rect x="495" y="362" width="22" height="24" rx="3" class="bar"/>
 
-        <rect x="0" y="440" width="641" height="76" class="tint-attn" rx="10"/>
-        <text x="20" y="468" class="t" style="fill:var(--ink);font-weight:600">好處：一次 softmax 只能分出「一組」比例＝一個焦點。</text>
-        <text x="20" y="498" class="ts">一個人只能盯一個地方；四個人可以同時盯四個地方——而且成本一模一樣。</text>
-        <rect x="0" y="524" width="641" height="36" class="box" rx="10"/>
-        <text x="20" y="548" class="ts" style="fill:var(--ink2)">代價：每個人只剩 4 個數字可用，看得比較粗。</text>
+        <text x="0" y="438" class="t" style="font-weight:600">為什麼切開完全免費？因為 16 維的內積，本來就是四段相加：</text>
+        <text x="0" y="466" style="font:14px var(--mono);fill:var(--ink2)">(前 4 個的內積) ＋ (第 5–8 個的內積) ＋ (第 9–12 個) ＋ (第 13–16 個)</text>
+        <text x="0" y="490" class="td">切 head ＝ 不要那三個加號，讓四段各自算完　（權重還是 16×16，乘法一次也沒多）</text>
+        <rect x="0" y="504" width="300" height="52" class="box" rx="10"/>
+        <text x="16" y="526" class="ts" style="fill:var(--ink);font-weight:600">單頭：先加起來，再 softmax</text>
+        <text x="16" y="546" class="td">一組注意力，16 個維度被迫共用</text>
+        <rect x="330" y="504" width="311" height="52" class="tint-attn" rx="10"/>
+        <text x="346" y="526" class="ts" style="fill:var(--ink);font-weight:600">四頭：不加，各自 softmax</text>
+        <text x="346" y="546" class="td">四組注意力，各看各的</text>
       </svg>
     </div>
     <div class="pane right">
@@ -1923,9 +1926,10 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">圖 4b・為什麼要四個人</span>
     <ul>
       <li><b>單頭做不到這件事</b>：16 個輸出維度被迫共用同一組注意力權重，只能「全看剛剛那個」或「全看開頭」，或糊成一團平均。</li>
-      <li>切 head <b>不花任何參數、不花任何計算量</b>——動作上一張看過了，就是切片＋拼回去。</li>
-      <li>取捨講白話：<b>一個高解析度的問題 vs 四個低解析度的問題。</b></li>
-      <li>（進階，看時間再加，不上螢幕：Wq/Wk/Wv/Wo 不管切幾個 head 都是 16×16；16 維內積在數學上恰好等於四段內積的和——差別 100% 來自 softmax 這個非線性被套在哪裡：單頭套在總和上，四頭各套各的。）</li>
+      <li><b>切、拼的動作上一張（4b-0）看過了</b>，這張只回答「為什麼」：一次 softmax 只能分出<b>一組</b>比例＝一個焦點，一個人只能盯一個地方。</li>
+      <li><b>「免費」要當場證給他們看</b>：預 3a 的內積是「逐項相乘再全部加總」——那 16 項的加總，本來就可以拆成四段各自加總、再相加。切 head 就是<b>把最後那三個加號拿掉</b>，讓四段各自走完 softmax。參數一個沒多、乘法一次沒多。</li>
+      <li>所以差別 100% 來自 <b>softmax 套在加總之前還是之後</b>——非線性擺放的位置不同，結果就完全不同。（這也是預 4 那句「非線性是唯一能製造分情況的地方」的第二次現身。）</li>
+      <li>代價：每個 head 只有 4 維，衡量「像不像」的解析度低很多。<b>取捨＝一個高解析度的問題 vs 四個低解析度的問題。</b></li>
     </ul>
   </aside>
 </section>
@@ -2059,7 +2063,7 @@ body.notes-on .slide.active .notes{display:block}
         <circle cx="260" cy="480" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
         <text x="260" y="487" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
         <path d="M260 495 V518" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="303" y="551" class="t mid" style="font-weight:600">拿掉 relu，兩個矩陣塌成一個 16×16——存在意義 100% 來自 relu</text>
+        <text x="303" y="551" class="t mid" style="font-weight:600">拿掉中間那道門檻，撐胖再壓瘦等於什麼都沒做——存在意義 100% 來自 relu</text>
       </svg>
     </div>
     <div class="pane right">
@@ -2093,7 +2097,8 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">圖 5・MLP</span>
     <ul>
       <li>回到預 3b：<b>fc1 就是一個 64 列的矩陣</b>——每一列都是一個偵測器，跟 x 做一次內積問一題。</li>
-      <li><b>為什麼要先撐胖再壓瘦？</b>拿掉 relu，兩個矩陣相乘會塌成一個 16×16 矩陣，整段完全白做——這段的存在意義 100% 來自那個 relu（<b>預 4 欠的完整論證，在這裡還</b>）。</li>
+      <li><b>為什麼要先撐胖再壓瘦？</b>（預 4 欠的論證，在這裡還。<b>不要講矩陣乘法</b>，講聽眾手上已經有的東西：）fc1 做的是「x 跟每一列做內積」，fc2 做的也是「跟每一列做內積」。如果中間沒有那道門檻，整段就只是<b>內積接內積</b>——而內積接內積，永遠可以事先算好一組列、一次做完。撐到 64 維再壓回 16 維完全白做。</li>
+      <li>加了 relu 就不一樣了：<b>哪些偵測器有開口，是看 x 才知道的</b>。同一段程式對不同的 x 表現得像不同的規則——這是「事先算好一組列」永遠做不到的事。這就是「分情況」的全部意思。</li>
       <li>把 MLP 看成<b>查表式的記憶體</b>：64 條 if-then 規則平行檢查，觸發的加總起來寫回主幹。中間要夠寬，是因為要放得下夠多條規則。</li>
       <li>以英文名字想像：某個神經元專門偵測「剛剛連續兩個子音」，一觸發就往主幹加上「接下來該是母音了」的方向。</li>
     </ul>
@@ -2145,16 +2150,16 @@ body.notes-on .slide.active .notes{display:block}
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py</span><span>梯度的高速公路</span></div>
+        <div class="codehead"><span>microgpt_en.py</span><span>全場的加號都是這一行</span></div>
         <div class="codebody">
-<div class="codesep"><b>加法的 local grad 是 (1, 1)</b>・反向傳播原封不動通過</div>
+<div class="codesep"><b>順手記住那個 (1, 1)</b>・加法寫的便條——圖 9.5 會用到</div>
 <pre class="py" data-hl="41:now">
 39	def __add__(self, other):   # ★ other：另一個加數
 40	    other = other if isinstance(other, Value)
 	↪         else Value(other)
 41	    return Value(self.data + other.data,
 	↪         (self, other), (1, 1))
-	# (1, 1)＝加法對兩邊的微分——反向傳播原封不動通過
+	# 便條上寫 (1, 1)——訓練時它會變成一件好事
 </pre>
 <div class="codesep"><b>整個 Block ＝掛在迴圈上的兩個加號</b></div>
 <pre class="py" data-hl="134:bus,141:bus">
@@ -2171,7 +2176,7 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">圖 6・殘差（最深刻的一張）</span>
     <ul>
       <li>它是一個<b>總和</b>，不是一連串變形。每一段都可以棄權——沒話說就輸出接近 0，主幹原封不動流過，所以層數多不會傷害模型。</li>
-      <li><b>梯度有一條高速公路</b>：__add__ 的 local grad 就是 (1, 1)，反向傳播經過殘差時原封不動。</li>
+      <li>右欄那個 <b>(1, 1)</b> 現在<b>只要點一下、不要展開</b>——這頁還沒講到訓練，講了會岔題。一句話帶過：「加法寫的便條是 (1, 1)，這個 1 等一下會讓訓練變得很順，圖 9.5 再說。」</li>
       <li>為什麼要多層？把 n_layer 從 1 改成 2，就只是在匯流排上<b>再插兩個加號</b>，架構一個字都不用改。</li>
       <li><b>全場最好用的一句話</b>：Attention 決定「去哪裡拿資訊」，MLP 決定「拿到之後要想什麼」，殘差確保「兩者都只是往共用主幹上添加，而不是覆蓋」。</li>
     </ul>
@@ -2215,9 +2220,9 @@ body.notes-on .slide.active .notes{display:block}
         <text x="303" y="326" class="ts mid">誰的方向跟我最像，分數就最高——是查字典，不是思考</text>
 
         <rect x="0" y="348" width="606" height="96" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <text x="30" y="386" style="font:15px var(--mono);fill:var(--ink)">logit_i ＝ lm_head[i]・x ＝ <tspan fill="var(--c-now)">|看板 i|</tspan> × |x| × <tspan fill="var(--c-bus)">cos(夾角)</tspan></text>
-        <text x="330" y="420" class="ts mid" style="fill:var(--c-now)">↑ 先天票數（bias 藏在長度裡）</text>
-        <text x="540" y="420" class="ts mid" style="fill:var(--c-bus)">↑ 像不像</text>
+        <text x="30" y="382" class="ts">回收預 3a：內積大小由兩件事決定</text>
+        <text x="30" y="412" class="t"><tspan fill="var(--c-bus)">① 方向像不像</tspan>　　<tspan fill="var(--c-now)">② 這塊看板本身的數字有多大</tspan></text>
+        <text x="30" y="434" class="td">②＝先天票數：常見字母把自己整塊看板加大，不管 x 指哪邊都先拿基礎分</text>
 
         <rect x="0" y="464" width="606" height="82" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <rect x="0" y="464" width="4" height="82" class="f-bus"/>
@@ -2252,7 +2257,7 @@ body.notes-on .slide.active .notes{display:block}
   <aside class="notes"><span class="ntag">圖 7・lm_head</span>
     <ul>
       <li>MLP 算完後主幹上那 16 個數字仍是<b>內部語言</b>——第 8 維不代表「字母 m」，它沒有名字。lm_head 是唯一把內部語言翻回外部符號的地方。</li>
-      <li>列的長度本身是先驗：常見字母把自己的向量拉長，不管 x 指哪邊都先拿基礎分——<b>bias 藏在長度裡</b>。</li>
+      <li><b>回收預 3a 埋的那句</b>：內積大小＝方向像不像 × 這一列本身數字有多大。所以常見字母只要把自己那一列整個放大，不管 x 指哪邊都先拿一份基礎分——這就是模型的<b>先天票數</b>。（其他框架會另外開一個 bias 參數做這件事；這份程式沒有 bias，它就藏在 lm_head 的列裡。）</li>
       <li><b>正因為它笨，前面才被逼得聰明</b>：訓練壓力全要穿過 lm_head，唯一能讓 loss 下降的方式，就是逼 Attention＋MLP 把向量準備到「只差一次內積就能讀出答案」。</li>
       <li>比喻：MLP 是在腦中想清楚；lm_head 是<b>張嘴的那一瞬間</b>——出口只有 27 個字母，必須挑一個。壓縮發生在這裡，思考不在這裡。</li>
     </ul>
@@ -2467,6 +2472,112 @@ body.notes-on .slide.active .notes{display:block}
     </ul>
   </aside>
 </section>
+<!-- ═══════════ 圖9.5 便條怎麼往回傳 ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">圖 9.5</span>便條怎麼往回傳 — 手算一次就懂了</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:12.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="18" class="ts"><tspan class="tb">①　前向</tspan>　用一個只有兩步的迷你算式（真的只有兩步）</text>
+
+        <rect x="0" y="30" width="64" height="34" class="tint-bus" rx="7"/>
+        <text x="32" y="52" class="tn mid" style="fill:var(--ink)">w = 2</text>
+        <text x="78" y="53" class="t mid">×</text>
+        <rect x="92" y="30" width="64" height="34" class="tint-bus" rx="7"/>
+        <text x="124" y="52" class="tn mid" style="fill:var(--ink)">x = 3</text>
+        <path d="M160 47 H196" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="202" y="30" width="70" height="34" class="box" rx="7"/>
+        <text x="237" y="52" class="tn mid" style="fill:var(--ink)">b = 6</text>
+        <text x="292" y="52" class="td">← 中間值</text>
+
+        <rect x="0" y="76" width="64" height="34" class="box" rx="7"/>
+        <text x="32" y="98" class="tn mid" style="fill:var(--ink)">b = 6</text>
+        <text x="78" y="99" class="t mid">＋</text>
+        <rect x="92" y="76" width="64" height="34" class="tint-bus" rx="7"/>
+        <text x="124" y="98" class="tn mid" style="fill:var(--ink)">c = 1</text>
+        <path d="M160 93 H196" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="202" y="76" width="70" height="34" class="tint-now" rx="7"/>
+        <text x="237" y="98" class="tn mid" style="fill:var(--ink)">L = 7</text>
+        <text x="292" y="98" class="td">← 就當它是 loss</text>
+
+        <text x="0" y="140" class="ts">算的同時，兩步各留下一張便條（<tspan class="tn" style="font-size:12.5px">_local_grads</tspan>）：</text>
+        <text x="16" y="166" class="tn" style="font-size:13px;fill:var(--c-now)">乘法 → (3, 2)</text>
+        <text x="176" y="166" class="td">＝對方的數值：w 動 1 格，b 動 3 格</text>
+        <text x="16" y="188" class="tn" style="font-size:13px;fill:var(--c-now)">加法 → (1, 1)</text>
+        <text x="176" y="188" class="td">＝誰動 1 格，L 就動 1 格</text>
+
+        <line x1="0" y1="212" x2="641" y2="212" class="axis"/>
+
+        <text x="0" y="240" class="ts"><tspan class="tb">②　反向</tspan>　從 L 出發，把便條上的數字<tspan class="tb">一路乘回去</tspan>，就這樣</text>
+
+        <rect x="0" y="254" width="440" height="30" class="tint-now" rx="6"/>
+        <text x="16" y="275" style="font:14px var(--mono);fill:var(--ink)">L.grad = 1</text>
+        <text x="190" y="275" class="td">起點：L 對自己，1 倍</text>
+        <path d="M60 284 V296" class="wire-now"/>
+        <text x="16" y="314" style="font:14px var(--mono);fill:var(--ink)">c.grad = 1 × 1 = 1</text>
+        <text x="190" y="314" class="td">走過加法的便條 (1, 1)</text>
+        <text x="16" y="342" style="font:14px var(--mono);fill:var(--ink)">b.grad = 1 × 1 = 1</text>
+        <text x="190" y="342" class="td">走過加法的便條 (1, 1)</text>
+        <path d="M60 350 V362" class="wire-now"/>
+        <text x="16" y="380" style="font:14px var(--mono);fill:var(--ink)">w.grad = 1 × 3 = 3</text>
+        <text x="190" y="380" class="td">走過乘法的便條 (3, 2)</text>
+        <text x="16" y="408" style="font:14px var(--mono);fill:var(--ink)">x.grad = 1 × 2 = 2</text>
+        <text x="190" y="408" class="td">走過乘法的便條 (3, 2)</text>
+        <text x="400" y="352" class="ts" style="fill:var(--c-now)">每個節點只做一件事：</text>
+        <text x="400" y="376" class="ts" style="fill:var(--c-now)">便條上的數字 × 自己的 grad，</text>
+        <text x="400" y="400" class="ts" style="fill:var(--c-now)">交給來源。走完就全有了。</text>
+
+        <rect x="0" y="436" width="641" height="72" rx="12" fill="rgba(201,133,0,.08)" stroke="var(--c-now)" stroke-width="1.4"/>
+        <text x="22" y="466" class="tb"><tspan style="font-family:var(--mono)">w.grad = 3</tspan> 的意思：w 從 2 挪到 2.001，L 就從 7 變成 7.003。</text>
+        <text x="22" y="494" class="ts">這個數字就叫<tspan class="tb">梯度</tspan>。要 L 變小，就往<tspan class="tb">反方向</tspan>挪一點——訓練沒有別的了。</text>
+
+        <text x="0" y="526" class="td">4,192 個參數，就是同一件事做 4,192 次。</text>
+        <text x="0" y="548" class="td">加法的便條全是 1，乘 1＝原封不動走過去——這就是圖 6 那條「殘差高速公路」的真正意思。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・便條與回傳</span><span>預 5 欠的帳，這裡還</span></div>
+        <div class="codebody">
+<div class="codesep"><b>每種運算寫什麼便條</b>・括號裡就是</div>
+<pre class="py" data-hl="41:now,45:now">
+41	return Value(self.data + other.data,
+	↪     (self, other), (1, 1))
+	# ★ 加法：兩邊都是 1
+45	return Value(self.data * other.data,
+	↪     (self, other), (other.data, self.data))
+	# ★ 乘法：便條寫「對方的數值」
+50	def relu(self): … (float(self.data &gt; 0),)
+	# ★ relu：1 或 0——關掉的路，什麼都不傳
+</pre>
+<div class="codesep"><b>backward() 的核心就三行</b>・L59–72</div>
+<pre class="py" data-hl="69:now,72:now">
+69	self.grad = 1   # ★ 從 loss 出發
+70	for v in reversed(topo):   # 從後往前走一遍
+71	    for child, local_grad in
+	↪         zip(v._children, v._local_grads):
+72	        child.grad += local_grad * v.grad
+	# ★ 上面那張表，就是這一行跑了五次
+</pre>
+        </div>
+        <div class="codesep">topo＝先把節點依先後排好，確保回傳時<b>上游的 grad 已經算完</b>。</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 9.5・把預 5 欠的帳還掉</span>
+    <ul>
+      <li><b>這頁是全場唯一還過的一筆大帳</b>：預 5、圖 0、預 4 各埋過一次「圖 9.5 收」——收在這裡。不講，聽眾會帶著「所以它到底怎麼學」聽完整場。</li>
+      <li><b>一定要在投影片上手算一次</b>，不要只講原理。五行乘法，每個人都跟得上——跟完之後「反向傳播」就不再是名詞，是他剛剛做過的事。</li>
+      <li>梯度的定義只講這一句：<b>「這個參數挪一點點，loss 會跟著挪幾倍」</b>。不要講偏微分、不要畫切線。</li>
+      <li>回收圖 6：加法的便條是 (1, 1)，乘 1 等於原封不動——所以殘差那條主幹，梯度可以一路直達最前面不衰減。<b>圖 6 說「殘差讓層數多不會傷害模型」，理由現在才完整。</b></li>
+      <li>回收預 4：relu 的便條是 0 或 1——沒開口的偵測器，這一輪完全不會被調整。</li>
+      <li>尾鉤：現在知道每個參數該往哪動了，下一頁看它怎麼真的動——以及一筆「emma」到底給了幾個學習訊號。</li>
+    </ul>
+  </aside>
+</section>
 <!-- ═══════════ 17 圖10 訓練 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
@@ -2505,10 +2616,14 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="140" y="196" width="360" height="58" class="box" rx="10"/>
         <text x="320" y="220" class="tn mid" style="fill:var(--ink)">loss ＝ −log P(正確答案)</text>
         <text x="320" y="242" class="td mid">每個位置各算一次，再平均</text>
+        <text x="508" y="204" class="td">猜對的機率</text>
+        <text x="508" y="224" class="td">越低，罰越重</text>
+        <text x="508" y="248" class="td" style="font-family:var(--mono)">1 → 0</text>
+        <text x="508" y="266" class="td" style="font-family:var(--mono)">0.01 → 4.6</text>
         <path d="M320 254 V274" class="wire" marker-end="url(#ar-grey)"/>
         <rect x="140" y="278" width="360" height="58" class="tint-now" rx="10"/>
         <text x="320" y="302" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">loss.backward()</text>
-        <text x="320" y="324" class="ts mid">每個參數：「我往哪動一點，loss 會變小？」</text>
+        <text x="320" y="324" class="ts mid">圖 9.5 那張手算表，跑 4,192 次</text>
         <path d="M320 336 V356" class="wire" marker-end="url(#ar-grey)"/>
         <rect x="140" y="360" width="360" height="58" class="box" rx="10"/>
         <text x="320" y="384" class="t mid" style="font-weight:600">Adam — 4,192 個數字各挪一小步</text>
@@ -2562,7 +2677,9 @@ body.notes-on .slide.active .notes{display:block}
     <ul>
       <li>訓練從頭到尾只有一個任務——<b>猜下一個字母</b>。沒人教母音子音、沒人教名字長度，全部是順便學會的。</li>
       <li>losses 是<b>整個名字每個位置各算一次再平均</b>：一筆資料提供 5 個學習訊號，不是 1 個。</li>
-      <li>Adam 沒有黑魔法：就是「梯度的移動平均 ÷ 梯度平方的移動平均開根號」。</li>
+      <li><b>backward() 這格不要再解釋一次</b>——圖 9.5 剛手算過。一句話帶過：「就是剛剛那五行乘法，跑在 4,192 個參數上。」</li>
+      <li>loss 為什麼取 <b>−log</b>：機率 1 → 罰 0；機率 0.9 → 罰 0.1；機率 0.01 → 罰 4.6。<b>越是把正確答案說成不可能，罰得越兇</b>。就這樣，不用講 cross entropy。</li>
+      <li>Adam 沒有黑魔法：就是「梯度的移動平均 ÷ 梯度平方的移動平均開根號」。<b>不懂也不影響理解全場</b>——它只決定「挪多大一步」，方向早在 backward() 就算完了。真的沒時間就說這一句然後跳過右欄下半。</li>
       <li><b>撞名提醒</b>：Adam 的 m／v 這個 v 跟 attention 的 v 純粹撞名——作者省字母重用了，先點破，聽眾就不會亂連結。</li>
     </ul>
   </aside>
@@ -2642,6 +2759,7 @@ body.notes-on .slide.active .notes{display:block}
     <ul>
       <li>這三題都有數字撐著，才適合說「模型自己學會了沒人教它的東西」。</li>
       <li>中文實驗：名字只有 2–5 個字，block_size 變小、vocab 爆增——參數量的分佈完全變樣。</li>
+      <li><b>有人問「128K context 怎麼來的」時才講</b>（圖 3b 刻意留的）：wpe 這種查表法，超過列數就是 IndexError。現代模型改成不查表——把位置變成一個<b>旋轉角度</b>，直接轉在 q 和 k 上（RoPE）。角度可以一直往下算，所以能外推到訓練時沒看過的長度。這需要聽眾已經懂 q/k，所以擺在最後。</li>
     </ul>
   </aside>
 </section>
