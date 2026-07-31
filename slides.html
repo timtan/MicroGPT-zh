@@ -851,6 +851,8 @@ body.notes-on .slide.active .notes{display:block}
 34	    self.data = data      # ★ 數值本體
 	# 前向只用得到 .data
 ⋯
+39	def __add__(self, other):   # ★ a + b 會走到這裡
+⋯
 41	    return Value(self.data + other.data,
 	↪                 (self, other), (1, 1))
 	# ★ 加法：算出和，順手寫下便條
@@ -876,81 +878,52 @@ body.notes-on .slide.active .notes{display:block}
     <h1><span class="figno">圖 0.5a</span>前 100 行，都還沒進入 Transformer</h1>
     <nav class="map"></nav>
   </header>
-  <div class="cols" style="--split:56fr 44fr;--code-fs:13.5px">
+  <div class="cols solo">
     <div class="pane left">
-      <svg viewBox="0 0 640 560">
-        <rect x="0" y="16" width="640" height="220" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)" stroke-dasharray="6 4"/>
-        <text x="20" y="44" class="td">基礎準備（infrastructure）——都是水電，沒有一行是 Transformer</text>
+      <svg viewBox="0 0 1140 560">
+        <rect x="0" y="16" width="1140" height="268" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)" stroke-dasharray="6 4"/>
+        <text x="24" y="50" class="td">基礎準備（infrastructure）——都是水電，沒有一行是 Transformer</text>
 
-        <text x="20" y="82" class="tn" style="fill:var(--ink3)">L9–27</text>
-        <text x="112" y="82" class="t">① 資料 ＋ tokenizer</text>
-        <text x="330" y="82" class="ts">文字 → 整數</text>
-        <text x="500" y="82" class="td">圖 2 主場</text>
+        <text x="24" y="98" class="tn" style="fill:var(--ink3)">L9–27</text>
+        <text x="150" y="98" class="t">① 資料 ＋ tokenizer</text>
+        <text x="520" y="98" class="ts">文字 → 整數</text>
+        <text x="880" y="98" class="td">圖 2 主場</text>
 
-        <text x="20" y="118" class="tn" style="fill:var(--ink3)">L30–72</text>
-        <text x="112" y="118" class="t">② Value / autograd</text>
-        <text x="330" y="118" class="ts">讓數字帶著便條</text>
-        <text x="500" y="118" class="td">預 5 剛講</text>
+        <text x="24" y="144" class="tn" style="fill:var(--ink3)">L30–72</text>
+        <text x="150" y="144" class="t">② Value / autograd</text>
+        <text x="520" y="144" class="ts">讓數字帶著便條</text>
+        <text x="880" y="144" class="td">預 5 剛講</text>
 
-        <text x="20" y="154" class="tn" style="fill:var(--ink3)">L75–90</text>
-        <text x="112" y="154" class="t">③ state_dict ＋ params</text>
-        <text x="330" y="154" class="ts">4,192 個知識</text>
-        <text x="500" y="154" class="td">圖 0 看過</text>
+        <text x="24" y="190" class="tn" style="fill:var(--ink3)">L75–90</text>
+        <text x="150" y="190" class="t">③ state_dict ＋ params</text>
+        <text x="520" y="190" class="ts">4,192 個知識</text>
+        <text x="880" y="190" class="td">圖 0 看過</text>
 
-        <text x="20" y="190" class="tn" style="fill:var(--ink3)">L94–106</text>
-        <text x="112" y="190" class="t">④ 三個工具函數</text>
-        <text x="330" y="190" class="tn" style="font-size:12.5px">linear／softmax／rmsnorm</text>
-        <text x="500" y="212" class="td">預 3b／預 4 講掉兩個</text>
+        <text x="24" y="236" class="tn" style="fill:var(--ink3)">L94–106</text>
+        <text x="150" y="236" class="t">④ 三個工具函數</text>
+        <text x="520" y="236" class="tn" style="font-size:13.5px">linear／softmax／rmsnorm</text>
+        <text x="880" y="236" class="td">預 3b／預 4 講過</text>
 
-        <rect x="0" y="256" width="640" height="52" class="tint-bus"/>
-        <text x="20" y="288" class="tn" style="fill:var(--ink3)">L108–144</text>
-        <text x="112" y="288" class="tb">⑤ def gpt(...)</text>
-        <text x="330" y="288" class="ts">模型本體，只有三十幾行</text>
+        <rect x="0" y="308" width="1140" height="66" class="tint-bus"/>
+        <text x="24" y="348" class="tn" style="fill:var(--ink3)">L108–144</text>
+        <text x="150" y="348" class="tb">⑤ def gpt(...)</text>
+        <text x="520" y="348" class="ts">模型本體，只有三十幾行——今天整場都在這裡</text>
 
-        <rect x="0" y="320" width="640" height="46" class="box"/>
-        <text x="20" y="348" class="tn" style="fill:var(--ink3)">L150–199</text>
-        <text x="112" y="348" class="t">⑥ 訓練迴圈／推論迴圈</text>
-        <text x="330" y="348" class="ts">在 gpt() 外面繞圈（圖 9、圖 10）</text>
+        <rect x="0" y="392" width="1140" height="58" class="box"/>
+        <text x="24" y="428" class="tn" style="fill:var(--ink3)">L150–199</text>
+        <text x="150" y="428" class="t">⑥ 訓練迴圈／推論迴圈</text>
+        <text x="520" y="428" class="ts">在 gpt() 外面繞圈（圖 9、圖 10）</text>
 
-        <text x="0" y="410" class="th">還沒講過的只剩 softmax</text>
-        <text x="0" y="446" class="ts">把一排任意大小的分數，擠成「加起來剛好 1」的比例</text>
-
-        <text x="0" y="486" class="tn">+2.7</text><text x="84" y="486" class="tn">+0.5</text><text x="168" y="486" class="tn">−1.2</text>
-        <text x="250" y="486" class="td">正負混雜、大小不一</text>
-        <path d="M30 496 V518" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <path d="M108 496 V518" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <path d="M186 496 V518" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <text x="250" y="512" class="td">取 exp（一律變正）、再各自除以總和</text>
-        <text x="0" y="544" class="tn" style="fill:var(--c-attn)">0.85</text><text x="84" y="544" class="tn" style="fill:var(--c-attn)">0.13</text><text x="168" y="544" class="tn" style="fill:var(--c-attn)">0.02</text>
-        <text x="250" y="544" class="ts">加總 = 1，可以當機率用</text>
+        <text x="0" y="504" class="th">「200 行的 GPT」不等於模型有 200 行。</text>
+        <text x="0" y="542" class="ts">前 100 行都是準備，模型本體只有中間那三十幾行——那才是要看懂的部分。</text>
       </svg>
-    </div>
-    <div class="pane right">
-      <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・三個工具函數</span><span>L94–106</span></div>
-        <div class="codebody">
-<pre class="py" data-hl="97:attn,103:bus">
-94	def linear(x, w):        # 預 3b 講過
-95	    return [sum(wi * xi for wi, xi in zip(wo, x))
-	↪            for wo in w]
-97	def softmax(logits):     # ★ 分數 → 比例
-98	    max_val = max(val.data for val in logits)
-	# 減掉最大值：只為了 exp 不爆掉，不影響結果
-99	    exps = [(val - max_val).exp() for val in logits]
-100	    total = sum(exps)
-101	    return [e / total for e in exps]
-103	def rmsnorm(x):          # 預 4 講過：音控台
-</pre>
-        </div>
-        <div class="codesep">softmax 全場上工兩次：<b>attention 分注意力</b>（圖 4a）、<b>出口算機率</b>（圖 8）。</div>
-      </div>
     </div>
   </div>
   <aside class="notes"><span class="ntag">圖 0.5a・檔案地圖</span>
     <ul>
       <li>「200 行的 GPT」容易讓人以為模型有 200 行。<b>模型本體只有 L108–144。</b>其他都是資料、autograd、初始化、迴圈。</li>
-      <li>四段基礎準備裡，③已經在圖 0 看過、②預 5 剛講、①圖 2 主場，④只剩 softmax 沒講——順手補完。</li>
-      <li>softmax 就是開場那頁「輸出是一組比例」的實作；max_val 只是數值穩定技巧，不影響結果。</li>
+      <li>四段基礎準備<b>都已經講過或等一下會講</b>——這頁只是把它們排成一張目錄，讓聽眾知道自己站在哪。<b>三十秒帶過就好，不要展開任何一段。</b></li>
+      <li>唯一要說出口的一句：「等一下所有的圖，都在 L108–144 那個框裡。」</li>
     </ul>
   </aside>
 </section>
@@ -2544,10 +2517,12 @@ body.notes-on .slide.active .notes{display:block}
         <div class="codebody">
 <div class="codesep"><b>每種運算寫什麼便條</b>・括號裡就是</div>
 <pre class="py" data-hl="41:now,45:now">
-41	return Value(self.data + other.data,
+39	def __add__(self, other):   # a + b
+41	    return Value(self.data + other.data,
 	↪     (self, other), (1, 1))
 	# ★ 加法：兩邊都是 1
-45	return Value(self.data * other.data,
+43	def __mul__(self, other):   # a * b
+45	    return Value(self.data * other.data,
 	↪     (self, other), (other.data, self.data))
 	# ★ 乘法：便條寫「對方的數值」
 50	def relu(self): … (float(self.data &gt; 0),)
