@@ -1434,7 +1434,7 @@ body.notes-on .slide.active .notes{display:block}
 	# q？——下一節 4a-0 專門介紹，先看結構
 ⋯
 133	    x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])
-	# ★ x_attn：四個 head 的輸出接起來（16 維，拼法圖 4c）
+	# ★ x_attn：四個 head 的輸出接起來（16 維，拼法圖 4b-0）
 134	    x = [a + b for a, b in zip(x, x_residual)]
 135	    # 2) MLP block
 136	    x_residual = x
@@ -1589,32 +1589,31 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="250" y="252" width="330" height="34" class="tint-kv" rx="8"/>
         <text x="415" y="274" class="ts mid" style="fill:var(--c-kv)">k、v 存進 KV cache——前文每一格都留過一份</text>
         <text x="146" y="252" class="td mid">之後各切 4 段</text>
-        <text x="146" y="268" class="td mid">每個 head 拿 4 個（圖 4c）</text>
+        <text x="146" y="268" class="td mid">每個 head 拿 4 個（圖 4b-0）</text>
 
-        <text x="0" y="322" class="ts">一個 head 的七步，每一步只為了一個效果（<tspan fill="var(--ink)">數字下一張才登場</tspan>）：</text>
-        <line x1="0" y1="336" x2="620" y2="336" class="axis"/>
-        <text x="8" y="358" class="tn" style="font-size:12.5px">rmsnorm</text>
-        <text x="150" y="358" class="td">16 → 16</text>
-        <text x="280" y="358" class="ts" style="font-size:12.5px">先把音量歸一，別讓誰壓過誰</text>
-        <line x1="0" y1="366" x2="620" y2="366" class="axis" opacity=".4"/>
-        <text x="8" y="388" class="tn" style="font-size:12.5px">× Wq／Wk／Wv</text>
-        <text x="150" y="388" class="td">16 → 16（切 4）</text>
-        <text x="280" y="388" class="ts" style="font-size:12.5px">抽出搜尋詞／掛書背標題／備好內容（上圖）</text>
-        <line x1="0" y1="396" x2="620" y2="396" class="axis" opacity=".4"/>
-        <text x="8" y="418" class="tn" style="font-size:12.5px">q·k 內積</text>
-        <text x="150" y="418" class="td">每格前文 1 分</text>
-        <text x="280" y="418" class="ts" style="font-size:12.5px">我跟每一格前文有多對頻</text>
-        <line x1="0" y1="426" x2="620" y2="426" class="axis" opacity=".4"/>
-        <text x="8" y="448" class="tn" style="font-size:12.5px">softmax</text>
-        <text x="150" y="448" class="td">分數 → 比例</text>
-        <text x="280" y="448" class="ts" style="font-size:12.5px">擠成加總＝1 的注意力（非線性）</text>
-        <line x1="0" y1="456" x2="620" y2="456" class="axis" opacity=".4"/>
-        <text x="8" y="478" class="tn" style="font-size:12.5px">Σ wₜ·vₜ</text>
-        <text x="150" y="478" class="td">比例 × v → 4</text>
-        <text x="280" y="478" class="ts" style="font-size:12.5px">按比例把前文內容拌回「我」</text>
-        <line x1="0" y1="488" x2="620" y2="488" class="axis"/>
-        <text x="0" y="520" class="td">（x 的來歷：wte＋wpe＋前文——預 1／圖 3 講過，這裡不重來）</text>
-        <text x="0" y="546" class="td">左表第 3 步是全檔最長的一行——右欄先拆好，圖 4a 一格一格走</text>
+        <line x1="0" y1="316" x2="620" y2="316" class="axis"/>
+        <text x="0" y="348" class="t">三張紙條備好之後，一個 head 只做三件事（<tspan fill="var(--ink3)">數字下一張才登場</tspan>）：</text>
+
+        <rect x="0" y="368" width="184" height="136" class="tint-attn" rx="10"/>
+        <text x="92" y="400" class="mid" style="font:600 16px var(--sans);fill:var(--ink)">① 打分數</text>
+        <text x="92" y="436" class="ts mid">我跟前面</text>
+        <text x="92" y="458" class="ts mid">每一格</text>
+        <text x="92" y="480" class="ts mid">有多對頻</text>
+        <path d="M186 436 H216" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="228" y="368" width="184" height="136" class="tint-attn" rx="10"/>
+        <text x="320" y="400" class="mid" style="font:600 16px var(--sans);fill:var(--ink)">② 分比例</text>
+        <text x="320" y="436" class="ts mid">擠成加起來</text>
+        <text x="320" y="458" class="ts mid">剛好 100%</text>
+        <text x="320" y="480" class="ts mid">的一組比例</text>
+        <path d="M414 436 H444" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="456" y="368" width="184" height="136" class="tint-attn" rx="10"/>
+        <text x="548" y="400" class="mid" style="font:600 16px var(--sans);fill:var(--ink)">③ 按比例拿</text>
+        <text x="548" y="436" class="ts mid">誰的比例高，</text>
+        <text x="548" y="458" class="ts mid">就多拿一點</text>
+        <text x="548" y="480" class="ts mid">它的內容</text>
+
+        <text x="0" y="530" class="td">（x 的來歷：wte＋wpe＋前文——預 1／圖 3 講過，這裡不重來）</text>
+        <text x="0" y="552" class="td">下一張帶著數字，這三步一格一格走一遍。</text>
       </svg>
     </div>
     <div class="pane right">
@@ -1628,7 +1627,7 @@ body.notes-on .slide.active .notes{display:block}
 120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
 	# ★ q／k／v：搜尋詞／書背標題／書的內容
 </pre>
-<div class="codesep"><b>全檔最長的一行，先拆好</b>・對過去每格 t：q 跟它的 k 內積，再 ÷√4</div>
+<div class="codesep"><b>① 打分數</b>・全檔最長的一行，先拆好：對過去每格 t，q 跟它的 k 內積再 ÷√4</div>
 <pre class="py" data-hl="129:attn">
 129	attn_logits = [sum(q_h[j] * k_h[t][j]
 	↪     for j in range(head_dim)) / head_dim**0.5
@@ -1644,82 +1643,88 @@ body.notes-on .slide.active .notes{display:block}
       <li>三張紙條都是<b>同一個 x 自己算出來的</b>（L118-120），不是外面發的。</li>
       <li>為什麼要三個角度、不拿 x 直接比 x？——「我在找的」跟「我是誰」通常不是同一件事：m 在找母音，但它自己是子音。三個矩陣，各司其職。</li>
       <li>k、v 是「留給後人查的」，q 是「當下用完就丟的」——這個不對稱，圖 9 的 KV cache 會收。</li>
-      <li>這是全檔最長的一行，先在右欄拆開；圖 4a 馬上帶著數字一格一格走一遍。</li>
+      <li><b>「打分數／分比例／按比例拿」這三個動詞，圖 4a、圖 4b-0 會原字重複，不要中途換詞。</b></li>
+      <li>① 是全檔最長的一行，先在右欄拆開；圖 4a 馬上帶著數字一格一格走一遍。</li>
     </ul>
   </aside>
 </section>
-<!-- ═══════════ 9 圖4a 一個 head ═══════════ -->
+<!-- ═══════════ 9 圖4a 一個 head 的三步 ═══════════ -->
 <section class="slide std" data-station="3">
   <header>
-    <h1><span class="figno">圖 4a</span>一個 attention head，手算尺寸</h1>
+    <h1><span class="figno">圖 4a</span>一個 head 只做三件事</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
     <div class="pane left">
       <svg viewBox="0 0 641 560">
-        <text x="0" y="20" class="td">已有「em」，正在決定第 3 個字母・第 0 層的 head 0・每個向量只有 4 個數字（16÷4）・示意值</text>
-        <rect x="230" y="34" width="180" height="40" class="tint-now"/>
-        <text x="320" y="59" class="tn mid" style="fill:var(--ink)">查詢「m」的 q＝[4 個數字]</text>
-        <path d="M320 74 L132 112" class="wire" marker-end="url(#ar-grey)"/>
-        <path d="M320 74 V112" class="wire" marker-end="url(#ar-grey)"/>
-        <path d="M320 74 L508 112" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="336" y="102" class="ts">內積・÷ √4＝2</text>
-        <rect x="55" y="116" width="150" height="38" class="box"/>
-        <text x="130" y="140" class="tn mid" style="fill:var(--ink)">k(BOS)</text>
-        <rect x="245" y="116" width="150" height="38" class="box"/>
-        <text x="320" y="140" class="tn mid" style="fill:var(--ink)">k(e)</text>
-        <rect x="435" y="116" width="150" height="38" class="box"/>
-        <text x="510" y="140" class="tn mid" style="fill:var(--ink)">k(m)</text>
-        <text x="8" y="188" class="td">logit</text>
-        <text x="130" y="188" class="mid" style="font:15px var(--mono);fill:var(--ink)">+2.7</text>
-        <text x="320" y="188" class="mid" style="font:15px var(--mono);fill:var(--ink)">+0.5</text>
-        <text x="510" y="188" class="mid" style="font:15px var(--mono);fill:var(--ink)">−1.2</text>
-        <rect x="55" y="204" width="530" height="34" class="tint-attn" rx="8"/>
-        <text x="320" y="226" class="ts mid" style="fill:var(--c-attn);font-weight:650">softmax —— 輸出加起來必須＝1</text>
-        <text x="130" y="266" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">w=0.85</text>
-        <text x="320" y="266" class="mid" style="font:15px var(--mono);fill:var(--ink2)">w=0.13</text>
-        <text x="510" y="266" class="mid" style="font:15px var(--mono);fill:var(--ink2)">w=0.02</text>
-        <rect x="75" y="276" width="94" height="13" rx="2.5" class="bar"/>
-        <rect x="265" y="276" width="14" height="13" rx="2.5" class="bar"/>
-        <rect x="455" y="276" width="3" height="13" rx="1.5" class="bar"/>
-        <text x="8" y="322" class="td">拿多少</text>
-        <rect x="55" y="306" width="150" height="36" class="box"/>
-        <text x="130" y="329" class="tn mid" style="fill:var(--ink)">v(BOS)</text>
-        <rect x="245" y="306" width="150" height="36" class="box"/>
-        <text x="320" y="329" class="tn mid" style="fill:var(--ink)">v(e)</text>
-        <rect x="435" y="306" width="150" height="36" class="box"/>
-        <text x="510" y="329" class="tn mid" style="fill:var(--ink)">v(m)</text>
-        <path d="M130 342 V372 H304" class="wire-attn"/>
-        <path d="M510 342 V372 H336" class="wire-attn"/>
-        <path d="M320 342 V366" class="wire-attn"/>
-        <text x="320" y="402" class="mid" style="font:15px var(--mono);fill:var(--ink)"><tspan fill="var(--c-attn)">0.85</tspan>·v(BOS) ＋ <tspan fill="var(--c-attn)">0.13</tspan>·v(e) ＋ <tspan fill="var(--c-attn)">0.02</tspan>·v(m)</text>
-        <path d="M320 412 V438" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <rect x="230" y="442" width="180" height="42" class="tint-attn"/>
-        <text x="320" y="468" class="tn mid" style="fill:var(--ink)">head_out（4 個數字）</text>
-        <text x="424" y="458" class="td">過去 3 個或 300 個字母，</text>
-        <text x="424" y="476" class="td">出來永遠是 4 個數字</text>
-        <text x="320" y="530" class="t mid" style="font-weight:650">序列長度，在這一步消失了</text>
-        <text x="320" y="552" class="td mid">（q 只有一個、k/v 有一串——這個不對稱是整張圖的骨架）</text>
+        <text x="0" y="14" class="td">已有「e m」，正在決定第 3 個字母・第 0 層的 head 0・每個向量只有 4 個數字（16÷4）・示意值</text>
+
+        <line x1="0" y1="28" x2="641" y2="28" class="axis"/>
+        <rect x="0" y="36" width="118" height="30" class="tint-attn" rx="8"/>
+        <text x="59" y="57" class="mid" style="font:600 15px var(--sans);fill:var(--ink)">① 打分數</text>
+        <text x="132" y="57" class="ts">我的 q 跟每一格前文的 k 對一次答案</text>
+        <rect x="200" y="80" width="240" height="34" class="tint-now"/>
+        <text x="320" y="102" class="tn mid" style="fill:var(--ink)">q（「m」的搜尋詞・4 個數字）</text>
+        <path d="M320 114 L128 146" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 114 V146" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 114 L512 146" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="46" y="150" width="148" height="34" class="box"/>
+        <text x="120" y="172" class="tn mid" style="fill:var(--ink)">k(BOS)</text>
+        <rect x="246" y="150" width="148" height="34" class="box"/>
+        <text x="320" y="172" class="tn mid" style="fill:var(--ink)">k(e)</text>
+        <rect x="446" y="150" width="148" height="34" class="box"/>
+        <text x="520" y="172" class="tn mid" style="fill:var(--ink)">k(m)</text>
+        <text x="120" y="212" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">2.7</text>
+        <text x="320" y="212" class="mid" style="font:17px var(--mono);fill:var(--ink2)">0.5</text>
+        <text x="520" y="212" class="mid" style="font:17px var(--mono);fill:var(--ink2)">−1.2</text>
+        <text x="320" y="236" class="td mid">分數越大＝越對頻　（÷√4＝÷2：只是不讓分數太誇張）</text>
+
+        <line x1="0" y1="252" x2="641" y2="252" class="axis"/>
+        <rect x="0" y="260" width="118" height="30" class="tint-attn" rx="8"/>
+        <text x="59" y="281" class="mid" style="font:600 15px var(--sans);fill:var(--ink)">② 分比例</text>
+        <text x="132" y="281" class="ts">softmax：把三個分數擠成加起來剛好 100% 的一組比例</text>
+        <text x="120" y="320" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">0.85</text>
+        <text x="320" y="320" class="mid" style="font:17px var(--mono);fill:var(--ink2)">0.13</text>
+        <text x="520" y="320" class="mid" style="font:17px var(--mono);fill:var(--ink2)">0.02</text>
+        <rect x="73" y="330" width="94" height="14" rx="2.5" class="bar"/>
+        <rect x="313" y="330" width="14" height="14" rx="2.5" class="bar"/>
+        <rect x="518" y="330" width="3" height="14" rx="1.5" class="bar"/>
+        <text x="320" y="368" class="td mid">多看一格，就得少看另一格——只有這麼多可以分</text>
+
+        <line x1="0" y1="384" x2="641" y2="384" class="axis"/>
+        <rect x="0" y="392" width="118" height="30" class="tint-attn" rx="8"/>
+        <text x="59" y="413" class="mid" style="font:600 15px var(--sans);fill:var(--ink)">③ 按比例拿</text>
+        <text x="132" y="413" class="ts">v(BOS) 拿 85%　v(e) 拿 13%　v(m) 拿 2%，全部加起來</text>
+        <text x="320" y="450" class="mid" style="font:15px var(--mono);fill:var(--ink)"><tspan fill="var(--c-attn)">0.85</tspan>·v(BOS) ＋ <tspan fill="var(--c-attn)">0.13</tspan>·v(e) ＋ <tspan fill="var(--c-attn)">0.02</tspan>·v(m)</text>
+        <path d="M320 460 V478" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="230" y="482" width="180" height="38" class="tint-attn"/>
+        <text x="320" y="506" class="tn mid" style="fill:var(--ink)">head_out（4 個數字）</text>
+        <text x="424" y="496" class="td">過去 3 個或 300 個字母，</text>
+        <text x="424" y="514" class="td">出來永遠是 4 個數字</text>
+
+        <line x1="0" y1="534" x2="641" y2="534" class="axis"/>
+        <text x="0" y="554" class="t">這是 head 0「一個人」的答案——它幾乎只盯著 BOS 那一格。</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・head 內部</span><span>三行核心</span></div>
+        <div class="codehead"><span>microgpt_en.py・head 內部</span><span>三步，各一行</span></div>
         <div class="codebody">
-<div class="codesep"><b>三張紙條</b>・都是同一個字母自己算出來的</div>
-<pre class="py" data-hl="118-120:attn">
-118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
-119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
-120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
-</pre>
-<div class="codesep"><b>整張圖</b>・內積 → softmax → 加權混合</div>
-<pre class="py" data-hl="129-131:attn">
+<div class="codesep">⋯　<b>118-120</b>：q、k、v ＝ 上一張的三張紙條</div>
+<div class="codesep"><b>① 打分數</b></div>
+<pre class="py" data-hl="129:attn">
 129	attn_logits = [sum(q_h[j] * k_h[t][j]
 	↪     for j in range(head_dim)) / head_dim**0.5
 	↪     for t in range(len(k_h))]
-	# ★ attn_logits：跟每一格前文的對頻分數
+	# ★ attn_logits：對頻分數（2.7／0.5／−1.2）
+</pre>
+<div class="codesep"><b>② 分比例</b></div>
+<pre class="py" data-hl="130:attn">
 130	attn_weights = softmax(attn_logits)
-	# ★ attn_weights：分好的注意力比例，加總＝1
+	# ★ attn_weights：比例，加總＝1（0.85／0.13／0.02）
+</pre>
+<div class="codesep"><b>③ 按比例拿</b></div>
+<pre class="py" data-hl="131:attn">
 131	head_out = [sum(attn_weights[t] * v_h[t][j]
 	↪     for t in range(len(v_h)))
 	↪     for j in range(head_dim)]
@@ -1731,17 +1736,124 @@ body.notes-on .slide.active .notes{display:block}
   </div>
   <aside class="notes"><span class="ntag">圖 4a・一個 head（核心）</span>
     <ul>
-      <li><b>q 只有一個，k/v 有一串</b>——這個不對稱是整張圖的骨架（圖 9 收）。三張紙條是誰、從哪來，4a-0 剛講完——這裡直接看數字怎麼流。</li>
-      <li>÷√4 就是 ÷2：維度越高內積越大，除掉避免 softmax 太極端。</li>
+      <li>三個動詞跟上一張一模一樣。左邊的 ①②③ 跟右欄的 ①②③ 是同一件事——<b>左圖上出現的每個數字，右欄都指得出是哪一行算的。</b></li>
+      <li>÷√4 就是 ÷2（＝ 129 那行的 <code>/ head_dim**0.5</code>）：維度越高內積越大，除掉避免 softmax 太極端。</li>
       <li><b>softmax 輸出加起來＝1</b>：「注意力」這名字就從這來——一組必須分完的比例，多看這裡就得少看那裡。</li>
       <li>進去是 4 維的 q，過去有 3 個或 300 個字母，出來永遠 4 個數字——<b>序列長度在這裡消失了</b>。</li>
+      <li><b>q 只有一個，k/v 有一串</b>——這個不對稱是整張圖的骨架（圖 9 收）。</li>
+      <li>收尾那句橋是給下一張用的：這只是一個人的答案，而且它只盯得住一個地方。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 9b 圖4b-0 切、跑、拼 ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">圖 4b-0</span>其實有四個人：切開、各跑一遍、再拼回來</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="320" y="26" class="t mid" style="font-weight:600">剛剛那三步，其實同時跑了四遍。</text>
+
+        <text x="320" y="66" class="ts mid">q、k、v 各 16 個數字</text>
+        <rect x="30" y="78" width="580" height="40" class="tint-bus"/>
+        <line x1="175" y1="78" x2="175" y2="118" stroke="var(--c-bus)" stroke-width="1.4" stroke-dasharray="4 4"/>
+        <line x1="320" y1="78" x2="320" y2="118" stroke="var(--c-bus)" stroke-width="1.4" stroke-dasharray="4 4"/>
+        <line x1="465" y1="78" x2="465" y2="118" stroke="var(--c-bus)" stroke-width="1.4" stroke-dasharray="4 4"/>
+        <text x="102" y="104" class="tn mid" style="fill:var(--ink)">0-3</text>
+        <text x="247" y="104" class="tn mid" style="fill:var(--ink)">4-7</text>
+        <text x="392" y="104" class="tn mid" style="fill:var(--ink)">8-11</text>
+        <text x="537" y="104" class="tn mid" style="fill:var(--ink)">12-15</text>
+        <text x="320" y="138" class="td mid">只是切開，沒有新東西</text>
+
+        <path d="M102 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M247 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M392 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M537 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+
+        <rect x="32" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="102" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 0</text>
+        <text x="102" y="234" class="ts mid">① 打分數</text>
+        <text x="102" y="260" class="ts mid">② 分比例</text>
+        <text x="102" y="286" class="ts mid">③ 按比例拿</text>
+        <rect x="177" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="247" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 1</text>
+        <text x="247" y="234" class="ts mid">① 打分數</text>
+        <text x="247" y="260" class="ts mid">② 分比例</text>
+        <text x="247" y="286" class="ts mid">③ 按比例拿</text>
+        <rect x="322" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="392" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 2</text>
+        <text x="392" y="234" class="ts mid">① 打分數</text>
+        <text x="392" y="260" class="ts mid">② 分比例</text>
+        <text x="392" y="286" class="ts mid">③ 按比例拿</text>
+        <rect x="467" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="537" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 3</text>
+        <text x="537" y="234" class="ts mid">① 打分數</text>
+        <text x="537" y="260" class="ts mid">② 分比例</text>
+        <text x="537" y="286" class="ts mid">③ 按比例拿</text>
+        <text x="320" y="332" class="td mid">每一個都跑一次剛剛那三步——四個人彼此完全不講話</text>
+
+        <path d="M102 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M247 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M392 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M537 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="102" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <text x="175" y="402" class="mid" style="font:20px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="247" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <text x="320" y="402" class="mid" style="font:20px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="392" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <text x="465" y="402" class="mid" style="font:20px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="537" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <rect x="30" y="418" width="580" height="40" class="tint-bus"/>
+        <text x="320" y="444" class="ts mid" style="fill:var(--ink)">＝ 拼回主幹用的 16 個數字——長度跟進來時一模一樣</text>
+
+        <rect x="0" y="482" width="641" height="70" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="482" width="4" height="70" class="f-attn"/>
+        <text x="26" y="512" class="t" style="font-weight:600">切、跑、拼——三個動作而已</text>
+        <text x="26" y="538" class="ts">參數一個都沒多：Wq／Wk／Wv 還是 16×16。</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py・multi-head</span><span>切、跑、拼</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="79:now">
+79	head_dim = n_embd // n_head
+	# ★ head_dim：16 ÷ 4 ＝ 4
+</pre>
+<div class="codesep"><b>切</b>・就這一行切片，沒有魔法</div>
+<pre class="py" data-hl="124:attn,126-128:now">
+124	for h in range(n_head):
+125	    hs = h * head_dim   # ★ hs：切片起點（0、4、8、12）
+126	    q_h = q[hs:hs+head_dim]
+127	    k_h = [ki[hs:hs+head_dim] for ki in keys[li]]
+128	    v_h = [vi[hs:hs+head_dim] for vi in values[li]]
+	# ki／vi：cache 裡每一格前文的 k、v
+</pre>
+<div class="codesep"><b>跑</b>・129-131 ＝ 上一張那三步，原封不動</div>
+<div class="codesep"><b>拼</b>・4＋4＋4＋4 ＝ 16</div>
+<pre class="py" data-hl="132:attn">
+132	    x_attn.extend(head_out)
+	# ★ x_attn：四個 head 接起來的 16 個數字
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4b-0・切、跑、拼（只講動作）</span>
+    <ul>
+      <li>「切成四個 head」在程式裡就是 <code>q[hs:hs+head_dim]</code> <b>一行切片</b>（126）。很多教材把 multi-head 畫得很神祕，其實就是把 16 個數字分成 4 組。</li>
+      <li>每個 head 方塊裡的 ①②③ 就是上一張那三步，<b>原封不動再跑一次</b>，只是拿到的是自己那 4 維。</li>
+      <li>拼回去也只有一行（132）——<b>進來 16 個數字，出去還是 16 個數字。</b></li>
+      <li>這張只講「怎麼做」。「為什麼要這樣做」下一張。</li>
     </ul>
   </aside>
 </section>
 <!-- ═══════════ 10 圖4b 四個 head ═══════════ -->
 <section class="slide std" data-station="3">
   <header>
-    <h1><span class="figno">圖 4b</span>為什麼要切成四個 head</h1>
+    <h1><span class="figno">圖 4b</span>為什麼要四個人：一次只能有一個焦點</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
@@ -1799,19 +1911,11 @@ body.notes-on .slide.active .notes{display:block}
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・multi-head</span><span>「切」就是一行切片</span></div>
+        <div class="codehead"><span>microgpt_en.py・multi-head</span><span>這張圖＝這個 for 迴圈跑四遍</span></div>
         <div class="codebody">
-<pre class="py" data-hl="79:now">
-79	head_dim = n_embd // n_head # derived dimension …
-</pre>
-<div class="codesep"><b>沒有魔法</b>・把 16 個數字分成 4 組，各自跑圖 4a</div>
-<pre class="py" data-hl="124:attn,126-128:now,132:attn">
+<div class="codesep"><b>沒有新的 code</b>・上一張的切、跑、拼，跑滿四輪</div>
+<pre class="py" data-hl="124:attn,132:attn">
 124	for h in range(n_head):
-125	    hs = h * head_dim   # ★ hs：切片起點（0、4、8、12）
-126	    q_h = q[hs:hs+head_dim]
-127	    k_h = [ki[hs:hs+head_dim] for ki in keys[li]]
-128	    v_h = [vi[hs:hs+head_dim] for vi in values[li]]
-	# ki／vi：cache 裡每一格前文的 k、v
 ⋯
 132	    x_attn.extend(head_out)
 </pre>
@@ -1819,9 +1923,10 @@ body.notes-on .slide.active .notes{display:block}
       </div>
     </div>
   </div>
-  <aside class="notes"><span class="ntag">圖 4b・四個 head</span>
+  <aside class="notes"><span class="ntag">圖 4b・為什麼要四個人</span>
     <ul>
       <li><b>單頭做不到這件事</b>：16 個輸出維度被迫共用同一組注意力權重，只能「全看剛剛那個」或「全看開頭」，或糊成一團平均。</li>
+      <li><b>切、拼的動作上一張（4b-0）看過了</b>，這張只回答「為什麼」：一次 softmax 只能分出<b>一組</b>比例＝一個焦點，一個人只能盯一個地方。</li>
       <li><b>「免費」要當場證給他們看</b>：預 3a 的內積是「逐項相乘再全部加總」——那 16 項的加總，本來就可以拆成四段各自加總、再相加。切 head 就是<b>把最後那三個加號拿掉</b>，讓四段各自走完 softmax。參數一個沒多、乘法一次沒多。</li>
       <li>所以差別 100% 來自 <b>softmax 套在加總之前還是之後</b>——非線性擺放的位置不同，結果就完全不同。（這也是預 4 那句「非線性是唯一能製造分情況的地方」的第二次現身。）</li>
       <li>代價：每個 head 只有 4 維，衡量「像不像」的解析度低很多。<b>取捨＝一個高解析度的問題 vs 四個低解析度的問題。</b></li>
@@ -1866,34 +1971,13 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="476" y="118" width="114" height="46" fill="none" stroke="var(--c-kv)" stroke-width="1.2" rx="7"/>
         <text x="533" y="138" class="ts mid" style="fill:var(--c-kv);font-weight:600">KV cache</text>
         <text x="533" y="156" class="td mid">k, v 的歷史</text>
-        <rect x="40" y="190" width="400" height="30" rx="8" fill="#1f1f1e" stroke="#6a6965" stroke-dasharray="5 4"/>
-        <text x="240" y="210" class="ts mid">切成 4 段、各 4 維——只是切片，沒有魔法</text>
-        <path d="M88 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <path d="M192 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <path d="M296 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <path d="M400 220 V242" class="wire-attn" marker-end="url(#ar-attn)"/>
-        <rect x="45" y="246" width="86" height="52" class="tint-attn"/>
-        <text x="88" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 0</text>
-        <text x="88" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
-        <rect x="149" y="246" width="86" height="52" class="tint-attn"/>
-        <text x="192" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 1</text>
-        <text x="192" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
-        <rect x="253" y="246" width="86" height="52" class="tint-attn"/>
-        <text x="296" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 2</text>
-        <text x="296" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
-        <rect x="357" y="246" width="86" height="52" class="tint-attn"/>
-        <text x="400" y="268" class="tn mid" style="fill:var(--ink);font-size:12.5px">head 3</text>
-        <text x="400" y="286" class="td mid" style="font-size:11px">圖 4a ×1</text>
-        <path d="M533 170 V272 H447" class="wire-kv dash" marker-end="url(#ar-kv)"/>
-        <text x="541" y="230" class="td" style="fill:var(--c-kv)">讀</text>
-        <text x="244" y="320" class="td mid">四個 head 彼此完全不講話</text>
-        <path d="M88 298 V330" class="wire-attn"/>
-        <path d="M192 298 V330" class="wire-attn"/>
-        <path d="M296 298 V330" class="wire-attn"/>
-        <path d="M400 298 V330" class="wire-attn"/>
-        <rect x="45" y="334" width="398" height="30" class="box"/>
-        <text x="244" y="354" class="tn mid" style="fill:var(--ink)">4＋4＋4＋4 接起來＝16</text>
-        <path d="M244 364 V390" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="45" y="190" width="398" height="118" class="tint-attn" rx="10"/>
+        <text x="244" y="224" class="t mid" style="fill:var(--ink);font-weight:600">切、跑、拼　＝　圖 4b-0</text>
+        <text x="244" y="256" class="ts mid">四個 head 各跑一遍那三步，彼此完全不講話</text>
+        <text x="244" y="286" class="tn mid" style="fill:var(--ink)">4＋4＋4＋4 ＝ 16</text>
+        <path d="M533 170 V250 H449" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+        <text x="541" y="222" class="td" style="fill:var(--c-kv)">讀</text>
+        <path d="M244 308 V390" class="wire-attn" marker-end="url(#ar-attn)"/>
         <rect x="184" y="394" width="120" height="40" class="tint-attn"/>
         <text x="244" y="419" class="tn mid" style="fill:var(--ink)">Wo</text>
         <text x="316" y="418" class="ts" style="fill:var(--c-attn)">← 唯一讓四個 head 交流的地方</text>
@@ -1906,7 +1990,7 @@ body.notes-on .slide.active .notes{display:block}
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・attention 區塊全文</span><span>129–131 見圖 4a</span></div>
+        <div class="codehead"><span>microgpt_en.py・attention 區塊全文</span><span>124–132 見圖 4b-0</span></div>
         <div class="codebody">
 <pre class="py" data-hl="116:bus,121-122:kv,126:now,133:attn,134:bus">
 116	x_residual = x
@@ -1933,8 +2017,7 @@ body.notes-on .slide.active .notes{display:block}
   </div>
   <aside class="notes"><span class="ntag">圖 4c・接線</span>
     <ul>
-      <li>上半部（x → Wq/Wk/Wv → 切片）<b>4a-0 都看過了</b>——這張圖只看下半：怎麼接回主幹（拼回 16 → Wo → ⊕）。</li>
-      <li>「切成 4 個 head」在程式裡就是 <b>q[hs:hs+head_dim] 一行切片</b>。很多教材把 multi-head 畫得很神祕，其實就是把 16 個數字分成 4 組。</li>
+      <li>中間那塊<b>上一張整張講完了</b>，這裡壓成一個方塊帶過。這張只看它獨有的四件事：<b>rmsnorm 的位置、KV cache 的讀寫、Wo、以及那條原封不動繞過去的殘差。</b></li>
       <li><b>Wo 是翻譯層</b>：head 寫在第 8 格的數字，跟主幹第 8 格的意義毫無關係——那只是切片的記帳方式。Wo 把「四個 head 各說各話」翻譯成主幹聽得懂的語言。</li>
       <li>Wo 也是四個 head <b>第一次能被聯合判斷</b>的地方。</li>
     </ul>
