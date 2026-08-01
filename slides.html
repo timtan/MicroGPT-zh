@@ -843,15 +843,17 @@ body.notes-on .slide.active .notes{display:block}
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・只看這三行就夠</span><span>L30–72・全檔 1/3</span></div>
+        <div class="codehead"><span>microgpt_en.py・看這幾行就夠</span><span>L30–72・全檔 1/3</span></div>
         <div class="codebody">
 <pre class="py" data-hl="34:bus,41:now">
+30	class Value:
+⋯
 33	def __init__(self, data, children=(),
 	↪              local_grads=()):
 34	    self.data = data      # ★ 數值本體
 	# 前向只用得到 .data
 ⋯
-39	def __add__(self, other):   # ★ a + b 會走到這裡
+39	def __add__(self, other):
 ⋯
 41	    return Value(self.data + other.data,
 	↪                 (self, other), (1, 1))

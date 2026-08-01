@@ -425,11 +425,15 @@
 - 尾鉤：這張便條怎麼一路接回去、算出每個參數該往哪動——**圖 9.5 會用五行乘法手算一次**。
   這裡要明確說出「圖 9.5」，聽眾才願意先放下它。
 
-**配碼（microgpt_en.py・只看這三行就夠）**
+**配碼（microgpt_en.py・看這幾行就夠）**
 
 ```
+30   class Value:
+⋯
 33       def __init__(self, data, children=(), local_grads=()):
-34           self.data = data                # ★ .data：數值本體，前向只用這個
+34           self.data = data                … # ★ .data：數值本體，前向只用這個
+⋯
+39       def __add__(self, other):
 ⋯
 41           return Value(self.data + other.data, (self, other), (1, 1))
              # 加法：算出和，順手在便條寫下「我從這兩個來，微分值都是 1」
