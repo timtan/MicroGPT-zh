@@ -42,14 +42,14 @@ a{color:var(--c-bus)}
 #graphic{position:sticky;top:0;height:100vh;width:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
 #steps{position:relative;z-index:20;pointer-events:none}
 .step{min-height:105vh;display:flex;align-items:center;justify-content:flex-end;padding-right:44px}
-.step .card{pointer-events:auto;max-width:300px;background:rgba(20,20,19,.78);border:1px solid rgba(255,255,255,.07);
-  border-radius:12px;padding:16px 18px;backdrop-filter:blur(6px)}
+.step .card{pointer-events:auto;max-width:230px;background:rgba(20,20,19,.72);border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;padding:13px 15px;backdrop-filter:blur(6px)}
 .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
 .kicker b{font-weight:600}
 .k-bus{color:var(--c-bus)} .k-attn{color:var(--c-attn)} .k-mlp{color:var(--c-mlp)}
 .k-now{color:var(--c-now)} .k-kv{color:var(--c-kv)} .k-rand{color:var(--c-rand)}
-.card h2{font-size:17px;font-weight:700;margin-bottom:8px;letter-spacing:.01em;color:var(--ink2)}
-.card p{font-size:13px;line-height:1.7;color:var(--ink3)}
+.card h2{font-size:15px;font-weight:700;margin-bottom:6px;letter-spacing:.01em;color:var(--ink2)}
+.card p{font-size:12px;line-height:1.65;color:var(--ink3)}
 .card p b{color:var(--ink2)}
 .card p+p{margin-top:8px}
 .card code{font-family:var(--mono);font-size:12.5px;background:var(--panel2);border:1px solid var(--border);
@@ -60,7 +60,7 @@ a{color:var(--c-bus)}
 .scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .35s}
 .scene.show{opacity:1}
 /* 圖形是主角：置中於扣掉右側文字卡（約 360px）後的區域 */
-.scene-inner{width:min(880px,62vw);margin-left:calc((100vw - min(880px,62vw) - 360px)/2)}
+.scene-inner{width:min(880px,64vw);margin-left:calc((100vw - min(880px,64vw) - 290px)/2)}
 @media (max-width:1100px){
   .step{padding-right:24px}
   .scene-inner{margin-left:4vw;width:90vw}
@@ -109,6 +109,15 @@ a{color:var(--c-bus)}
 #ghostTitle{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink3);margin-bottom:8px;text-transform:uppercase}
 .strip.mini .cell{height:44px;border-radius:5px}
 .strip.mini .cell .val{font-size:9.5px;padding-bottom:3px}
+
+/* Wo：四個 head 併成一條 */
+#headsMerge{display:flex;justify-content:center;margin-bottom:18px;transition:opacity .25s}
+#headsMerge .hg{display:grid;grid-template-columns:repeat(4,44px);gap:5px;position:relative;transition:margin .1s linear}
+#headsMerge .hg .hlab{position:absolute;top:-18px;left:0;right:0;text-align:center;font-family:var(--mono);
+  font-size:10px;color:var(--c-attn);transition:opacity .2s}
+/* embedding：從表格抄出來 */
+#embChip{font-family:var(--mono);font-size:13px;color:var(--c-now);margin-bottom:12px;transition:opacity .25s}
+#embChip b{font-size:16px}
 
 /* q/k/v 三條 */
 #qkv{margin-top:18px;display:grid;gap:10px;transition:opacity .3s}
@@ -215,6 +224,8 @@ a{color:var(--c-bus)}
       <div class="scene-inner">
         <div id="busWrap">
           <div id="busTitle"><span class="name" id="busName"></span><span id="busBadge"></span></div>
+          <div id="embChip" style="opacity:0">wte 表・第 <b>12</b> 列 ↓</div>
+          <div id="headsMerge" style="opacity:0"></div>
           <div class="strip" id="strip"></div>
           <div class="zeroline"></div>
           <div id="ghostWrap" style="opacity:0">
@@ -301,60 +312,46 @@ const POSLBL = FLOW.meta.labels;   // ['<BOS>','e','m']
 const SCENES = [
   {id:'hero',  scene:'hero',  rail:['now','起點'],
     kicker:['k-now','TOKEN "M" · 進場'], title:'一個字母，即將變成 16 個數字',
-    body:`<p>GPT 不認得字母。「m」進門的第一件事，是換一張 <span class="num">16</span> 維的身分證——一串數字。</p>
-         <p>接下來每一站，改變的都是<b>這串數字本身</b>。盯著它看。</p>`},
+    body:`<p>「m」進場。跟著它，看這串數字一路被改造。</p>`},
   {id:'tok',   scene:'tok', rail:['now','變成 ID'],
     kicker:['k-now','STATION 1 · TOKENIZER'], title:'先領號碼牌：m → 12',
-    body:`<p>GPT 不認得字母。字典裡 26 個字母加一個「結束符」排排站，「m」排在第 <b>12</b> 格（從 0 數起）。</p>
-         <p>從這一刻起，模型眼中沒有「m」，只有號碼 <b>12</b>。</p>`},
-  {id:'emb',   scene:'bus', vec:M.tok_emb, name:'wte[12] — token embedding', badge:'查表而來，還沒有任何上下文', rail:['bus','查表'],
+    body:`<p>字典 26 個字母＋結束符，「m」排第 <b>12</b> 格——從此模型只認得號碼 12。</p>`},
+  {id:'emb',   scene:'bus', reveal:true, vec:M.tok_emb, name:'wte[12] — token embedding', badge:'查表而來，還沒有任何上下文', rail:['bus','查表'],
     kicker:['k-bus','STATION 2 · EMBEDDING'], title:'查表：領到出廠設定',
-    body:`<p>拿著號碼 12 到 <code>wte</code> 表領第 12 列——16 個數字。<b>每一個「m」領到的都是同一串</b>——它還不知道自己排在哪、前面是誰。</p>
-         <p>這 16 格就是它的全部家當，之後一路被改造。</p>`},
+    body:`<p>拿號碼 12 到 <code>wte</code> 表抄第 12 列。每個「m」領到的都是同一串。</p>`},
   {id:'pos',   scene:'bus', vec:M.x_sum, ghost:{vec:M.pos_emb, title:'wpe[2] — 位置 2 的向量（幽靈條，正在併入）'}, name:'x = wte["m"] + wpe[2]', badge:'逐格相加：內容 + 位置', rail:['bus','加位置'],
     kicker:['k-bus','STATION 3 · + POSITION'], title:'蓋章：你排在第 2 位',
-    body:`<p>另一張表 <code>wpe</code> 給出「位置 2」的向量，<b>逐格加</b>進來。看下面的幽靈條融進主條——16 個數字全部挪動了一點。</p>
-         <p>從此這串數字不只代表「m」，還代表「<b>排在第 2 位的</b> m」。</p>`},
+    body:`<p>位置 2 的向量逐格加進來——現在是「<b>排第 2 的</b> m」。</p>`},
   {id:'norm',  scene:'bus', vec:M.x_norm0, name:'rmsnorm(x)', badge:'', rail:['bus','整隊'],
     kicker:['k-bus','STATION 4 · RMSNORM'], title:'整隊：把音量轉到標準刻度',
-    body:`<p>進 Transformer 之前先「整隊」：整串數字等比例縮放，讓能量固定在同一個刻度。</p>
-         <p>注意：<b>格子之間的比例沒變</b>，只是整體音量被轉大或轉小——資訊還在，只是變得好處理。</p>`},
+    body:`<p>整串等比例縮放到標準刻度；格子間的比例不變。</p>`},
   {id:'qkv',   scene:'bus', vec:M.x_norm0, qkv:true, name:'x → q, k, v（三種分身）', badge:'m 的 k、v 同時存入 KV cache', rail:['kv','分身 q·k·v'],
     kicker:['k-kv','STATION 5 · Q / K / V'], title:'一分為三：問題、名片、行李',
-    body:`<p>同一串數字被三個不同的矩陣照了三次鏡子，變成三個分身：<b style="color:var(--c-attn)">q</b>（我想找什麼）、<b style="color:var(--c-kv)">k</b>（我是誰的名片）、<b style="color:var(--c-kv)">v</b>（我要交出的行李）。</p>
-         <p>k 和 v 隨即存進 <b style="color:var(--c-kv)">KV cache</b>——跟「e」早先留下的排在一起。</p>`},
+    body:`<p>照三次鏡子：<b>q</b> 問題、<b>k</b> 名片、<b>v</b> 行李。k、v 存入 KV cache。</p>`},
   {id:'attn',  scene:'attn', vec:M.x_attn, rail:['attn','Attention'],
     kicker:['k-attn','STATION 6 · ATTENTION'], title:'回頭看：m 讀取 e 留下的線索',
-    body:`<p>重頭戲。m 拿著 <b style="color:var(--c-attn)">q</b>，去面試 cache 裡三張名片：<span style="color:var(--c-kv)">&lt;BOS&gt;</span>、<span style="color:var(--c-kv)">e</span>、<span style="color:var(--c-now)">m 自己</span>。</p>
-         <p>右邊是 4 個 head <b>真實算出的權重</b>——合得來就多聽一點，把對方的 v 按比例打包帶走。<b>這一刻，e 的資訊流進了 m 的向量。</b></p>`},
-  {id:'wo',    scene:'bus', vec:M.wo_out, name:'linear(x_attn, Wo)', badge:'四個 head 的收穫，混合成一條', rail:['attn','匯整'],
+    body:`<p>m 拿 <b>q</b> 面試 BOS、e、自己——權重是真實算出的。<b>e 的資訊流進 m。</b></p>`},
+  {id:'wo',    scene:'bus', merge:true, vec:M.wo_out, name:'linear(x_attn, Wo)', badge:'四個 head 的收穫，混合成一條', rail:['attn','匯整'],
     kicker:['k-attn','STATION 7 · 匯整'], title:'四份收穫，攪拌成一條',
-    body:`<p>4 個 head 各自打包了 4 格，接回 16 格，再過一次矩陣攪拌均勻。</p>
-         <p>對比一下上一站——這串數字已經<b>不再只是 m 自己</b>，裡面混進了 e 的成分。</p>`},
+    body:`<p>4 個 head 各帶回 4 格：併攏、攪拌，落成一條 16 維。</p>`},
   {id:'res1',  scene:'bus', vec:M.resid1, ghost:{vec:M.x_norm0, title:'residual — 進站前的自己（正在加回來）'}, name:'x = attention 輸出 + residual', badge:'原本的自己 + 新學到的', rail:['bus','殘差 +'],
     kicker:['k-bus','STATION 8 · RESIDUAL'], title:'別忘了你是誰：加回原本的自己',
-    body:`<p>Transformer 的保險絲：把<b>進站前的向量</b>原封不動加回來。</p>
-         <p>所以 attention 學到的東西是「疊加」上去的，不是「取代」。就算這站什麼都沒學到，m 也不會失憶。</p>`},
+    body:`<p>把進站前的自己加回來——學到的是<b>疊加</b>，不是取代。</p>`},
   {id:'mlp1',  scene:'mlp', vec:M.resid1, rail:['mlp','MLP 爆開'],
     kicker:['k-mlp','STATION 9 · MLP 16→64'], title:'爆開：16 維攤成 64 維',
-    body:`<p>換 MLP 加工。向量先被投影到 <span class="num">64</span> 維的大工作檯上攤開——每格是一個「特徵偵測器」的反應強度。</p>
-         <p>接著 <b>ReLU</b> 一刀切：負的全部歸零。看那些<b>暗掉的格子</b>——它們這一次沒話要說。</p>`},
+    body:`<p>攤上 64 維工作檯；ReLU 把負值歸零（暗掉的格子）。</p>`},
   {id:'mlp2',  scene:'bus', vec:M.resid2, ghost:{vec:M.resid1, title:'residual — MLP 進站前的自己（正在加回來）'}, name:'x = MLP 輸出 + residual', badge:'第二次殘差疊加，主線完工', rail:['mlp','收回 + 殘差'],
     kicker:['k-mlp','STATION 10 · MLP 64→16'], title:'收回 16 維，再疊一次自己',
-    body:`<p>工作檯上留下的訊號被壓回 16 維，照例<b>加回進站前的自己</b>。</p>
-         <p>到這裡，主線走完了。這串數字濃縮了：m 是誰、排第 2、前面是 e——<b>它已經準備好預測下一個字了</b>。</p>`},
+    body:`<p>壓回 16 維，再疊一次自己。主線完工。</p>`},
   {id:'logits',scene:'bars', mode:'logits', rail:['bus','27 條跑道'],
     kicker:['k-bus','STATION 11 · LM_HEAD'], title:'攤牌：對 27 個候選字打分數',
-    body:`<p>最後一張表 <code>lm_head</code> 把 16 維向量對每個候選字各打一個分數（logit）：a–z 加上「名字結束」。</p>
-         <p>分數有正有負、沒有單位——還不是機率，只是<b>裸的偏好</b>。</p>`},
+    body:`<p>對 27 個候選字各打一個分數——還不是機率。</p>`},
   {id:'probs', scene:'bars', mode:'probs', rail:['rand','機率與抽籤'],
     kicker:['k-rand','STATION 12 · SOFTMAX + 抽籤'], title:'換算成機率，然後——擲骰子',
-    body:`<p>softmax 把分數壓成加總為 1 的機率（溫度 <span class="num">0.5</span>，讓模型收斂一點）。</p>
-         <p>最後一步是<b style="color:var(--c-rand)">全場唯一的隨機</b>：按機率抽一個。「em」之後，模型押注最大的就是下面這位。</p>`},
+    body:`<p>softmax 換算成機率（T=0.5），然後<b style="color:var(--c-rand)">抽一個</b>。</p>`},
   {id:'fin',   scene:'finale', rail:['now','終點'],
     kicker:['k-now','旅程結束'], title:'然後，一切重來',
-    body:`<p>抽出的新字接到「em」後面，變成下一輪的「當前 token」，從第一站再走一遍——直到抽中「結束」。</p>
-         <p>名字，就是這樣一個字母、一個字母長出來的。</p>`},
+    body:`<p>新字接上「em」，從第一站重來——直到抽中結束符。</p>`},
 ];
 
 /* ── 建 DOM ── */
@@ -426,6 +423,27 @@ for (let h = 0; h < N_HEAD; h++) {
   attnHeadsEl.appendChild(box);
   headEls.push(box);
 }
+
+/* Wo 四合一 overlay：4 組 × 4 小格（head_out 真實值） */
+const headsMergeEl = document.getElementById('headsMerge');
+const hmGroups = [], hmCells = [];
+for (let h = 0; h < N_HEAD; h++) {
+  const g = document.createElement('div');
+  g.className = 'hg';
+  g.innerHTML = `<span class="hlab">head ${h}</span>`;
+  headsMergeEl.appendChild(g);
+  hmGroups.push(g);
+  for (let j = 0; j < 4; j++) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.style.height = '44px'; c.style.borderRadius = '5px';
+    c.innerHTML = `<div class="bar"></div><span class="val" style="font-size:9.5px;padding-bottom:3px"></span>`;
+    g.appendChild(c);
+    hmCells.push({bar: c.querySelector('.bar'), val: c.querySelector('.val'), el: c});
+  }
+}
+paintCells(hmCells, M.x_attn, 0.6, ATTN, ATTN);
+const embChipEl = document.getElementById('embChip');
 
 /* MLP grid */
 const mlpGridEl = document.getElementById('mlpGrid');
@@ -530,10 +548,46 @@ function render() {
   }
   else if (s.scene === 'bus') {
     const from = prevVec(active);
-    const vec = lerpV(from, s.vec, f);
+    // 逐格波浪 morph：由左至右一格一格滑向新值，變動中的格子發光
+    const vec = [];
+    const fBase = s.merge ? clamp01((f - 0.55) / 0.45) : f; // 合併場景：等 head 落下才開始 morph
+    for (let i = 0; i < 16; i++) {
+      const fi = clamp01(fBase * 1.55 - i * 0.035);
+      vec.push(lerp(from[i], s.vec[i], fi));
+      const changing = fi > 0 && fi < 1 && Math.abs(s.vec[i] - from[i]) > 0.15;
+      stripCells[i].el.style.boxShadow = changing ? '0 0 14px rgba(57,135,229,.55), inset 0 0 0 1px rgba(57,135,229,.6)' : '';
+    }
     paintCells(stripCells, vec, 0.6);
     busName.textContent = s.name;
     busBadge.textContent = s.badge || '';
+    if (s.reveal) {
+      // tokenizer → embedding：id 牌現身，表格列由左至右「抄」出來
+      embChipEl.style.opacity = String(clamp01(f * 3) * clamp01((0.9 - f) * 6));
+      for (let i = 0; i < 16; i++) {
+        const on = clamp01(f * 2.2 - i * 0.09);
+        stripCells[i].el.style.opacity = String(0.06 + 0.94 * on);
+        stripCells[i].el.style.transform = `translateY(${((1 - on) * -14).toFixed(1)}px)`;
+      }
+    } else {
+      embChipEl.style.opacity = '0';
+      for (const c of stripCells) { c.el.style.opacity = ''; c.el.style.transform = ''; }
+    }
+    if (s.merge) {
+      // 四份 head 收穫：先分開站好，滑近、併攏，然後落進主條
+      const gather = clamp01(f / 0.55), drop = clamp01((f - 0.55) / 0.45);
+      headsMergeEl.style.opacity = String((1 - drop) * clamp01(f * 4 + 0.25));
+      headsMergeEl.style.transform = `translateY(${(drop * 26).toFixed(1)}px)`;
+      const gap = lerp(34, 2, ease(gather));
+      hmGroups.forEach((g, h) => {
+        g.style.marginLeft = h === 0 ? '0' : gap + 'px';
+        g.querySelector('.hlab').style.opacity = String(1 - gather);
+      });
+      // 主條在 head 併攏後才亮起，並從 x_attn 滑向 wo_out
+      document.getElementById('strip').style.opacity = String(0.12 + 0.88 * drop);
+    } else {
+      headsMergeEl.style.opacity = '0';
+      document.getElementById('strip').style.opacity = '';
+    }
     if (s.ghost) {
       ghostWrap.style.opacity = String(clamp01(1.2 - f * 1.4));
       ghostWrap.style.transform = `translateY(${(-f * 26).toFixed(1)}px)`;
