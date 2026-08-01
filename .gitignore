@@ -19,3 +19,6 @@ checkpoints/*.tmp
 
 # Local PDF extraction intermediates
 tmp/
+
+# Paseo session data
+paseo.json
