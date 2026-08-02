@@ -2,6 +2,15 @@
 
 這是 Karpathy MicroGPT 的純 Python 教學實作，使用字元級 tokenizer 學習並生成中文姓名。
 
+## 投影片
+
+- [slides.html](https://timtan.github.io/MicroGPT-zh/slides.html) — MicroGPT 概念投影片
+- [flow3d.html](https://timtan.github.io/MicroGPT-zh/flow3d.html) — 3D 訓練流程動畫投影片
+
+## microgpt_en.py
+
+`microgpt_en.py` 是 [Andrej Karpathy](https://github.com/karpathy) 原始的英文版 MicroGPT，未經修改地收錄於本 repo 中作為對照與學習參考；本專案的 `microgpt.py` 是基於它的中文姓名版重寫。
+
 ## 執行
 
 ```bash
