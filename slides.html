@@ -42,6 +42,7 @@ body{font-family:var(--sans);visibility:hidden}
 .chip.on{color:var(--ink);border-color:var(--c-bus);background:rgba(57,135,229,.14)}
 .chip.on b{color:var(--c-bus)}
 .tick{width:9px;height:1px;background:var(--grid)}
+.maplabel{font-size:11.5px;color:var(--ink3);margin-right:9px;white-space:nowrap;letter-spacing:.5px}
 
 /* ============ 左右欄 ============ */
 .cols{display:grid;grid-template-columns:var(--split,52fr 48fr);gap:26px;min-height:0;padding-top:10px}
@@ -56,11 +57,15 @@ body{font-family:var(--sans);visibility:hidden}
 .codehead{padding:10px 16px;font:12.5px var(--mono);color:var(--ink3);
           border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex:0 0 auto}
 .codebody{flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 6px;min-height:0;overflow:hidden}
+/* 聽眾不必讀程式碼——明講出來，免得他們在「該不該看」之間分心 */
+.codecard::after{content:"不用讀懂　·　只是讓你確認：左邊那張圖，程式裡真的就這幾行";
+          flex:0 0 auto;padding:7px 16px;font:11.5px var(--sans);color:var(--ink3);letter-spacing:.3px;
+          border-top:1px solid var(--border);background:rgba(255,255,255,.025);text-align:center}
 .codesep{font:12px var(--sans);color:var(--ink3);padding:10px 16px 4px;letter-spacing:.5px}
 .codesep b{color:var(--ink2);font-weight:600}
 pre.py{margin:0;padding:2px 8px;font-family:var(--mono);font-size:var(--code-fs,14px);line-height:1.62}
 .row{display:flex;white-space:pre;border-radius:4px}
-.no{flex:0 0 4ch;text-align:right;padding-right:13px;color:#56554f;user-select:none}
+.no{flex:0 0 4ch;text-align:right;padding-right:13px;padding-left:5px;color:#56554f;user-select:none}
 .cd{white-space:pre;color:#e8e6df}
 .row.elide .no,.row.elide .cd{color:#4c4b45}
 .fold{color:#56554f}
@@ -185,7 +190,7 @@ body.notes-on .slide.active .notes{display:block}
       <path d="M550 62 H576" class="wire-bus" marker-end="url(#ar-bus)"/>
       <rect x="580" y="42" width="110" height="40" class="tint-bus"/><text x="635" y="67" class="ts mid">lm_head</text>
       <path d="M690 62 H716" class="wire" marker-end="url(#ar-grey)"/>
-      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="67" class="ts mid">抽樣 ★</text>
+      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="61" class="ts mid">抽樣</text><text x="763" y="77" class="td mid" style="fill:var(--c-rand)">唯一的隨機</text>
       <path d="M806 62 H836" class="wire-rand" marker-end="url(#ar-rand)"/>
       <text x="848" y="68" class="th" style="font-family:var(--mono);fill:var(--c-now)">e</text>
       <path d="M763 90 V106 H40 V80" class="wire dash" marker-end="url(#ar-grey)"/>
@@ -249,11 +254,12 @@ body.notes-on .slide.active .notes{display:block}
         <text x="360" y="368" class="td">⋮</text>
         <text x="360" y="392" class="tn">z</text><rect x="380" y="380" width="3" height="15" rx="1.5" class="bar-grey"/><text x="393" y="392" class="td">0.1%</text>
 
-        <rect x="0" y="430" width="640" height="112" rx="10" fill="rgba(230,103,103,.08)" stroke="var(--c-rand)" stroke-width="1.4"/>
+        <rect x="0" y="428" width="640" height="126" rx="10" fill="rgba(230,103,103,.08)" stroke="var(--c-rand)" stroke-width="1.4"/>
         <text x="22" y="464" class="tb">它不會「決定」答案，它只給 27 個比例。</text>
         <text x="22" y="492" class="ts">真正抽出一個字母的，是外面那一行</text>
         <text x="330" y="492" class="tn" style="fill:var(--c-rand)">random.choices</text>
-        <text x="22" y="520" class="td">輸出是一個分佈，不是一個字——溫度、隨機性都建在這句話上（圖 8 主場）</text>
+        <text x="22" y="518" class="td"><tspan style="fill:var(--ink2)">訓練和推論是同一個函數的兩種用法</tspan>：接下來十幾張講的都是「拿現成的數字算一次」；</text>
+        <text x="22" y="538" class="td">「學習」是在這個函數<tspan style="fill:var(--ink2)">外面</tspan>繞一圈迴圈、回頭修那些數字——最後兩張才講。</text>
       </svg>
     </div>
     <div class="pane right">
@@ -296,6 +302,7 @@ body.notes-on .slide.active .notes{display:block}
           <stop offset="0" stop-color="#4a4947"/><stop offset="1" stop-color="#4a4947" stop-opacity="0"/>
         </linearGradient></defs>
         <text x="0" y="24" class="th">整個模型的全部知識 = 5 個矩陣</text>
+        <text x="0" y="46" class="td">每個矩陣就是一張數字表。表格大小相乘＝格子數，全部加起來就是下面那個 4,192。</text>
 
         <text x="0" y="76" class="t" style="font-family:var(--mono)">wte</text>
         <text x="0" y="96" class="td">27 × 16・字母 → 向量（查表）</text>
@@ -323,17 +330,19 @@ body.notes-on .slide.active .notes{display:block}
         <text x="595" y="317" class="tn">2,048</text>
 
         <line x1="0" y1="360" x2="640" y2="360" class="axis"/>
-        <text x="0" y="404" class="t">合計</text>
-        <text x="70" y="408" style="fill:var(--ink);font:700 36px var(--mono)">4,192</text>
-        <text x="185" y="404" class="ts">個數字，全部可以手算</text>
+        <text x="0" y="398" class="t">合計</text>
+        <text x="70" y="402" style="fill:var(--ink);font:700 36px var(--mono)">4,192</text>
+        <text x="185" y="398" class="ts">個數字，全部可以手算</text>
+        <text x="0" y="426" class="td">432＋256＋432＋1,024＋2,048</text>
+        <text x="0" y="448" class="td">而且只有<tspan style="fill:var(--ink2)">一層</tspan>——一層就已經包含 attention、MLP、殘差的全部；多層只是同一件事再做一次。</text>
 
-        <text x="0" y="462" class="td">對照組</text>
-        <text x="0" y="492" class="t">GPT-2 small</text>
-        <text x="122" y="492" class="tn">124,000,000</text>
-        <rect x="255" y="474" width="385" height="26" rx="3.5" fill="url(#fadeG)"/>
-        <text x="420" y="493" class="ts" style="fill:var(--ink)">× 30,000 …畫不下</text>
-        <text x="0" y="536" class="t">現代大模型</text>
-        <text x="122" y="536" class="tn">100,000,000,000+</text>
+        <text x="0" y="478" class="td">對照組</text>
+        <text x="0" y="506" class="t">GPT-2 small</text>
+        <text x="122" y="506" class="tn">124,000,000</text>
+        <rect x="255" y="488" width="385" height="26" rx="3.5" fill="url(#fadeG)"/>
+        <text x="420" y="507" class="ts" style="fill:var(--ink)">× 30,000 …畫不下</text>
+        <text x="0" y="546" class="t">現代大模型</text>
+        <text x="122" y="546" class="tn">100,000,000,000+</text>
       </svg>
     </div>
     <div class="pane right">
@@ -350,11 +359,11 @@ body.notes-on .slide.active .notes{display:block}
 80	matrix = lambda nout, nin, std=0.08:
 	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
 	↪  for _ in range(nout)]
-	# ★ matrix：造一個矩陣；Value＝數字＋一張便條（圖 9.5 收）
+	# ★ matrix：造一個矩陣；Value＝數字＋一張便條
 81	state_dict = {'wte': matrix(vocab_size, n_embd),
 	↪ 'wpe': matrix(block_size, n_embd),
 	↪ 'lm_head': matrix(vocab_size, n_embd)}
-	# ★ state_dict：知識收納櫃；vocab_size＝27（圖 2 細講）
+	# ★ state_dict：知識收納櫃；vocab_size＝27
 82	for i in range(n_layer):
 83	    state_dict[f'layer{i}.attn_wq'] =
 	↪         matrix(n_embd, n_embd)
@@ -382,7 +391,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預0 兩種數字 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 0</span>程式裡只有兩種數字</h1>
+    <h1><span class="figno">暖身 0</span>程式裡只有兩種數字</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--split:60fr 40fr;--code-fs:13.5px">
@@ -404,7 +413,7 @@ body.notes-on .slide.active .notes{display:block}
         <line x1="24" y1="152" x2="284" y2="152" class="axis"/>
         <line x1="356" y1="152" x2="616" y2="152" class="axis"/>
 
-        <text x="24" y="184" class="ts">共 4,192 個，就是圖 0 那張表</text>
+        <text x="24" y="184" class="ts">共 4,192 個，就是前一張那張表</text>
         <text x="24" y="212" class="ts">跑幾次都不變</text>
         <text x="24" y="240" class="ts">住在 state_dict 裡</text>
         <text x="24" y="268" class="ts">只有「訓練」會改它</text>
@@ -437,7 +446,7 @@ body.notes-on .slide.active .notes{display:block}
 	# ★ ② 算出來的：每一輪重生一次
 </pre>
         </div>
-        <div class="codesep">先埋一個伏筆：<b>keys／values</b> 是右邊的東西，卻活過了一輪——為什麼，圖 9 收。</div>
+        <div class="codesep">先埋一個伏筆：<b>keys／values</b> 是右邊的東西，卻活過了一輪——為什麼？等一下講。</div>
       </div>
     </div>
   </div>
@@ -453,7 +462,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預1 主角 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 1</span>全場只有一個主角：一個 16 維向量</h1>
+    <h1><span class="figno">暖身 1</span>全場只有一個主角：一個 16 維向量</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols solo">
@@ -472,32 +481,32 @@ body.notes-on .slide.active .notes{display:block}
         <text x="24" y="364" class="t" style="font-weight:600">加完三次料、進出口（lm_head）之前：</text>
         <text x="24" y="394" class="ts">「此刻的意義」與「對下一個字母的預測」</text>
         <text x="24" y="418" class="ts">已同時濃縮在這 16 個數字裡</text>
-        <text x="24" y="446" class="td">——圖 7 會揭曉：這兩件事其實是同一件事</text>
-        <text x="0" y="524" class="ts" style="fill:var(--c-now)">每一步的動詞都是「＋」——三個加號（圖 6 收這條線）</text>
+        <text x="24" y="446" class="td">——最後會揭曉：這兩件事其實是同一件事</text>
+        <text x="0" y="524" class="ts" style="fill:var(--c-now)">每一步的動詞都是「＋」——三個加號</text>
 
         <text x="530" y="36" class="ts">整個程式＝對同一個 x 不停「加料」（生成 emma 走到第 3 步）：</text>
         <rect x="530" y="58" width="470" height="54" class="tint-bus" rx="10"/>
         <text x="548" y="91" class="td">出生・wte 查表</text>
         <text x="780" y="91" class="t mid" style="font-weight:600">「我是字母 m」</text>
-        <text x="988" y="91" class="td end">圖 3</text>
+        <text x="988" y="91" class="td end">查表</text>
         <path d="M765 112 V146" class="wire-bus" marker-end="url(#ar-bus)"/>
         <text x="781" y="135" class="ts" style="fill:var(--c-now)">＋ wpe</text>
         <rect x="530" y="150" width="470" height="54" class="tint-bus" rx="10"/>
         <text x="548" y="183" class="td">知道位置</text>
         <text x="780" y="183" class="t mid" style="font-weight:600">「我是第 3 格的 m」</text>
-        <text x="988" y="183" class="td end">圖 3</text>
+        <text x="988" y="183" class="td end">查表</text>
         <path d="M765 204 V238" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="781" y="227" class="ts" style="fill:var(--c-now)">＋ 一份「前文的料」（怎麼來的，圖 4 才拆）</text>
+        <text x="781" y="227" class="ts" style="fill:var(--c-now)">＋ 一份「前文的料」（怎麼來的，等一下拆）</text>
         <rect x="530" y="242" width="470" height="54" class="tint-bus" rx="10"/>
         <text x="548" y="275" class="td">拌入前文</text>
         <text x="780" y="275" class="t mid" style="font-weight:600">「我前面是 e、m」</text>
-        <text x="988" y="275" class="td end">圖 4</text>
+        <text x="988" y="275" class="td end">attention</text>
         <path d="M765 296 V330" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="781" y="319" class="ts" style="fill:var(--c-now)">＋ 一份「加工的料」（怎麼來的，圖 5 才拆）</text>
+        <text x="781" y="319" class="ts" style="fill:var(--c-now)">＋ 一份「加工的料」（怎麼來的，等一下拆）</text>
         <rect x="530" y="334" width="470" height="54" class="tint-bus" rx="10"/>
         <text x="548" y="367" class="td">想清楚了</text>
         <text x="780" y="367" class="t mid" style="font-weight:600">「下一個八成是 a」</text>
-        <text x="988" y="367" class="td end">圖 5</text>
+        <text x="988" y="367" class="td end">MLP</text>
         <text x="765" y="440" class="ts mid">你等一下看到的每一張圖，都只是在回答：</text>
         <text x="765" y="466" class="t mid" style="font-weight:600">「這一步往 x 裡加了什麼料？」</text>
         <text x="765" y="522" class="td mid">這個 x 從頭到尾，只會被三種運算對待——接下來一種一頁</text>
@@ -516,7 +525,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預2 相加 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 2</span>① 相加：向量＋向量 — 把兩份理解疊在一起</h1>
+    <h1><span class="figno">暖身 2</span>① 相加：向量＋向量 — 把兩份理解疊在一起</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--code-fs:13px">
@@ -548,8 +557,8 @@ body.notes-on .slide.active .notes{display:block}
 
         <rect x="0" y="366" width="590" height="104" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <rect x="0" y="366" width="4" height="104" class="f-bus"/>
-        <text x="24" y="404" style="font:600 17px var(--mono);fill:var(--ink)">殘差就是 x += 修正，不是 x = 修正</text>
-        <text x="24" y="438" class="ts">疊上去、不覆蓋——全場沒有任何一步會「洗掉」x（圖 6 收這條線）</text>
+        <text x="24" y="400" style="font:600 17px var(--sans);fill:var(--ink)">新的 x　＝　<tspan class="f-bus">舊的 x</tspan>　＋　修正量　（這叫「殘差」）</text>
+        <text x="24" y="432" class="ts">關鍵是<tspan style="fill:var(--ink);font-weight:600">舊的 x 一定會出現在等號右邊</tspan>——所以它不會被洗掉，只是被疊上東西</text>
 
         <text x="303" y="536" class="td mid">加法只會疊、不會變——要變出「我在找母音」這種新理解，得靠第二種運算：相乘</text>
       </svg>
@@ -563,9 +572,10 @@ body.notes-on .slide.active .notes{display:block}
 	# ★ x、tok_emb、pos_emb：主角本人＋兩張便利貼
 ⋯
 134	    x = [a + b for a, b in zip(x, x_residual)]
-	# ★ x_residual：加料前先留一份的備份——殘差（圖 6 主場）
+	# ★ 左邊是新的 x，右邊的 x_residual 是舊的 x——舊的沒被丟掉
 ⋯
 141	    x = [a + b for a, b in zip(x, x_residual)]
+	# ★ 一模一樣的一行：attention 之後一次，MLP 之後一次
 </pre>
         </div>
       </div>
@@ -583,7 +593,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預3a 內積 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 3a</span>② 相乘（一）：兩個向量的內積</h1>
+    <h1><span class="figno">暖身 3a</span>② 相乘（一）：兩個向量的內積</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols solo">
@@ -598,7 +608,8 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="0" y="110" width="700" height="44" class="box" rx="10"/>
         <text x="24" y="138" class="t" style="font-weight:600">w</text>
         <text x="60" y="138" style="font:16px var(--mono);fill:var(--ink)">= [  0.2,  -0.1,   0.9,  … ]</text>
-        <text x="700" y="138" class="td">← 另一個 16 維向量</text>
+        <text x="700" y="132" class="td">← 一個「問句」，例如「你是不是母音？」</text>
+        <text x="700" y="152" class="td">　　它裡面的數字是<tspan style="fill:var(--ink2)">訓練學出來的</tspan>，不是人寫的</text>
 
         <text x="0" y="200" class="t" style="font-weight:600">內積＝逐項相乘，再全部加總</text>
 
@@ -607,10 +618,12 @@ body.notes-on .slide.active .notes{display:block}
         <text x="266" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.3×(−0.1)</text>
         <text x="360" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋</text>
         <text x="450" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.5×0.9</text>
-        <text x="540" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋ …</text>
+        <text x="556" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋ …</text>
         <text x="70" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.08</text>
         <text x="266" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">−0.03</text>
         <text x="450" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.45</text>
+        <text x="556" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.73</text>
+        <text x="556" y="298" class="mid td">剩下 13 項</text>
         <path d="M620 258 H700" class="wire-bus" marker-end="url(#ar-bus)"/>
         <rect x="708" y="234" width="150" height="46" class="tint-bus" rx="10"/>
         <text x="783" y="265" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">1.23</text>
@@ -631,11 +644,11 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="760" y="360" width="380" height="176" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <rect x="760" y="360" width="4" height="176" class="f-bus"/>
         <text x="784" y="392" class="t" style="font-weight:600">這個數字代表什麼</text>
-        <text x="784" y="422" class="ts">兩個向量有多同方向：</text>
-        <text x="784" y="448" class="ts">同方向 → 大正數・無關 → 接近 0</text>
-        <text x="784" y="470" class="ts">反方向 → 負數</text>
+        <text x="784" y="420" class="ts"><tspan style="fill:var(--ink);font-weight:600">「x 對這個問句，答得多用力」</tspan></text>
+        <text x="784" y="446" class="ts">用力說對 → 大正數・沒關係 → 接近 0</text>
+        <text x="784" y="468" class="ts">用力說不對 → 負數</text>
         <text x="784" y="496" class="td">另一個因素：向量本身數字越大，</text>
-        <text x="784" y="516" class="td">內積也跟著變大（圖 7 會用到）</text>
+        <text x="784" y="516" class="td">內積也跟著變大（等一下會用到）</text>
 
         <text x="0" y="536" class="td">下一頁：一個內積只給一個數字，但主幹上要的是 16 個數字——所以要做 16 次。</text>
       </svg>
@@ -654,7 +667,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預3b 矩陣 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 3b</span>② 相乘（二）：矩陣就是一疊向量</h1>
+    <h1><span class="figno">暖身 3b</span>② 相乘（二）：矩陣就是一疊向量</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols solo">
@@ -671,16 +684,16 @@ body.notes-on .slide.active .notes{display:block}
         <text x="360" y="110" class="td">← 第 1 列</text>
         <text x="360" y="178" class="td">← 第 15 列</text>
         <path d="M520 62 H540 V190 H520" class="wire-bus"/>
-        <text x="20" y="222" class="ts" style="fill:var(--c-bus)">每一列自己就是一個 16 維向量——這裡總共 16 個</text>
-        <text x="20" y="248" class="td">（幾列由矩陣自己決定：fc1 有 64 列、lm_head 有 27 列）</text>
+        <text x="20" y="222" class="ts" style="fill:var(--c-bus)">每一列自己就是一個 16 維向量——這裡總共 16 列</text>
+        <text x="20" y="248" class="td">（幾列由矩陣自己決定：fc1 有 64 列、lm_head 有 27 列。注意：上一頁的 w 是「一個」向量，這裡的 w 是「一疊」）</text>
 
-        <text x="600" y="66" class="t" style="font-weight:600">x 跟「每一列」各做一次預 3a 的內積</text>
+        <text x="600" y="66" class="t" style="font-weight:600">x 跟「每一列」各做一次剛剛的內積</text>
         <rect x="600" y="86" width="140" height="40" class="tint-bus" rx="8"/>
         <text x="670" y="112" class="tn mid" style="fill:var(--ink)">x（16 個數）</text>
         <path d="M740 106 H772" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="790" y="152" class="ts">x · 第 0 列</text>
+        <text x="790" y="152" class="ts">x · 第 0 列</text><text x="1020" y="152" class="td">← 就是上一頁那個</text>
         <path d="M900 147 H950" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="962" y="152" class="tn" style="fill:var(--ink)">0.87</text>
+        <text x="962" y="152" class="tn" style="fill:var(--ink)">1.23</text>
         <text x="790" y="186" class="ts">x · 第 1 列</text>
         <path d="M900 181 H950" class="wire" marker-end="url(#ar-grey)"/>
         <text x="962" y="186" class="tn" style="fill:var(--ink)">−1.20</text>
@@ -689,28 +702,33 @@ body.notes-on .slide.active .notes{display:block}
         <text x="790" y="248" class="ts">x · 第 15 列</text>
         <path d="M900 243 H950" class="wire" marker-end="url(#ar-grey)"/>
         <text x="962" y="248" class="tn" style="fill:var(--ink)">0.34</text>
-        <rect x="770" y="270" width="330" height="40" class="tint-bus" rx="8"/>
-        <text x="935" y="296" class="ts mid" style="fill:var(--ink)">16 列 → 16 個數字 ＝ 又是一個 16 維向量</text>
+        <rect x="770" y="266" width="330" height="62" class="tint-bus" rx="8"/>
+        <text x="935" y="290" class="ts mid" style="fill:var(--ink);font-weight:600">有幾列，出來就是幾個數字</text>
+        <text x="935" y="314" class="td mid">這個矩陣 16 列，所以又是一個 16 維向量</text>
 
         <line x1="0" y1="342" x2="1140" y2="342" class="axis"/>
 
-        <text x="0" y="378" class="t" style="font-weight:600">程式：外層跑每一列，內層就是預 3a 那一行</text>
+        <text x="0" y="378" class="t" style="font-weight:600">程式：外層跑每一列，內層就是剛剛那一行</text>
         <rect x="0" y="396" width="820" height="76" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <text x="24" y="424" style="font:15px var(--mono);fill:var(--ink)">def linear(x, w):</text>
         <text x="24" y="452" style="font:15px var(--mono);fill:var(--ink)">    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]</text>
         <path d="M300 458 V478" class="wire-bus"/>
-        <text x="150" y="496" class="td">預 3a：跟一列做內積</text>
+        <text x="150" y="496" class="td">跟一列做內積</text>
         <path d="M478 458 V478" class="wire-bus"/>
-        <text x="404" y="496" class="td">wo 逐一取出每一列</text>
+        <text x="404" y="496" class="td">wo 逐一取出每一列</text><text x="404" y="514" class="td" style="font-size:11px">（小寫 wo＝「其中一列」，跟右邊大寫的 Wo 無關）</text>
         <text x="24" y="528" class="td" style="font-family:var(--mono)">matrix = lambda nout, nin, …: [[… for _ in range(nin)] for _ in range(nout)]</text>
         <text x="24" y="550" class="td">造矩陣也是巢狀 list：外層跑 nout 次＝幾列，內層跑 nin 次＝一列有幾個數字</text>
 
         <rect x="860" y="396" width="280" height="120" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <rect x="860" y="396" width="4" height="120" class="f-attn"/>
-        <text x="884" y="426" class="ts" style="fill:var(--ink);font-weight:600">全場用 7 次，動作都一樣</text>
-        <text x="884" y="456" class="tn" style="font-size:12.5px">× Wq（圖 4a-0）</text>
-        <text x="884" y="480" class="tn" style="font-size:12.5px">× fc1（圖 5）・× lm_head（圖 7）</text>
-        <text x="884" y="504" class="td">差別只在矩陣裡那些列是什麼</text>
+        <text x="884" y="424" class="ts" style="fill:var(--ink);font-weight:600">全場只用 7 次，動作都一樣</text>
+        <text x="884" y="450" class="tn" style="font-size:12.5px">Wq　Wk　Wv　Wo</text>
+        <text x="1060" y="450" class="td">← attention</text>
+        <text x="884" y="472" class="tn" style="font-size:12.5px">fc1　fc2</text>
+        <text x="1060" y="472" class="td">← MLP</text>
+        <text x="884" y="494" class="tn" style="font-size:12.5px">lm_head</text>
+        <text x="1060" y="494" class="td">← 出口</text>
+        <text x="884" y="514" class="td">差別只在那些列裡裝什麼數字</text>
       </svg>
     </div>
   </div>
@@ -727,7 +745,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預4 非線性 ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 4</span>③ 非線性 — 神經網路裡的 if（主角 relu）</h1>
+    <h1><span class="figno">暖身 4</span>③ 非線性 — 神經網路裡的 if（主角 relu）</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--code-fs:13px">
@@ -751,7 +769,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="370" y="184" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
         <text x="490" y="184" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+0.1</text>
         <text x="310" y="216" class="td mid">負的一律歸零，正的原樣通過——沒有 if，程式只是一條算式</text>
-        <text x="303" y="248" class="ts mid">沒有 relu，做幾次內積都還是內積——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan>（圖 5 還債）</text>
+        <text x="303" y="248" class="ts mid">沒有 relu，做幾次內積都還是內積——<tspan fill="var(--ink)" font-weight="600">疊一百層等於一層</tspan></text>
 
         <line x1="0" y1="274" x2="606" y2="274" class="axis"/>
 
@@ -762,11 +780,13 @@ body.notes-on .slide.active .notes{display:block}
         <text x="168" y="380" class="ts">÷ 整體音量（16 個數字的均方根）</text>
         <text x="60" y="416" style="font:15px var(--mono);fill:var(--ink)">[ 0.8, -0.4,  1.2, … ]</text>
         <text x="330" y="416" class="td">← 方向沒變，音量回到標準</text>
-        <rect x="0" y="446" width="590" height="60" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <text x="20" y="472" class="ts"><tspan fill="var(--ink)" font-weight="600">每次拿 x 去做內積之前，先過一次音控</tspan>（進主幹前・attention 前・MLP 前）</text>
-        <text x="20" y="496" class="td">零參數：4,192 個數字裡沒有半個屬於它——它不是知識，是水電</text>
+        <rect x="0" y="444" width="596" height="78" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="20" y="468" class="ts"><tspan fill="var(--ink)" font-weight="600">每次拿 x 去做內積之前，先過一次音控</tspan>（進主幹前・attention 前・MLP 前）</text>
+        <text x="20" y="490" class="td">不做會怎樣？音量一路變大，內積出來的分數就沒有共同尺度，「像不像」的比較會失準</text>
+        <text x="20" y="510" class="td">零參數：4,192 個數字裡沒有半個屬於它——它不是知識，是水電</text>
 
-        <text x="303" y="544" class="td mid">三種運算到此為止——運算只有三種、數字只有 4,192 個。之後每一步都可以問：這是哪一種？</text>
+        <text x="303" y="530" class="td mid">三種運算到此為止：<tspan style="fill:var(--ink2)">① 相加　② 相乘（內積／矩陣）　③ 非線性（relu）</tspan></text>
+        <text x="303" y="550" class="td mid">之後每看到一步，都可以問：這是哪一種？</text>
       </svg>
     </div>
     <div class="pane right">
@@ -776,7 +796,7 @@ body.notes-on .slide.active .notes{display:block}
 <pre class="py" data-hl="50:now,139:now">
 50	def relu(self): return Value(max(0, self.data),
 	↪     (self,), (float(self.data > 0),))
-	# ★ self.data：數值本體；括號＝便條（圖 9.5 收）
+	# ★ self.data：數值本體；括號＝便條
 ⋯
 139	x = [xi.relu() for xi in x]   # 16 個數字各自過門檻
 </pre>
@@ -803,7 +823,7 @@ body.notes-on .slide.active .notes{display:block}
 <!-- ═══════════ 預5 Value ═══════════ -->
 <section class="slide std" data-station="">
   <header>
-    <h1><span class="figno">預 5</span>Value：讓訓練有可能發生的水電</h1>
+    <h1><span class="figno">暖身 5</span>Value：讓訓練有可能發生的水電</h1>
     <nav class="map"></nav>
   </header>
   <div class="cols" style="--split:56fr 44fr;--code-fs:13.5px">
@@ -834,11 +854,11 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M186 376 H236" class="wire-now" marker-end="url(#ar-now)"/>
         <text x="248" y="382" class="t">順著便條回頭走，才問得出</text>
         <text x="248" y="408" class="ts">「每個參數往哪動一點，loss 會變小」</text>
-        <text x="248" y="432" class="td">（圖 9.5 手算一次）</text>
+        <text x="248" y="432" class="td">（訓練時手算一次）</text>
 
         <rect x="0" y="470" width="640" height="76" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)"/>
         <text x="22" y="504" class="tb">Value 不是模型的一部分，它是讓訓練有可能發生的基礎設施。</text>
-        <text x="22" y="532" class="ts">接下來到圖 9 為止，你都可以把它當成普通的 float 讀。</text>
+        <text x="22" y="532" class="ts">接下來一路到最後，你都可以把它當成普通的 float 讀。</text>
       </svg>
     </div>
     <div class="pane right">
@@ -889,22 +909,22 @@ body.notes-on .slide.active .notes{display:block}
         <text x="24" y="98" class="tn" style="fill:var(--ink3)">L9–27</text>
         <text x="150" y="98" class="t">① 資料 ＋ tokenizer</text>
         <text x="520" y="98" class="ts">文字 → 整數</text>
-        <text x="880" y="98" class="td">圖 2 主場</text>
+        <text x="880" y="98" class="td">等一下講</text>
 
         <text x="24" y="144" class="tn" style="fill:var(--ink3)">L30–72</text>
         <text x="150" y="144" class="t">② Value / autograd</text>
         <text x="520" y="144" class="ts">讓數字帶著便條</text>
-        <text x="880" y="144" class="td">預 5 剛講</text>
+        <text x="880" y="144" class="td">剛講過</text>
 
         <text x="24" y="190" class="tn" style="fill:var(--ink3)">L75–90</text>
         <text x="150" y="190" class="t">③ state_dict ＋ params</text>
         <text x="520" y="190" class="ts">4,192 個知識</text>
-        <text x="880" y="190" class="td">圖 0 看過</text>
+        <text x="880" y="190" class="td">已看過</text>
 
         <text x="24" y="236" class="tn" style="fill:var(--ink3)">L94–106</text>
         <text x="150" y="236" class="t">④ 三個工具函數</text>
         <text x="520" y="236" class="tn" style="font-size:13.5px">linear／softmax／rmsnorm</text>
-        <text x="880" y="236" class="td">預 3b／預 4 講過</text>
+        <text x="880" y="236" class="td">剛講過</text>
 
         <rect x="0" y="308" width="1140" height="66" class="tint-bus"/>
         <text x="24" y="348" class="tn" style="fill:var(--ink3)">L108–144</text>
@@ -914,7 +934,7 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="0" y="392" width="1140" height="58" class="box"/>
         <text x="24" y="428" class="tn" style="fill:var(--ink3)">L150–199</text>
         <text x="150" y="428" class="t">⑥ 訓練迴圈／推論迴圈</text>
-        <text x="520" y="428" class="ts">在 gpt() 外面繞圈（圖 9、圖 10）</text>
+        <text x="520" y="428" class="ts">在 gpt() 外面繞圈（最後兩張講）</text>
 
         <text x="0" y="504" class="th">「200 行的 GPT」不等於模型有 200 行。</text>
         <text x="0" y="542" class="ts">前 100 行都是準備，模型本體只有中間那三十幾行——那才是要看懂的部分。</text>
@@ -948,20 +968,20 @@ body.notes-on .slide.active .notes{display:block}
         <circle cx="10" cy="112" r="5" class="f-now"/>
         <text x="30" y="118" class="tn" style="fill:var(--c-now)">token_id</text>
         <text x="150" y="118" class="ts">現在手上這「一個」字母的編號</text>
-        <text x="150" y="142" class="td">0–26　（圖 2）</text>
+        <text x="150" y="142" class="td">0–26</text>
 
         <circle cx="10" cy="186" r="5" class="f-bus"/>
         <text x="30" y="192" class="tn" style="fill:var(--c-bus)">pos_id</text>
         <text x="150" y="192" class="ts">我是第幾格</text>
-        <text x="150" y="216" class="td">0–15　（圖 3）</text>
+        <text x="150" y="216" class="td">0–15</text>
 
         <circle cx="10" cy="260" r="5" class="f-kv"/>
         <text x="30" y="266" class="tn" style="fill:var(--c-kv)">keys, values</text>
         <text x="150" y="266" class="ts">前文留下的 k、v</text>
-        <text x="150" y="290" class="td">唯一「跨輪次還活著」的東西　（圖 9 主場）</text>
+        <text x="150" y="290" class="td">唯一「跨輪次還活著」的東西　（等一下講）</text>
 
         <text x="0" y="330" class="ts">回傳 <tspan class="tn">logits</tspan> ＝ 27 個分數，下一個字母各一個</text>
-        <text x="430" y="330" class="td">（圖 7 主場）</text>
+        <text x="430" y="330" class="td">（等一下講）</text>
 
         <line x1="0" y1="358" x2="640" y2="358" class="axis"/>
 
@@ -987,10 +1007,10 @@ body.notes-on .slide.active .notes{display:block}
 	# 27 個分數，如此而已
 ⋯
 194	logits = gpt(token_id, pos_id, keys, values)
-	# ★ 外面的迴圈這樣呼叫它（圖 1 全景）
+	# ★ 外面的迴圈這樣呼叫它
 </pre>
         </div>
-        <div class="codesep">回收預 0：四個參數裡，<b>keys／values</b> 是「算出來的」那一欄中<b>唯一活過一輪</b>的東西。</div>
+        <div class="codesep">前面說的「兩種數字」：四個參數裡，<b>keys／values</b> 是「算出來的」那一欄中<b>唯一活過一輪</b>的東西。</div>
       </div>
     </div>
   </div>
@@ -1027,15 +1047,17 @@ body.notes-on .slide.active .notes{display:block}
         <text x="349" y="100" class="ts mid" style="fill:var(--c-attn)">Attention</text>
         <text x="349" y="122" class="ts mid">＋</text>
         <text x="349" y="146" class="ts mid" style="fill:var(--c-mlp)">MLP</text>
+        <text x="349" y="178" class="td mid" style="font-size:12px">這一格就叫「Block」</text>
         <path d="M408 116 H420" class="wire-bus" marker-end="url(#ar-bus)"/>
         <rect x="424" y="92" width="96" height="48" class="tint-bus"/>
         <text x="472" y="121" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">lm_head</text>
         <text x="472" y="178" class="tn mid" style="font-size:12px">16 → 27 分數</text>
+        <text x="472" y="194" class="td mid" style="font-size:11px">27＝候選字母數</text>
         <path d="M520 116 H532" class="wire" marker-end="url(#ar-grey)"/>
         <rect x="536" y="92" width="84" height="48" class="tint-rand"/>
-        <text x="578" y="121" class="ts mid" style="fill:var(--ink)">抽樣 ★</text>
+        <text x="578" y="121" class="ts mid" style="fill:var(--ink)">抽樣</text>
         <text x="578" y="84" class="ts mid">溫度・加權隨機</text>
-        <text x="626" y="40" class="ts end" style="fill:var(--c-rand)">★ 全流程唯一的隨機性</text>
+        <text x="626" y="40" class="ts end" style="fill:var(--c-rand)">全流程唯一的隨機性</text>
 
         <path d="M578 140 V162" class="wire-rand" marker-end="url(#ar-rand)"/>
         <text x="578" y="196" class="mid" style="font:600 22px var(--mono);fill:var(--c-now)">m</text>
@@ -1083,14 +1105,14 @@ body.notes-on .slide.active .notes{display:block}
 189	for sample_idx in range(20):   # ★ sample_idx：第幾個名字
 190	    keys, values = [[] for _ in range(n_layer)],
 	↪         [[] for _ in range(n_layer)]
-	# ★ keys、values：KV cache 本體——只進不出（圖 9 主場）
+	# ★ keys、values：KV cache 本體——只進不出（等一下講）
 191	    token_id = BOS   # ★ token_id：現在手上這個字母的編號
 192	    sample = []   # ★ sample：已經生出來的字母們
 193	    for pos_id in range(block_size):
 194	        logits = gpt(token_id, pos_id, keys, values)
 	# ★ gpt：整個模型＝一個函數；logits：27 個分數
 195	        probs = softmax([l / temperature for l in logits])
-	# ★ probs：27 個機率；temperature 圖 8 主場，先不停留
+	# ★ probs：27 個機率；temperature 最後一站再講
 196	        token_id = random.choices(range(vocab_size),
 	↪             weights=[p.data for p in probs])[0]
 197	        if token_id == BOS:
@@ -1141,15 +1163,16 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="348" y="46" width="66" height="42" class="box" rx="6"/>
         <text x="381" y="65" class="tn mid" style="fill:var(--ink)">BOS</text>
         <text x="381" y="81" class="td mid">26</text>
-        <text x="436" y="60" class="ts">→ vocab = 27</text>
-        <text x="436" y="80" class="td">26 個字母＋1 個特殊符號</text>
+        <text x="436" y="56" class="ts">→ vocab = 27</text>
+        <text x="436" y="76" class="td">26 個字母＋1 個特殊符號</text>
+        <text x="0" y="112" class="td"><tspan style="fill:var(--ink2)">BOS</tspan> = Beginning Of Sequence，字面是「開頭」，但這份程式把它當成<tspan style="fill:var(--ink2)">「分隔線」</tspan>用</text>
 
         <text x="0" y="150" style="font:600 19px var(--mono);fill:var(--ink)">emma</text>
         <path d="M76 144 H100" class="wire" marker-end="url(#ar-grey)"/>
         <text x="112" y="150" style="font:19px var(--mono);fill:var(--ink2)">[ 4, 12, 12, 0 ]</text>
         <text x="0" y="180" class="td">一個字母一個 token——沒有 BPE、沒有 subword</text>
 
-        <text x="0" y="238" class="ts">加上開頭與結尾——同一個符號：</text>
+        <text x="0" y="232" class="ts">加上開頭與結尾——<tspan style="fill:var(--ink)">故意用同一個符號</tspan>（一條分隔線，兩邊都用它）：</text>
         <rect x="0" y="258" width="76" height="58" class="tint-now" rx="8"/>
         <text x="38" y="283" class="tn mid" style="fill:var(--ink)">BOS</text>
         <text x="38" y="303" class="td mid" style="fill:var(--c-now)">26</text>
@@ -1175,8 +1198,9 @@ body.notes-on .slide.active .notes{display:block}
 
         <rect x="0" y="420" width="580" height="86" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <rect x="0" y="420" width="4" height="86" class="f-rand"/>
-        <text x="26" y="454" class="t" style="font-weight:600">「模型怎麼知道要停？」</text>
-        <text x="26" y="484" class="ts">停止也是一個它要學會預測的 token——生成時抽到 BOS 就停手。</text>
+        <text x="26" y="450" class="t" style="font-weight:600">「模型怎麼知道要停？」</text>
+        <text x="26" y="478" class="ts">停止也是一個它要學會預測的 token——生成時抽到 BOS 就停手。</text>
+        <text x="26" y="500" class="td">所以之後你會看到 BOS 出現在最前面，也出現在最後面——那是同一個 26 號。</text>
       </svg>
     </div>
     <div class="pane right">
@@ -1229,7 +1253,7 @@ body.notes-on .slide.active .notes{display:block}
         <line x1="60" y1="68" x2="260" y2="68" stroke="rgba(57,135,229,.35)"/>
         <line x1="60" y1="92" x2="260" y2="92" stroke="rgba(57,135,229,.35)"/>
         <line x1="60" y1="140" x2="260" y2="140" stroke="rgba(57,135,229,.35)"/>
-        <text x="160" y="61" class="td mid">wte（27 × 16）</text>
+        <text x="160" y="61" class="td mid">wte（<tspan style="fill:var(--ink2)">27 列</tspan> × 每列 16 個數字）</text>
         <rect x="63" y="95" width="194" height="21" class="tint-now" rx="4"/>
         <text x="160" y="110" class="td mid" style="fill:var(--ink)">第 4 列＝「e」的向量</text>
         <text x="160" y="133" class="td mid">⋮</text>
@@ -1237,7 +1261,7 @@ body.notes-on .slide.active .notes{display:block}
         <line x1="346" y1="68" x2="546" y2="68" stroke="rgba(57,135,229,.35)"/>
         <line x1="346" y1="92" x2="546" y2="92" stroke="rgba(57,135,229,.35)"/>
         <line x1="346" y1="140" x2="546" y2="140" stroke="rgba(57,135,229,.35)"/>
-        <text x="446" y="61" class="td mid">wpe（16 × 16）</text>
+        <text x="446" y="61" class="td mid">wpe（<tspan style="fill:var(--ink2)">16 列</tspan> × 每列 16 個數字）</text>
         <rect x="349" y="71" width="194" height="21" class="tint-now" rx="4"/>
         <text x="446" y="86" class="td mid" style="fill:var(--ink)">第 1 列＝位置 1 的向量</text>
         <text x="446" y="133" class="td mid">⋮</text>
@@ -1247,20 +1271,23 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M446 196 V226 H325" class="wire-bus"/>
         <circle cx="303" cy="226" r="17" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
         <text x="303" y="233" class="mid" style="font-size:19px;fill:var(--c-bus)">＋</text>
-        <text x="336" y="231" class="ts">相加</text>
+        <text x="336" y="226" class="ts">相加</text><text x="336" y="244" class="td">兩份意思疊在一起</text>
         <path d="M303 243 V272" class="wire-bus" marker-end="url(#ar-bus)"/>
         <rect x="243" y="276" width="120" height="38" class="box"/>
         <text x="303" y="300" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
-        <text x="376" y="300" class="td">← 把長度標準化</text>
+        <text x="376" y="294" class="td">← 音控台：把整串數字的音量</text><text x="376" y="310" class="td">　　拉回標準，方向不變</text>
         <path d="M303 314 V344" class="wire-bus" marker-end="url(#ar-bus)"/>
         <rect x="153" y="348" width="300" height="46" class="tint-bus"/>
         <text x="303" y="371" class="t mid">進入主幹（16 維）</text>
         <text x="303" y="388" class="td mid" style="font-family:var(--mono)">residual stream</text>
+        <text x="303" y="418" class="td mid">之後每一步，都只是往這條線上「加」東西</text>
 
-        <rect x="0" y="446" width="580" height="94" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <rect x="0" y="446" width="4" height="94" class="f-bus"/>
+        <rect x="0" y="444" width="600" height="116" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="444" width="4" height="116" class="f-bus"/>
         <text x="26" y="480" class="t" style="font-weight:600">這裡是「符號」變成「意義」的轉折點</text>
-        <text x="26" y="512" class="ts">wpe 是模型唯一知道「我在第幾格」的管道——拿掉它，emma 和 amme 完全相同。</text>
+        <text x="26" y="506" class="ts">wpe 是模型唯一知道「我在第幾格」的管道——拿掉它，emma 和 amme 完全相同。</text>
+        <text x="26" y="532" class="td">「加起來不會混在一起嗎？」16 個數字的空間夠大，字母的意思和位置的意思可以放在不同方向上；</text>
+        <text x="26" y="550" class="td">之後每個矩陣還是問得出各自要的那一件事。這也是訓練要學的事情之一。</text>
       </svg>
     </div>
     <div class="pane right">
@@ -1271,11 +1298,11 @@ body.notes-on .slide.active .notes{display:block}
 108	def gpt(token_id, pos_id, keys, values):
 109	    tok_emb = state_dict['wte'][token_id] # token embedding
 110	    pos_emb = state_dict['wpe'][pos_id] # position embedding
-	# 預 2 見過的兩張便利貼——這是它們的出生地
+	# 剛講的兩張便利貼——這是它們的出生地
 111	    x = [t + p for t, p in zip(tok_emb, pos_emb)] # joint …
-	# 預 2 的相加，正式上場
+	# 「相加」正式上場
 112	    x = rmsnorm(x) # note: not redundant due to backward …
-	# 預 4 的音控台正式上工（旁路沒過音控，這裡不多餘）
+	# 音控台（rmsnorm）正式上工
 </pre>
         </div>
       </div>
@@ -1312,7 +1339,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="100" y="303" class="tn end">pos 15</text>
         <text x="240" y="303" class="td mid">[ 16 個數字 ]</text>
         <text x="400" y="76" class="ts">block_size = 16</text>
-        <text x="400" y="98" class="td">（最長的名字＝15 個字母）</text>
+        <text x="400" y="92" class="td">（最長的名字＝15 個字母，</text><text x="400" y="108" class="td">　再加開頭那個 BOS＝16 格）</text>
         <rect x="40" y="336" width="340" height="40" rx="8" fill="rgba(230,103,103,.07)" stroke="var(--c-rand)" stroke-dasharray="6 4" stroke-width="1.6"/>
         <text x="100" y="361" class="tn end" style="fill:var(--c-rand)">pos 16</text>
         <text x="240" y="361" class="ts mid" style="fill:var(--c-rand)">✗ 沒有這一列</text>
@@ -1398,7 +1425,7 @@ body.notes-on .slide.active .notes{display:block}
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・一個 Block 的全部</span><span>119–132 見圖 4a–4c</span></div>
+        <div class="codehead"><span>microgpt_en.py・一個 Block 的全部</span><span>119–132 見接下來三張</span></div>
         <div class="codebody">
 <pre class="py" data-hl="115-133:attn,134:bus,135-140:mlp,141:bus">
 114	for li in range(n_layer):
@@ -1409,7 +1436,7 @@ body.notes-on .slide.active .notes{display:block}
 	# q？——下一節 4a-0 專門介紹，先看結構
 ⋯
 133	    x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])
-	# ★ x_attn：四個 head 的輸出接起來（16 維，拼法圖 4b-0）
+	# ★ x_attn：四個 head 的輸出接起來（16 維，拼法下一張講）
 134	    x = [a + b for a, b in zip(x, x_residual)]
 135	    # 2) MLP block
 136	    x_residual = x
@@ -1460,7 +1487,8 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M80 160 H486" class="wire-kv" marker-end="url(#ar-kv)"/>
         <path d="M500 112 V148" class="wire-now"/>
         <circle cx="500" cy="160" r="6" class="f-now"/>
-        <text x="80" y="200" class="ts">前三格的 k,v <tspan fill="var(--c-kv)">直接沿用</tspan>（不重算 → 圖 9）</text>
+        <text x="80" y="200" class="ts">前三格的 k,v <tspan fill="var(--c-kv)">直接沿用</tspan>（不重算，等一下講）</text>
+        <text x="0" y="246" class="td"><tspan style="fill:var(--c-now)">先別管 q、k、v 是什麼</tspan>——這頁只要看「誰在動、誰沒動」。下一整張都在解釋這三個字母。</text>
         <text x="500" y="200" class="ts mid">把前面每一格的意義</text>
         <text x="500" y="220" class="ts mid">按比例拌進「我」自己</text>
 
@@ -1564,7 +1592,7 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="250" y="252" width="330" height="34" class="tint-kv" rx="8"/>
         <text x="415" y="274" class="ts mid" style="fill:var(--c-kv)">k、v 存進 KV cache——前文每一格都留過一份</text>
         <text x="146" y="252" class="td mid">之後各切 4 段</text>
-        <text x="146" y="268" class="td mid">每個 head 拿 4 個（圖 4b-0）</text>
+        <text x="146" y="268" class="td mid">每個 head 拿 4 個（下一張講）</text>
 
         <line x1="0" y1="316" x2="620" y2="316" class="axis"/>
         <text x="0" y="348" class="t">三張紙條備好之後，一個 head 只做三件事（<tspan fill="var(--ink3)">數字下一張才登場</tspan>）：</text>
@@ -1587,7 +1615,7 @@ body.notes-on .slide.active .notes{display:block}
         <text x="548" y="458" class="ts mid">就多拿一點</text>
         <text x="548" y="480" class="ts mid">它的內容</text>
 
-        <text x="0" y="530" class="td">（x 的來歷：wte＋wpe＋前文——預 1／圖 3 講過，這裡不重來）</text>
+        <text x="0" y="530" class="td">（x 的來歷：wte＋wpe＋前文，前面兩張講過）</text>
         <text x="0" y="552" class="td">下一張帶著數字，這三步一格一格走一遍。</text>
       </svg>
     </div>
@@ -1834,7 +1862,7 @@ body.notes-on .slide.active .notes{display:block}
   <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
     <div class="pane left">
       <svg viewBox="0 0 641 560">
-        <text x="0" y="20" class="td">生成 emma 的第 4 個字母時（已有 e, m, m）・同一時刻、同一層，四個 head 各自跑一遍圖 4a・示意分佈</text>
+        <text x="0" y="20" class="td">生成 emma 的第 4 個字母時（已有 e, m, m）・同一時刻、同一層，四個 head 各自跑一遍前一張那三步・示意分佈</text>
         <text x="210" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">BOS</text>
         <text x="320" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">e</text>
         <text x="430" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">m</text>
@@ -1868,20 +1896,21 @@ body.notes-on .slide.active .notes{display:block}
 
         <text x="0" y="376" style="font:600 14px var(--mono);fill:var(--ink)">head 3</text>
         <text x="0" y="396" class="td">分散——整體長度感</text>
+        <text x="0" y="410" class="td" style="font-size:10.5px">（單頭只有這一種可選；四頭是「其中一個」這樣做）</text>
         <rect x="165" y="362" width="25" height="24" rx="3" class="bar"/>
         <rect x="275" y="362" width="20" height="24" rx="3" class="bar"/>
         <rect x="385" y="362" width="23" height="24" rx="3" class="bar"/>
         <rect x="495" y="362" width="22" height="24" rx="3" class="bar"/>
 
-        <text x="0" y="438" class="t" style="font-weight:600">為什麼切開完全免費？因為 16 維的內積，本來就是四段相加：</text>
-        <text x="0" y="466" style="font:14px var(--mono);fill:var(--ink2)">(前 4 個的內積) ＋ (第 5–8 個的內積) ＋ (第 9–12 個) ＋ (第 13–16 個)</text>
-        <text x="0" y="490" class="td">切 head ＝ 不要那三個加號，讓四段各自算完　（權重還是 16×16，乘法一次也沒多）</text>
-        <rect x="0" y="504" width="300" height="52" class="box" rx="10"/>
-        <text x="16" y="526" class="ts" style="fill:var(--ink);font-weight:600">單頭：先加起來，再 softmax</text>
-        <text x="16" y="546" class="td">一組注意力，16 個維度被迫共用</text>
-        <rect x="330" y="504" width="311" height="52" class="tint-attn" rx="10"/>
-        <text x="346" y="526" class="ts" style="fill:var(--ink);font-weight:600">四頭：不加，各自 softmax</text>
-        <text x="346" y="546" class="td">四組注意力，各看各的</text>
+        <text x="0" y="436" class="t" style="font-weight:600">為什麼「一次只能有一個焦點」？因為<tspan style="fill:var(--c-attn)">分比例（softmax）一次只給得出一組比例</tspan></text>
+        <text x="0" y="462" class="ts">內積（逐項相乘再加總）本來就是「四段各自加總、再相加」。切 head ＝ <tspan style="fill:var(--ink)">不做最後那一次相加</tspan>，讓四段各自分自己的比例。</text>
+        <rect x="0" y="480" width="300" height="52" class="box" rx="10"/>
+        <text x="16" y="502" class="ts" style="fill:var(--ink);font-weight:600">單頭：先全部加起來，再分比例</text>
+        <text x="16" y="522" class="td">一組比例 → 只能盯一個地方</text>
+        <rect x="330" y="480" width="311" height="52" class="tint-attn" rx="10"/>
+        <text x="346" y="502" class="ts" style="fill:var(--ink);font-weight:600">四頭：不加，四段各自分比例</text>
+        <text x="346" y="522" class="td">四組比例 → 同時盯四個地方</text>
+        <text x="0" y="554" class="td"><tspan style="fill:var(--ink2)">計算量沒多</tspan>（參數還是 16×16）；<tspan style="fill:var(--ink2)">代價在解析度</tspan>——每個 head 只剩 4 個數字可以衡量「像不像」</text>
       </svg>
     </div>
     <div class="pane right">
@@ -1923,6 +1952,8 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M240 34 V64" class="wire-bus" marker-end="url(#ar-bus)"/>
         <rect x="190" y="68" width="100" height="32" class="box"/>
         <text x="240" y="89" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <text x="170" y="80" class="td end">音控台：把整串數字的</text>
+        <text x="170" y="96" class="td end">音量拉回標準，方向不變</text>
         <path d="M240 100 V112" class="wire-bus"/>
         <path d="M100 112 H380" class="wire-bus"/>
         <path d="M100 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
@@ -1940,14 +1971,17 @@ body.notes-on .slide.active .notes{display:block}
         <text x="112" y="178" class="td">q(16)</text>
         <text x="252" y="178" class="td">k(16)</text>
         <text x="392" y="178" class="td">v(16)</text>
+        <text x="0" y="196" class="td" style="font-size:11px">前一張講過：q＝我在找什麼・k＝我是什麼・v＝找到我就給你這個</text>
         <path d="M420 140 H464" class="wire-kv" marker-end="url(#ar-kv)"/>
         <text x="442" y="132" class="td mid" style="fill:var(--c-kv)">存入</text>
         <rect x="470" y="112" width="126" height="58" class="tint-kv" rx="10"/>
         <rect x="476" y="118" width="114" height="46" fill="none" stroke="var(--c-kv)" stroke-width="1.2" rx="7"/>
         <text x="533" y="138" class="ts mid" style="fill:var(--c-kv);font-weight:600">KV cache</text>
         <text x="533" y="156" class="td mid">k, v 的歷史</text>
+        <text x="596" y="186" class="td end">前面每一格算過的 k、v</text>
+        <text x="596" y="202" class="td end">存著，下一輪不用重算</text>
         <rect x="45" y="190" width="398" height="118" class="tint-attn" rx="10"/>
-        <text x="244" y="224" class="t mid" style="fill:var(--ink);font-weight:600">切、跑、拼　＝　圖 4b-0</text>
+        <text x="244" y="224" class="t mid" style="fill:var(--ink);font-weight:600">切、跑、拼　＝　前一張</text>
         <text x="244" y="256" class="ts mid">四個 head 各跑一遍那三步，彼此完全不講話</text>
         <text x="244" y="286" class="tn mid" style="fill:var(--ink)">4＋4＋4＋4 ＝ 16</text>
         <path d="M533 170 V250 H449" class="wire-kv dash" marker-end="url(#ar-kv)"/>
@@ -1959,13 +1993,15 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M244 434 V464" class="wire-attn" marker-end="url(#ar-attn)"/>
         <circle cx="244" cy="482" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
         <text x="244" y="489" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
+        <text x="272" y="500" class="td" style="fill:var(--c-bus)">殘差：算出來的東西「加」回原本的 x</text>
+        <text x="272" y="518" class="td">——所以繞過去那條線才有意義，原本的 x 不會被蓋掉</text>
         <path d="M244 497 V524" class="wire-bus" marker-end="url(#ar-bus)"/>
         <text x="244" y="548" class="ts mid">進入 MLP</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・attention 區塊全文</span><span>124–132 見圖 4b-0</span></div>
+        <div class="codehead"><span>microgpt_en.py・attention 區塊全文</span><span>124–132 見前一張</span></div>
         <div class="codebody">
 <pre class="py" data-hl="116:bus,121-122:kv,126:now,133:attn,134:bus">
 116	x_residual = x
@@ -1973,7 +2009,7 @@ body.notes-on .slide.active .notes{display:block}
 118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
 119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
 120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
-121	keys[li].append(k)   # 這一格的 k、v 存檔（圖 9 收）
+121	keys[li].append(k)   # 這一格的 k、v 存檔
 122	values[li].append(v)
 123	x_attn = []
 124	for h in range(n_head):
@@ -2017,7 +2053,7 @@ body.notes-on .slide.active .notes{display:block}
         <polygon points="200,124 320,124 420,190 100,190" class="tint-mlp"/>
         <text x="260" y="152" class="t mid" style="font-weight:600">fc1（16 → 64）</text>
         <text x="260" y="176" class="ts mid">64 個「偵測器」</text>
-        <text x="436" y="148" class="td">每一列跟 x 做一次內積：</text>
+        <text x="436" y="148" class="td">每一列跟 x 做一次內積（逐項相乘再加總）：</text>
         <text x="436" y="166" class="td">「你身上有沒有 X？」</text>
         <rect x="100" y="200" width="320" height="32" class="box"/>
         <text x="260" y="221" class="mid" style="font:13px var(--mono);fill:var(--ink2)">−1.2　+3.4　−0.8　+0.1　⋯</text>
@@ -2038,6 +2074,12 @@ body.notes-on .slide.active .notes{display:block}
         <circle cx="260" cy="480" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
         <text x="260" y="487" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
         <path d="M260 495 V518" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="0" y="440" width="188" height="88" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="440" width="4" height="88" class="f-mlp"/>
+        <text x="16" y="462" class="td" style="fill:var(--ink2)">一條規則長什麼樣</text>
+        <text x="16" y="484" class="td">「剛剛連續兩個子音？」</text>
+        <text x="16" y="504" class="td">一觸發，就往主幹加上</text>
+        <text x="16" y="520" class="td">「該輪到母音了」這個方向</text>
         <text x="303" y="551" class="t mid" style="font-weight:600">拿掉中間那道門檻，撐胖再壓瘦等於什麼都沒做——存在意義 100% 來自 relu</text>
       </svg>
     </div>
@@ -2127,7 +2169,7 @@ body.notes-on .slide.active .notes{display:block}
       <div class="codecard">
         <div class="codehead"><span>microgpt_en.py</span><span>全場的加號都是這一行</span></div>
         <div class="codebody">
-<div class="codesep"><b>順手記住那個 (1, 1)</b>・加法寫的便條——圖 9.5 會用到</div>
+<div class="codesep"><b>順手記住那個 (1, 1)</b>・加法寫的便條——訓練那張會用到</div>
 <pre class="py" data-hl="41:now">
 39	def __add__(self, other):   # ★ other：另一個加數
 40	    other = other if isinstance(other, Value)
@@ -2169,8 +2211,9 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="178" y="14" width="250" height="40" class="tint-bus"/>
         <text x="303" y="39" class="tn mid" style="fill:var(--ink)">最終的主幹向量 x（16 個數字）</text>
         <path d="M303 54 V82" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="318" y="74" class="ts">跟 lm_head 的 27 列逐一內積</text>
-        <text x="300" y="106" class="td">logits（27 個分數，一個 token 一個）</text>
+        <text x="318" y="70" class="ts">跟 lm_head 的 27 列逐一<tspan style="fill:var(--ink)">內積</tspan>（<tspan class="ts">⊙</tspan>）——逐項相乘再全部加總，出來一個數</text>
+        <text x="318" y="88" class="td">27 列 ＝ 26 個字母＋BOS，一個候選一列</text>
+        <text x="300" y="108" class="td">logits（27 個分數，一個候選字母一個）</text>
         <rect x="60" y="114" width="170" height="34" class="box"/>
         <text x="145" y="136" class="tn mid" style="fill:var(--ink)">看板「a」</text>
         <text x="258" y="136" class="ts mid">⊙</text>
@@ -2195,14 +2238,15 @@ body.notes-on .slide.active .notes{display:block}
         <text x="303" y="326" class="ts mid">誰的方向跟我最像，分數就最高——是查字典，不是思考</text>
 
         <rect x="0" y="348" width="606" height="96" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-        <text x="30" y="382" class="ts">回收預 3a：內積大小由兩件事決定</text>
+        <text x="30" y="382" class="ts">回到剛剛的內積：內積大小由兩件事決定</text>
         <text x="30" y="412" class="t"><tspan fill="var(--c-bus)">① 方向像不像</tspan>　　<tspan fill="var(--c-now)">② 這塊看板本身的數字有多大</tspan></text>
         <text x="30" y="434" class="td">②＝先天票數：常見字母把自己整塊看板加大，不管 x 指哪邊都先拿基礎分</text>
 
         <rect x="0" y="464" width="606" height="82" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
         <rect x="0" y="464" width="4" height="82" class="f-bus"/>
-        <text x="26" y="496" class="t" style="font-weight:600">它不是再想一次——它是「開口」</text>
-        <text x="26" y="526" class="ts">純線性・單一位置・沒有 relu・看不到別的 token。翻譯只需要一本字典。</text>
+        <text x="26" y="492" class="t" style="font-weight:600">它不是再想一次——它是「開口」</text>
+        <text x="26" y="516" class="ts">純線性・單一位置・沒有 relu・看不到別的 token。翻譯只需要一本字典。</text>
+        <text x="26" y="538" class="td"><tspan style="fill:var(--ink2)">正因為這一層這麼笨，前面才被逼得聰明</tspan>——所有壓力都要穿過這一次內積。</text>
       </svg>
     </div>
     <div class="pane right">
@@ -2253,16 +2297,18 @@ body.notes-on .slide.active .notes{display:block}
         <rect x="30" y="78" width="160" height="36" class="box"/>
         <text x="110" y="101" class="tn mid" style="fill:var(--ink)">÷ temperature</text>
         <text x="110" y="136" class="td mid">0.5 → 拉大差距・保守</text>
-        <text x="110" y="154" class="td mid">1.5 → 壓平分佈・隨機</text>
-        <path d="M110 162 V184" class="wire" marker-end="url(#ar-grey)"/>
-        <rect x="30" y="188" width="160" height="36" class="box"/>
-        <text x="110" y="211" class="tn mid" style="fill:var(--ink)">softmax</text>
-        <path d="M110 224 V246" class="wire" marker-end="url(#ar-grey)"/>
-        <rect x="30" y="250" width="160" height="40" class="tint-rand"/>
-        <text x="110" y="275" class="ts mid" style="fill:var(--ink);font-weight:600">加權隨機抽一個</text>
-        <text x="110" y="316" class="ts mid" style="fill:var(--c-rand)">★ 全流程唯一的隨機性</text>
-        <path d="M110 328 V352" class="wire-rand" marker-end="url(#ar-rand)"/>
-        <text x="110" y="380" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">一個字母</text>
+        <text x="110" y="154" class="td mid">1.5 → 壓平分佈・隨機</text><text x="110" y="172" class="td mid" style="font-size:11px">除 0.5 → 分數差距加倍（差 1.3 變差 2.6）</text><text x="110" y="188" class="td mid" style="font-size:11px">softmax 看的是<tspan style="fill:var(--ink2)">差距</tspan>，不是倍數</text>
+        <path d="M110 196 V204" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="208" width="160" height="36" class="box"/>
+        <text x="110" y="231" class="tn mid" style="fill:var(--ink)">softmax</text>
+        <text x="110" y="254" class="td mid">把 27 個分數擠成</text>
+        <text x="110" y="270" class="td mid">加起來剛好 100% 的比例</text>
+        <path d="M110 278 V296" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="300" width="160" height="40" class="tint-rand"/>
+        <text x="110" y="325" class="ts mid" style="fill:var(--ink);font-weight:600">加權隨機抽一個</text>
+        <text x="110" y="362" class="ts mid" style="fill:var(--c-rand)">全流程唯一的隨機性</text>
+        <path d="M110 372 V392" class="wire-rand" marker-end="url(#ar-rand)"/>
+        <text x="110" y="416" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">一個字母</text>
 
         <text x="260" y="30" class="ts">只有 BOS 時——模型認為第一個字母是（示意）</text>
         <text x="272" y="62" class="tn mid">a</text>
@@ -2400,19 +2446,30 @@ body.notes-on .slide.active .notes{display:block}
         <text x="302" y="396" class="tn mid">k₂ v₂</text>
         <rect x="356" y="376" width="92" height="30" class="tint-now" rx="6"/>
         <text x="402" y="396" class="tn mid" style="fill:var(--ink)">k₃ v₃</text>
+        <text x="44" y="436" class="td end">輪 5</text>
+        <rect x="56" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="436" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="202" y="436" class="tn mid">k₁ v₁</text>
+        <rect x="256" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="302" y="436" class="tn mid">k₂ v₂</text>
+        <rect x="356" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="402" y="436" class="tn mid">k₃ v₃</text>
+        <rect x="456" y="416" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="502" y="436" class="tn mid" style="fill:var(--ink)">k₄ v₄</text>
         <rect x="480" y="284" width="14" height="14" class="tint-now" rx="3"/>
         <text x="502" y="296" class="td">新算（只有最右邊這組）</text>
         <rect x="480" y="312" width="14" height="14" class="tint-kv" rx="3"/>
         <text x="502" y="324" class="td">直接沿用，不重算</text>
 
-        <text x="320" y="472" class="mid" style="font-size:16px;fill:var(--ink2)">最終輸出：<tspan style="font:700 26px var(--mono)" fill="var(--ink)">emma</tspan></text>
-        <text x="320" y="508" class="ts mid">一次前向＝一個字母；五輪，拼出一個名字</text>
-        <text x="320" y="536" class="td mid">沒有 cache 的話，每輪都要重算整段——長度平方級的浪費</text>
+        <text x="320" y="488" class="mid" style="font-size:16px;fill:var(--ink2)">最終輸出：<tspan style="font:700 26px var(--mono)" fill="var(--ink)">emma</tspan></text>
+        <text x="320" y="518" class="ts mid" style="fill:var(--ink)">ChatGPT 一個字一個字吐出來，不是打字動畫——它真的一次只能算一個</text>
+        <text x="320" y="542" class="td mid">沒有 cache 的話，每輪都要重算整段——長度平方級的浪費</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・生成一個名字</span><span>圖 1 的迴圈，這次看狀態</span></div>
+        <div class="codehead"><span>microgpt_en.py・生成一個名字</span><span>開場那張流程，這次看狀態</span></div>
         <div class="codebody">
 <div class="codesep"><b>每輪只把「新的」k, v 加進 cache</b>（gpt() 內部）</div>
 <pre class="py" data-hl="121-122:kv">
@@ -2510,12 +2567,12 @@ body.notes-on .slide.active .notes{display:block}
         <text x="22" y="494" class="ts">這個數字就叫<tspan class="tb">梯度</tspan>。要 L 變小，就往<tspan class="tb">反方向</tspan>挪一點——訓練沒有別的了。</text>
 
         <text x="0" y="526" class="td">4,192 個參數，就是同一件事做 4,192 次。</text>
-        <text x="0" y="548" class="td">加法的便條全是 1，乘 1＝原封不動走過去——這就是圖 6 那條「殘差高速公路」的真正意思。</text>
+        <text x="0" y="548" class="td">加法的便條全是 1，乘 1＝原封不動走過去——這就是剛剛那條「殘差高速公路」的真正意思。</text>
       </svg>
     </div>
     <div class="pane right">
       <div class="codecard">
-        <div class="codehead"><span>microgpt_en.py・便條與回傳</span><span>預 5 欠的帳，這裡還</span></div>
+        <div class="codehead"><span>microgpt_en.py・便條與回傳</span><span>前面欠的帳，這裡還</span></div>
         <div class="codebody">
 <div class="codesep"><b>每種運算寫什麼便條</b>・括號裡就是</div>
 <pre class="py" data-hl="41:now,45:now">
@@ -2600,7 +2657,7 @@ body.notes-on .slide.active .notes{display:block}
         <path d="M320 254 V274" class="wire" marker-end="url(#ar-grey)"/>
         <rect x="140" y="278" width="360" height="58" class="tint-now" rx="10"/>
         <text x="320" y="302" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">loss.backward()</text>
-        <text x="320" y="324" class="ts mid">圖 9.5 那張手算表，跑 4,192 次</text>
+        <text x="320" y="324" class="ts mid">剛剛那張手算表，跑 4,192 次</text>
         <path d="M320 336 V356" class="wire" marker-end="url(#ar-grey)"/>
         <rect x="140" y="360" width="360" height="58" class="box" rx="10"/>
         <text x="320" y="384" class="t mid" style="font-weight:600">Adam — 4,192 個數字各挪一小步</text>
@@ -2692,13 +2749,18 @@ body.notes-on .slide.active .notes{display:block}
       <path d="M550 62 H576" class="wire-bus" marker-end="url(#ar-bus)"/>
       <rect x="580" y="42" width="110" height="40" class="tint-bus"/><text x="635" y="67" class="ts mid">lm_head</text>
       <path d="M690 62 H716" class="wire" marker-end="url(#ar-grey)"/>
-      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="67" class="ts mid">抽樣 ★</text>
+      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="61" class="ts mid">抽樣</text><text x="763" y="77" class="td mid" style="fill:var(--c-rand)">唯一的隨機</text>
       <path d="M806 62 H836" class="wire-rand" marker-end="url(#ar-rand)"/>
       <text x="852" y="68" class="th" style="font-family:var(--mono);fill:var(--c-now)">a</text>
       <path d="M763 90 V106 H40 V80" class="wire dash" marker-end="url(#ar-grey)"/>
-      <text x="450" y="128" class="td mid">自迴歸</text>
+      <text x="450" y="128" class="td mid">自迴歸：抽到的字母回頭當下一輪輸入</text>
+      <path d="M400 20 V6 H550 V20" class="wire-attn" opacity=".7"/>
+      <text x="475" y="18" class="td mid" style="fill:var(--c-attn)">上面三句話講的是這一格</text>
     </svg>
-    <div class="hint" style="margin-top:28px">4,192 個數字・200 行純 Python——現在，每一格你都算得出來</div>
+    <div class="hint" style="margin-top:22px;font-size:15px;color:var(--ink2)">
+      多層 Transformer ＝ 同一件事再做一次　·　現在的大模型 ＝ 同一件事做大很多倍
+    </div>
+    <div class="hint" style="margin-top:10px">4,192 個數字・200 行純 Python——從頭到尾只有加法、乘法，和一道門檻</div>
   </div>
   <aside class="notes"><span class="ntag">總結</span>
     <ul>
@@ -2749,7 +2811,9 @@ body.notes-on .slide.active .notes{display:block}
 const STATIONS=['Tokenizer','Embedding','Block','lm_head','抽樣'];
 document.querySelectorAll('.map').forEach(nav=>{
   const on=(nav.closest('.slide').dataset.station||'').split(',').filter(Boolean).map(Number);
-  nav.innerHTML=STATIONS.map((n,i)=>
+  // 沒有這個標籤，聽眾看不出這排膠囊是「全場路線圖」，也看不出自己在哪
+  const label=on.length?'現在在':'路線圖・還沒進站';
+  nav.innerHTML=`<span class="maplabel">${label}</span>`+STATIONS.map((n,i)=>
     `<span class="chip${on.includes(i+1)?' on':''}"><b>${i+1}</b>${n}</span>`
   ).join('<i class="tick"></i>');
 });
