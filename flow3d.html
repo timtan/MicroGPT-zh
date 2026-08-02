@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MicroGPT 3D 流程 — 從字母到抽樣</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; background: #05070f; overflow: hidden;
+               font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #intro { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 18px; color: #dbe6ff; background: radial-gradient(ellipse at 50% 40%, rgba(20,30,60,.55), rgba(5,7,15,.92));
+           z-index: 20; transition: opacity .6s; cursor: pointer; }
+  #intro.hidden { opacity: 0; pointer-events: none; }
+  #intro h1 { font-size: 40px; font-weight: 700; margin: 0; letter-spacing: 2px;
+              background: linear-gradient(90deg, #7dd3fc, #c4b5fd, #fda4af); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #intro p  { margin: 0; font-size: 17px; color: #93a4c8; }
+  #intro .keys { font-size: 14px; color: #64748b; margin-top: 10px; line-height: 1.9; text-align: center; }
+  #intro .keys b { color: #cbd5f5; font-weight: 600; }
+
+  #info { position: fixed; left: 22px; bottom: 22px; max-width: 520px; z-index: 10;
+          background: rgba(8, 12, 26, .78); border: 1px solid rgba(120, 150, 220, .25);
+          border-radius: 14px; padding: 14px 18px; color: #dbe6ff; backdrop-filter: blur(6px);
+          transition: opacity .4s, transform .4s; }
+  #info.hidden { opacity: 0; transform: translateY(12px); }
+  #info .t { font-size: 19px; font-weight: 700; color: #e2ecff; }
+  #info .t small { font-weight: 400; color: #6b7ba3; margin-left: 8px; font-size: 12px; }
+  #info .d { font-size: 14px; color: #9fb0d6; margin-top: 5px; line-height: 1.65; }
+  #info .c { margin-top: 8px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+             color: #8ef0d2; background: rgba(10, 25, 22, .6); border-left: 3px solid #2dd4a7;
+             padding: 6px 10px; border-radius: 6px; white-space: pre; overflow-x: auto; }
+
+  #progress { position: fixed; right: 22px; bottom: 22px; z-index: 10; color: #8093bd; font-size: 13px;
+              background: rgba(8, 12, 26, .7); border: 1px solid rgba(120, 150, 220, .2);
+              border-radius: 999px; padding: 7px 16px; }
+  #progress b { color: #dbe6ff; }
+  #fastfwd { position: fixed; right: 22px; bottom: 62px; z-index: 10; color: #fbbf24; font-size: 12px;
+             opacity: 0; transition: opacity .2s; }
+  #fastfwd.on { opacity: 1; }
+
+  #legend { position: fixed; right: 22px; top: 18px; z-index: 10; display: none;
+            background: rgba(8, 12, 26, .7); border: 1px solid rgba(120, 150, 220, .2);
+            border-radius: 10px; padding: 7px 14px; color: #8fa2c9; font-size: 12.5px; line-height: 1.5; }
+  #legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                vertical-align: -1px; margin: 0 4px 0 10px; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="intro">
+  <h1>從字母到抽樣:一顆方塊的旅程</h1>
+  <p>MicroGPT 前向傳播 3D 視覺化 — 16 維、4 頭、1 層、4192 個參數</p>
+  <div class="keys">
+    <b>空白鍵 / 點擊</b> 推進下一關(播放中再按 = 快轉)<br>
+    <b>←</b> 回上一關定格 &nbsp; <b>R</b> 重來 &nbsp; <b>F</b> 全螢幕<br><br>
+    點擊任意處開始
+  </div>
+</div>
+
+<div id="info" class="hidden">
+  <div class="t"><span id="info-title"></span><small id="info-sub"></small></div>
+  <div class="d" id="info-desc"></div>
+  <div class="c" id="info-code"></div>
+</div>
+<div id="progress">按 <b>空白鍵</b> 開始 · 0 / 21</div>
+<div id="fastfwd">⏩ 快轉中</div>
+<div id="legend">方塊高度 = 數值大小<span class="sw" style="background:#3ec7de"></span>正值<span class="sw" style="background:#d98a3d"></span>負值 · 色調隨階段演進</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ================= 基礎場景 ================= */
+const BG = 0x05070f;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.Fog(BG, 160, 560);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 1200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.getElementById('app').appendChild(renderer.domElement);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0x8899cc, 0.55));
+const hemi = new THREE.HemisphereLight(0x8fb0ff, 0x120a1e, 0.5);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+sun.position.set(60, 120, 40);
+scene.add(sun);
+const flashLight = new THREE.PointLight(0xffffff, 0, 140, 1.8);
+scene.add(flashLight);
+
+window.__scene = scene; // debug 用鉤子(headless 檢查場景)
+const staticG = new THREE.Group();   // 軌道、關卡:建一次,永遠存在
+const dynamicG = new THREE.Group();  // 主角、幽靈、粒子、光束:reset 時清除
+scene.add(staticG, dynamicG);
+
+/* ================= 45° 軌道 ================= */
+// 軌道方向 (0,-1,1) 正規化:從遠處高點以 45° 俯角滑向近處低點
+const DIR = new THREE.Vector3(0, -1, 1).normalize();
+const ORIGIN = new THREE.Vector3(0, 150, -190);
+function pathPos(s, out = new THREE.Vector3()) {
+  return out.copy(ORIGIN).addScaledVector(DIR, s);
+}
+
+// 關卡的路徑座標
+const S = {
+  START: -70, ID: 36, WTE: 72, MERGE: 100, RMS: 150,
+  FORK1: 164, PRE1: 176, ATTN: 210, WO: 234, JOIN1: 250,
+  FORK2: 262, PRE2: 272, MLP: 292, RELU: 312, SQUEEZE: 330, JOIN2: 346,
+  WALL: 378
+};
+
+/* ================= 小工具 ================= */
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const easeIO = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeIn = k => k * k * k;
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(42);
+const gauss = () => {
+  let u = 0, v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+};
+
+/* ---- tween 引擎(promise-based,支援快轉 timeScale)---- */
+const tweens = new Set();
+let timeScale = 1;
+function tween(dur, update, ease = easeIO) {
+  return new Promise(res => tweens.add({ t: 0, dur, update, ease, res }));
+}
+const wait = ms => tween(ms, () => {}, k => k);
+function stepTweens(dt) {
+  for (const tw of [...tweens]) {
+    tw.t += dt * 1000 * timeScale;
+    const k = clamp(tw.t / tw.dur, 0, 1);
+    tw.update(tw.ease(k), k);
+    if (k >= 1) { tweens.delete(tw); tw.res(); }
+  }
+}
+
+/* ---- 文字 sprite(支援中文)---- */
+function textSprite(text, { fs = 56, color = '#dbe6ff', bg = true, scale = 0.11, onTop = false } = {}) {
+  const pad = 26;
+  const c = document.createElement('canvas');
+  let ctx = c.getContext('2d');
+  const font = `600 ${fs}px "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif`;
+  ctx.font = font;
+  c.width = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  c.height = fs + pad * 2;
+  ctx = c.getContext('2d');
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (bg) {
+    ctx.fillStyle = 'rgba(8,13,28,0.72)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    roundRect(ctx, 4, 4, c.width - 8, c.height - 8, 18);
+    ctx.fill(); ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = color;
+  ctx.fillText(text, c.width / 2, c.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, depthTest: !onTop
+  }));
+  spr.scale.set(c.width * scale, c.height * scale, 1);
+  spr.renderOrder = onTop ? 8 : 5;
+  return spr;
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* ---- 字母/數字方塊貼圖 ---- */
+function glyphTexture(glyph, c1, c2, fg) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 256, 256);
+  g.addColorStop(0, c1); g.addColorStop(1, c2);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 10;
+  roundRect(ctx, 8, 8, 240, 240, 26);
+  ctx.stroke();
+  ctx.font = '700 150px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = fg;
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = fg;
+  ctx.fillText(glyph, 128, 140);
+  return new THREE.CanvasTexture(c);
+}
+function glyphCube(glyph, c1, c2, fg, size = 8) {
+  const tex = glyphTexture(glyph, c1, c2, fg);
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(size, size, size),
+    new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.35, metalness: 0.25,
+      emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5
+    })
+  );
+  const grp = new THREE.Group();
+  grp.add(mesh);
+  grp.userData.spinMesh = mesh;
+  return grp;
+}
+
+/* ---- 數值條(16 / 64 連方塊)---- */
+const HEAD_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399'];
+function valColor(v, hue = 0) {
+  const h = (v >= 0 ? 0.52 : 0.055) + hue; // 正=青,負=橘;hue=各階段的色相偏移
+  return new THREE.Color().setHSL(h % 1, 0.85, clamp(0.3 + Math.abs(v) * 0.16, 0.25, 0.72));
+}
+function valScaleY(v) { return clamp(0.4 + Math.abs(v) * 0.85, 0.4, 4.2); }
+function valScaleXZ(v) { return clamp(0.78 + Math.abs(v) * 0.16, 0.78, 1.32); } // 值大→變壯
+
+function makeStrip(vals, { cube = 3, pitch = 3.9, opacity = 1, hue = 0 } = {}) {
+  const grp = new THREE.Group();
+  const n = vals.length;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(cube, cube, cube),
+      new THREE.MeshStandardMaterial({
+        color: valColor(vals[i], hue), roughness: 0.3, metalness: 0.3,
+        transparent: opacity < 1, opacity,
+        emissive: valColor(vals[i], hue), emissiveIntensity: 0.25
+      })
+    );
+    m.position.x = (i - (n - 1) / 2) * pitch;
+    m.scale.y = valScaleY(vals[i]);
+    m.scale.x = m.scale.z = valScaleXZ(vals[i]);
+    m.userData.v = vals[i];
+    grp.add(m);
+  }
+  grp.userData.vals = vals.slice();
+  grp.userData.pitch = pitch;
+  grp.userData.hue = hue;
+  grp.userData.cubes = grp.children.slice(); // 之後可能再掛標籤 sprite,數值操作只碰 cubes
+  return grp;
+}
+function setStripValues(strip, vals, k = 1, hueTarget) {
+  // k=1 → 完全套用;k<1 → 從舊值往新值內插(供 tween 用);hueTarget → 同時轉移階段色相
+  const hue0 = strip.userData.hue || 0;
+  const hue1 = hueTarget !== undefined ? hueTarget : hue0;
+  strip.userData.cubes.forEach((m, i) => {
+    if (i >= vals.length) return;
+    const v0 = m.userData.v, v1 = vals[i];
+    const v = v0 + (v1 - v0) * k;
+    const h = hue0 + (hue1 - hue0) * k;
+    m.scale.y = valScaleY(v);
+    m.scale.x = m.scale.z = valScaleXZ(v);
+    m.material.color.copy(valColor(v, h));
+    m.material.emissive.copy(valColor(v, h));
+    if (k >= 1) m.userData.v = v1;
+  });
+  if (k >= 1) { strip.userData.vals = vals.slice(); strip.userData.hue = hue1; }
+}
+// 殘差合併等「資料被改變」的瞬間:全條白熱脈衝
+function stripPulse(strip, dur = 550) {
+  return tween(dur, k => {
+    const p = Math.sin(k * Math.PI);
+    strip.userData.cubes.forEach(m => { m.material.emissiveIntensity = 0.25 + p * 1.25; });
+  });
+}
+function tintByHeads(strip) {
+  strip.userData.cubes.forEach((m, i) => {
+    const c = new THREE.Color(HEAD_COLORS[Math.floor(i / (strip.userData.cubes.length / 4))]);
+    m.material.color.copy(c);
+    m.material.emissive.copy(c);
+    m.material.emissiveIntensity = 0.4;
+  });
+}
+
+/* ---- 關卡 ---- */
+// 關卡標籤兩條規則:1) 離鏡頭太近淡出(透視放大會擋畫面)
+// 2) 只顯示「已通過或即將抵達」的關卡 —— 後面步驟的標籤不提早出現
+const fadeLabels = []; // { sprite, s }
+let showAllLabels = false; // 終章全景時打開
+function gateSphere(label, color, r = 7, s = 0) {
+  const grp = new THREE.Group();
+  const wire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(r, 1),
+    new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.85 })
+  );
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(r * 0.62, 20, 20),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16 })
+  );
+  grp.add(wire, core);
+  const lb = textSprite(label, { color: colToCss(color), fs: 46 });
+  lb.position.y = r + 5;
+  grp.add(lb);
+  fadeLabels.push({ sprite: lb, s });
+  pathPos(s, grp.position);
+  grp.userData = { wire, kind: 'sphere', baseR: r };
+  staticG.add(grp);
+  return grp;
+}
+function gateRing(label, color, r = 40, s = 0, labelFs = 46) {
+  const grp = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(r, 1.1, 12, 64),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+  );
+  ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR);
+  grp.add(ring);
+  const lb = textSprite(label, { color: colToCss(color), fs: labelFs });
+  lb.position.y = r + 10;
+  grp.add(lb);
+  fadeLabels.push({ sprite: lb, s });
+  pathPos(s, grp.position);
+  grp.userData = { wire: ring, kind: 'ring', baseR: r };
+  staticG.add(grp);
+  return grp;
+}
+function gatePlane(label, color, w, h, s) {
+  const grp = new THREE.Group();
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h, 16, 2),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, side: THREE.DoubleSide })
+  );
+  const frame = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, h)),
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 })
+  );
+  grp.add(plane, frame);
+  grp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR);
+  const lb = textSprite(label, { color: colToCss(color), fs: 46 });
+  lb.position.y = h / 2 + 9;
+  lb.quaternion.copy(grp.quaternion).invert();
+  grp.add(lb);
+  fadeLabels.push({ sprite: lb, s });
+  pathPos(s, grp.position);
+  grp.userData = { wire: plane, kind: 'plane' };
+  staticG.add(grp);
+  return grp;
+}
+function colToCss(c) { return '#' + new THREE.Color(c).getHexString(); }
+
+/* ---- 粒子爆散 ---- */
+const bursts = [];
+function burst(pos, color = 0xffffff, count = 70, speed = 26) {
+  const geo = new THREE.BufferGeometry();
+  const p = new Float32Array(count * 3), vel = [];
+  for (let i = 0; i < count; i++) {
+    p[i * 3] = pos.x; p[i * 3 + 1] = pos.y; p[i * 3 + 2] = pos.z;
+    const d = new THREE.Vector3(gaussFree(), gaussFree(), gaussFree()).normalize()
+      .multiplyScalar(speed * (0.35 + Math.random() * 0.85));
+    vel.push(d);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  const mat = new THREE.PointsMaterial({
+    color, size: 1.7, transparent: true, opacity: 1,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const pts = new THREE.Points(geo, mat);
+  dynamicG.add(pts);
+  bursts.push({ pts, vel, life: 0, max: 0.9 });
+}
+function gaussFree() { return (Math.random() * 2 - 1) + (Math.random() * 2 - 1); }
+function stepBursts(dt) {
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i];
+    b.life += dt * timeScale;
+    const arr = b.pts.geometry.attributes.position.array;
+    for (let j = 0; j < b.vel.length; j++) {
+      arr[j * 3] += b.vel[j].x * dt * timeScale;
+      arr[j * 3 + 1] += (b.vel[j].y - 14 * b.life) * dt * timeScale;
+      arr[j * 3 + 2] += b.vel[j].z * dt * timeScale;
+    }
+    b.pts.geometry.attributes.position.needsUpdate = true;
+    b.pts.material.opacity = clamp(1 - b.life / b.max, 0, 1);
+    if (b.life >= b.max) {
+      dynamicG.remove(b.pts);
+      b.pts.geometry.dispose(); b.pts.material.dispose();
+      bursts.splice(i, 1);
+    }
+  }
+}
+
+/* ---- 撞擊:閃光 + 震動 ---- */
+let shakeAmp = 0;
+function impact(pos, color, { count = 70, shake = 0.8, flash = 320 } = {}) {
+  burst(pos, color, count);
+  shakeAmp = Math.max(shakeAmp, shake);
+  flashLight.position.copy(pos);
+  flashLight.color.set(color);
+  flashLight.intensity = flash;
+}
+async function gatePulse(gate) {
+  const w = gate.userData.wire;
+  await tween(420, k => {
+    const s = 1 + Math.sin(k * Math.PI) * 0.35;
+    w.scale.setScalar(s);
+  });
+  w.scale.setScalar(1);
+}
+
+/* ---- 光束 ---- */
+function makeBeam(from, to, width, color) {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const len = dir.length();
+  const geo = new THREE.CylinderGeometry(width, width, len, 8, 1, true);
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(from).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  dynamicG.add(m);
+  return m;
+}
+
+/* ================= 數值(示意用,結構數字忠於程式)================= */
+const letters = 'abcdefghijklmnopqrstuvwxyz';
+const V = {};
+{
+  V.tok = Array.from({ length: 16 }, () => gauss() * 0.75);
+  V.pos = Array.from({ length: 16 }, () => gauss() * 0.75);
+  V.tok[3] += 3.2; V.tok[9] -= 2.9;                 // 讓融合後大小「誇張地」不均
+  V.pos[6] += 3.4; V.pos[13] -= 2.7;                // → RMSNorm 後全體明顯壓平才看得出效果
+  V.merged = V.tok.map((v, i) => v + V.pos[i]);      // 真實逐元素相加
+  const ms = V.merged.reduce((a, b) => a + b * b, 0) / 16;
+  const scale = Math.pow(ms + 1e-5, -0.5);
+  // RMSNorm 真算後再做視覺壓縮(|v|^0.55),讓「壓回相近大小」一眼可見
+  V.normed = V.merged.map(v => {
+    const n = v * scale;
+    return Math.sign(n) * Math.pow(Math.abs(n), 0.55);
+  });
+  V.q = V.normed.map(v => v * 0.8 + gauss() * 0.3);
+  V.k = V.normed.map(v => v * 0.7 + gauss() * 0.3);
+  V.v = V.normed.map(v => v * 0.75 + gauss() * 0.3);
+  V.attnCat = V.v.map(v => v * 0.85 + gauss() * 0.2);
+  V.attnOut = Array.from({ length: 16 }, () => gauss() * 0.9);
+  V.afterRes1 = V.normed.map((v, i) => v + V.attnOut[i]);
+  // MLP 前的 pre-norm 這次是「有感」的:殘差相加後尺度亂了,再壓平一次
+  const ms2 = V.afterRes1.reduce((a, b) => a + b * b, 0) / 16;
+  const sc2 = Math.pow(ms2 + 1e-5, -0.5);
+  V.norm2 = V.afterRes1.map(v => {
+    const n = v * sc2;
+    return Math.sign(n) * Math.pow(Math.abs(n), 0.55);
+  });
+  V.h64 = Array.from({ length: 64 }, () => gauss() * 0.9);
+  V.relu64 = V.h64.map(v => Math.max(0, v));
+  V.mlpOut = Array.from({ length: 16 }, () => gauss() * 0.9);
+  V.afterRes2 = V.afterRes1.map((v, i) => v + V.mlpOut[i]);
+  V.logits = Array.from({ length: 27 }, () => gauss() * 0.8);
+  V.logits[12] = 3.3;  // 'm':emma 中 e 之後是 m
+  V.logits[11] = 1.6;  // 'l'
+  V.logits[21] = 1.1;  // 'v'
+  const T = 0.5;
+  const mx = Math.max(...V.logits);
+  const ex = V.logits.map(l => Math.exp((l - mx) / T));
+  const tot = ex.reduce((a, b) => a + b, 0);
+  V.probs = ex.map(e => e / tot);
+  V.attnW = [0.38, 0.62]; // [BOS, e 自己]
+}
+
+/* ================= 靜態世界 ================= */
+// 星空
+{
+  const n = 900, p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3(gaussFree(), gaussFree(), gaussFree()).normalize()
+      .multiplyScalar(380 + Math.random() * 260);
+    v.add(pathPos(170));
+    p[i * 3] = v.x; p[i * 3 + 1] = v.y; p[i * 3 + 2] = v.z;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  staticG.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xaabbee, size: 1.1, transparent: true, opacity: 0.65, depthWrite: false
+  })));
+}
+// 軌道虛線
+{
+  const pts = [];
+  for (let s = S.START - 20; s <= S.WALL + 30; s += 4) pts.push(pathPos(s));
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
+    color: 0x3a4a78, dashSize: 2.2, gapSize: 3.2, transparent: true, opacity: 0.7
+  }));
+  line.computeLineDistances();
+  staticG.add(line);
+}
+
+// 關卡(依 forward 順序)
+const gates = {
+  id:      gateSphere('ID 轉換', 0xfbbf24, 7, S.ID),
+  wte:     gateSphere('Embedding 查表 wte', 0x38bdf8, 8, S.WTE),
+  wpe:     gateSphere('+ 位置 Embedding wpe', 0xe879f9, 8, S.MERGE),
+  rms:     gateRing('RMSNorm', 0x2dd4a7, 34, S.RMS, 40),
+  pre1:    gateSphere('rmsnorm', 0x2dd4a7, 3.5, S.PRE1),
+  attn:    gateRing('Attention(4 頭)', 0xc084fc, 42, S.ATTN),
+  wo:      gateSphere('wo 混合', 0xc084fc, 4.5, S.WO),
+  pre2:    gateSphere('rmsnorm', 0x2dd4a7, 3.5, S.PRE2),
+  mlp:     gateRing('MLP 升維 16→64', 0x4ade80, 42, S.MLP),
+  relu:    gatePlane('ReLU', 0xf87171, 134, 15, S.RELU),
+  squeeze: gateRing('降維 64→16', 0x4ade80, 42, S.SQUEEZE)
+};
+
+// lm_head 高牆(27 個柱槽)
+const wallCenter = pathPos(S.WALL);
+const wallG = new THREE.Group();
+let wallLabel = null;
+{
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(128, 34, 4),
+    new THREE.MeshStandardMaterial({ color: 0x16203c, roughness: 0.6, metalness: 0.4, emissive: 0x0c1430, emissiveIntensity: 0.6 })
+  );
+  const frame = new THREE.LineSegments(
+    new THREE.EdgesGeometry(wall.geometry),
+    new THREE.LineBasicMaterial({ color: 0x7aa2ff, transparent: true, opacity: 0.8 })
+  );
+  wallG.add(wall, frame);
+  // 27 條槽線
+  for (let i = 0; i <= 27; i++) {
+    const x = -128 / 2 + i * (128 / 27);
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(x, -17, 2.2), new THREE.Vector3(x, 17, 2.2)
+    ]);
+    wallG.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x38507e, transparent: true, opacity: 0.6 })));
+  }
+  wallG.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR.clone().negate());
+  wallG.position.copy(wallCenter);
+  const lb = textSprite('lm_head:16 維 → 27 個 logits', { color: '#7aa2ff', fs: 46 });
+  lb.position.copy(wallCenter).addScaledVector(DIR, -6).add(new THREE.Vector3(0, 38, 0));
+  staticG.add(wallG, lb);
+  fadeLabels.push({ sprite: lb, s: S.WALL });
+  wallLabel = lb;
+}
+// 高牆視角時要隱藏的中途關卡(否則會擋在鏡頭和柱狀圖之間)
+const MID_GATES = [gates.pre2, gates.mlp, gates.relu, gates.squeeze];
+function setMidGatesVisible(v) { MID_GATES.forEach(g => { g.visible = v; }); }
+
+// 光暈 sprite(讓小物件在遠景也看得見)
+function glowSprite(color, scale = 26) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.25, colToCss(color) + 'aa');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  spr.scale.setScalar(scale);
+  return spr;
+}
+
+// BOS 的 K/V 殘影艙(attention 的「過去」)
+const bosPod = new THREE.Group();
+{
+  const k = makeStrip(Array.from({ length: 4 }, () => gauss() * 0.6), { cube: 1.7, pitch: 2.2, opacity: 0.85 });
+  const v = makeStrip(Array.from({ length: 4 }, () => gauss() * 0.6), { cube: 1.7, pitch: 2.2, opacity: 0.85 });
+  k.position.y = 2.2; v.position.y = -2.2;
+  bosPod.add(k, v);
+  const kT = textSprite('K', { fs: 26, color: '#c4b5fd', bg: false, onTop: true });
+  kT.position.set(-7.5, 2.2, 0);
+  const vT = textSprite('V', { fs: 26, color: '#93c5fd', bg: false, onTop: true });
+  vT.position.set(-7.5, -2.2, 0);
+  bosPod.add(kT, vT);
+  const lb = textSprite('BOS 的 K/V(記憶)', { color: '#c084fc', fs: 40 });
+  lb.position.y = 9;
+  bosPod.add(lb);
+  fadeLabels.push({ sprite: lb, s: S.ATTN + 8 });
+  bosPod.position.copy(pathPos(S.ATTN + 8)).add(new THREE.Vector3(64, 40, 0));
+  staticG.add(bosPod);
+}
+
+/* ================= 相機 ================= */
+const camFocus = pathPos(S.START).clone();
+const camOff = new THREE.Vector3(58, 34, 86);
+const camOffTarget = camOff.clone();
+let focusMode = 'hero';
+const focusFixed = new THREE.Vector3();
+function setCam(offset, fixedFocus = null) {
+  camOffTarget.copy(offset);
+  if (fixedFocus) { focusMode = 'fixed'; focusFixed.copy(fixedFocus); }
+  else focusMode = 'hero';
+}
+const CLOSE_CAM = new THREE.Vector3(30, 18, 46);
+const DEFAULT_CAM = new THREE.Vector3(58, 34, 86);
+const WIDE_CAM = new THREE.Vector3(92, 48, 120);
+const WALL_CAM = DIR.clone().multiplyScalar(-100).add(new THREE.Vector3(0, 16, 0));
+const FINALE_CAM = new THREE.Vector3(190, 110, 230);
+
+/* ================= 主角狀態 ================= */
+let hero = null, heroS = S.START, heroLift = 0;
+let ghost = null, ghostLift = 0, ghostSide = 0, ghostLabel = null;
+const GHOST_LIFT = 42, GHOST_SIDE = -44; // 殘差分身平時停泊在左上遠處(需入鏡),回撞前才拉回
+let bars = null, barLabels = null;
+let attn = null; // Attention 拆關期間的 Q/K/V 三條分身與光束
+let playing = false, idx = 0;
+
+function syncHero() {
+  if (hero) { pathPos(heroS, hero.position); hero.position.y += heroLift; }
+  if (ghost) {
+    pathPos(heroS, ghost.position);
+    ghost.position.y += ghostLift;
+    ghost.position.x += ghostSide;
+  }
+}
+async function travel(toS, dur, ease = easeIO) {
+  const from = heroS;
+  await tween(dur, k => { heroS = from + (toS - from) * k; syncHero(); }, ease);
+}
+function setHero(obj, s = heroS, lift = 0) {
+  if (hero) disposeObj(hero);
+  hero = obj; heroS = s; heroLift = lift;
+  if (hero) { dynamicG.add(hero); syncHero(); }
+}
+function makeGhost(fromStrip) {
+  const g = makeStrip(fromStrip.userData.vals, { opacity: 0.22, hue: fromStrip.userData.hue || 0 });
+  g.children.forEach(m => { m.material.emissiveIntensity = 0.5; });
+  ghostLabel = textSprite('殘差 x_residual', { color: '#94a3b8', fs: 32 });
+  ghostLabel.position.y = 8;
+  g.add(ghostLabel);
+  dynamicG.add(g);
+  return g;
+}
+function disposeObj(obj) {
+  obj.parent && obj.parent.remove(obj);
+  obj.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      if (o.material.map) o.material.map.dispose();
+      o.material.dispose();
+    }
+  });
+}
+
+/* ================= HUD ================= */
+const $ = id => document.getElementById(id);
+function hud(title, sub, desc, code) {
+  $('info').classList.remove('hidden');
+  $('info-title').textContent = title;
+  $('info-sub').textContent = sub || '';
+  $('info-desc').textContent = desc;
+  $('info-code').textContent = code || '';
+  $('info-code').style.display = code ? '' : 'none';
+}
+function hudProgress() {
+  // 從 Embedding 查表(第 3 步)起顯示數值圖例
+  $('legend').style.display = idx >= 3 ? 'block' : 'none';
+  if (playing) {
+    $('progress').innerHTML = `播放中:<b>${steps[idx].name}</b>(再按空白鍵快轉)`;
+    return;
+  }
+  $('progress').innerHTML = idx >= steps.length
+    ? `完 · <b>R</b> 重播 · ${steps.length} / ${steps.length}`
+    : `下一關:<b>${steps[idx].name}</b> · ${idx} / ${steps.length}`;
+}
+
+/* ================= 12 關 ================= */
+const CUBE_E = () => glyphCube('e', '#7c2d12', '#f59e0b', '#fff7ed');
+const CUBE_4 = () => glyphCube('4', '#0c4a6e', '#22d3ee', '#ecfeff');
+const CUBE_M = () => glyphCube('m', '#4c1d95', '#f472b6', '#fdf4ff');
+
+const steps = [
+  /* 1 ─────────────────────────────── */
+  {
+    name: '開場:字母 e',
+    async play() {
+      hud('開場:一個字母', 'emma 的第一個字母', '遠處飛來一顆字母方塊 e —— 現在它只是一個字元,模型完全看不懂。它要沿著 45° 軌道,一路變形,直到變成「下一個字母的機率」。',
+        "doc = 'emma'  # 資料集裡的一個名字");
+      setCam(CLOSE_CAM);
+      setHero(CUBE_E(), S.START);
+      await travel(S.ID - 14, 3000, easeOut);
+    },
+    final() { setHero(CUBE_E(), S.ID - 14); setCam(CLOSE_CAM); }
+  },
+  /* 2 ─────────────────────────────── */
+  {
+    name: 'ID 轉換',
+    async play() {
+      hud('第一關:ID 轉換', 'tokenizer', '字母方塊撞上「ID 轉換」球體 —— e 是字母表第 5 個字(從 0 數起是 4),於是 e 變成了整數 4。模型的世界裡沒有文字,只有編號。',
+        "tokens = [BOS] + [uchars.index(ch) for ch in doc]  # e → 4");
+      await travel(S.ID, 800, easeIn);
+      impact(pathPos(S.ID), 0xfbbf24, { shake: 0.9 });
+      gatePulse(gates.id);
+      await tween(240, k => hero.scale.setScalar(1 - 0.85 * k), easeIn);
+      setHero(CUBE_4(), S.ID);
+      hero.scale.setScalar(0.15);
+      await tween(420, k => hero.scale.setScalar(0.15 + 1.05 * k), easeOut);
+      hero.scale.setScalar(1);
+      await travel(S.WTE - 16, 1200);
+    },
+    final() { setHero(CUBE_4(), S.WTE - 16); setCam(CLOSE_CAM); }
+  },
+  /* 3 ─────────────────────────────── */
+  {
+    name: 'Embedding 查表',
+    async play() {
+      hud('第二關:Embedding 查表', 'wte', 'ID 方塊撞上查表關卡:用 4 當索引,從 wte 表撈出第 4 列 —— 一排 16 個數字。一顆方塊炸開,重組成 16 個連續立方塊:高度與顏色就是每一維的數值。',
+        "tok_emb = state_dict['wte'][token_id]  # 16 維");
+      setCam(DEFAULT_CAM);
+      await travel(S.WTE, 900, easeIn);
+      impact(pathPos(S.WTE), 0x38bdf8, { count: 110, shake: 1.1 });
+      gatePulse(gates.wte);
+      await tween(220, k => hero.scale.setScalar(1 - 0.9 * k), easeIn);
+      const strip = makeStrip(V.tok);
+      strip.userData.cubes.forEach(m => { m.userData.tx = m.position.x; m.position.x = 0; m.scale.setScalar(0.05); });
+      setHero(strip, S.WTE);
+      await tween(950, k => {
+        strip.userData.cubes.forEach((m, i) => {
+          const kk = clamp(k * 1.6 - i * 0.035, 0, 1);
+          const e = easeOut(kk);
+          m.position.x = m.userData.tx * e;
+          const sy = valScaleY(m.userData.v);
+          m.scale.set(0.05 + 0.95 * e, 0.05 + (sy - 0.05) * e, 0.05 + 0.95 * e);
+        });
+      }, k => k);
+      await travel(S.MERGE - 18, 1100);
+    },
+    final() { setHero(makeStrip(V.tok), S.MERGE - 18); setCam(DEFAULT_CAM); }
+  },
+  /* 4 ─────────────────────────────── */
+  {
+    name: '位置融合 wpe',
+    async play() {
+      hud('第三關:+ 位置 Embedding', 'wpe', '前方出現「+ 位置 Embedding」關卡。從相似的角度,另一條 16 連方塊斜飛而來 —— 它是「位置 1」的 embedding,只知道「你是第幾個字」。兩條方塊列在關卡上相撞、逐元素相加:融合之後大小參差、胖瘦不一,色調也偏移了 —— 這已經是新的資料。',
+        'x = [t + p for t, p in zip(tok_emb, pos_emb)]');
+      const posStrip = makeStrip(V.pos, { opacity: 0.92, hue: 0.12 });
+      const lb = textSprite('位置 1 的 embedding(wpe)', { color: '#e879f9', fs: 40 });
+      lb.position.y = 9;
+      posStrip.add(lb);
+      dynamicG.add(posStrip);
+      const startP = pathPos(S.MERGE - 46).add(new THREE.Vector3(-78, 34, 0));
+      const endP = pathPos(S.MERGE);
+      posStrip.position.copy(startP);
+      // 兩者同時逼近 wpe 關卡,在球體上會合
+      await Promise.all([
+        travel(S.MERGE, 1600, easeIO),
+        tween(1600, k => posStrip.position.lerpVectors(startP, endP, k))
+      ]);
+      posStrip.remove(lb); disposeObj(lb);
+      impact(endP, 0xe879f9, { count: 150, shake: 1.1 });
+      gatePulse(gates.wpe);
+      // 逐塊級聯撞擊融合(同步轉移色相)
+      await Promise.all([
+        tween(900, k => {
+          hero.userData.cubes.forEach((m, i) => {
+            const kk = clamp(k * 1.8 - i * 0.05, 0, 1);
+            if (kk <= 0) return;
+            const pm = posStrip.userData.cubes[i];
+            pm.position.y = (1 - kk) * 3;
+            pm.scale.setScalar(Math.max(0.01, 1 - kk));
+            pm.material.opacity = 0.92 * (1 - kk);
+          });
+          setStripValues(hero, V.merged, easeOut(clamp(k * 1.3, 0, 1)), 0.06);
+        }, k => k),
+        stripPulse(hero, 900)
+      ]);
+      disposeObj(posStrip);
+      setStripValues(hero, V.merged, 1, 0.06);
+      await travel(S.RMS - 24, 1000);
+    },
+    final() { setHero(makeStrip(V.merged, { hue: 0.06 }), S.RMS - 24); setCam(DEFAULT_CAM); }
+  },
+  /* 5 ─────────────────────────────── */
+  {
+    name: 'RMSNorm',
+    async play() {
+      hud('第四關:RMSNorm', '尺度校正', '高塔般參差的方塊列穿過 RMSNorm 圓環 —— 撞擊波從左掃到右,把每一維除以整體的均方根,誇張的高低起伏被壓回相近的大小,整條隊伍重新變得整齊。',
+        'x = rmsnorm(x)  # xi * (mean(x²)+1e-5)^-0.5');
+      await travel(S.RMS, 1100, easeIn);
+      impact(pathPos(S.RMS), 0x2dd4a7, { count: 90, shake: 0.7 });
+      gatePulse(gates.rms);
+      await tween(850, k => {
+        hero.userData.cubes.forEach((m, i) => {
+          const kk = clamp(k * 1.9 - i * 0.055, 0, 1);
+          if (kk <= 0) return;
+          const v0 = V.merged[i], v1 = V.normed[i];
+          const v = v0 + (v1 - v0) * easeOut(kk);
+          m.scale.y = valScaleY(v);
+          m.scale.x = m.scale.z = valScaleXZ(v);
+          m.material.color.copy(valColor(v, 0.06));
+          m.material.emissive.copy(valColor(v, 0.06));
+        });
+      }, k => k);
+      setStripValues(hero, V.normed, 1);
+      await travel(S.FORK1 - 4, 800);
+    },
+    final() { setHero(makeStrip(V.normed, { hue: 0.06 }), S.FORK1 - 4); setCam(DEFAULT_CAM); }
+  },
+  /* 6 ─────────────────────────────── */
+  {
+    name: '殘差分岔',
+    async play() {
+      hud('第五關:殘差分岔', 'residual', '進 Attention 之前,方塊列複製出一條半透明分身,飄到左上遠處的旁觀位 —— 這就是殘差連接:先留一份原始資料,等 Attention 算完再拉回來加上去。本體接著輕輕滑過一顆小 rmsnorm 珠:注意,方塊完全沒變 —— 剛剛才正規化過,再做一次前向等於沒做;程式仍寫了這行,因為上一關那次 rmsnorm 讓「存入殘差的就是正規化後的值」,訓練時的梯度需要這個安排。',
+        'x_residual = x\nx = rmsnorm(x)  # 前向此刻不變,為梯度而存在');
+      ghost = makeGhost(hero);
+      ghostLift = 0; ghostSide = 0;
+      syncHero();
+      await Promise.all([
+        travel(S.PRE1 - 3, 900),
+        tween(900, k => {
+          ghostLift = GHOST_LIFT * easeOut(k);
+          ghostSide = GHOST_SIDE * easeOut(k);
+          syncHero();
+        })
+      ]);
+      // 只有柔光,沒有撞擊火花:這顆珠的前向是無感的,別讓它看起來像「又更新了一次」
+      flashLight.position.copy(pathPos(S.PRE1));
+      flashLight.color.set(0x2dd4a7);
+      flashLight.intensity = 70;
+      gatePulse(gates.pre1);
+      await travel(S.PRE1 + 8, 600);
+    },
+    final() {
+      setHero(makeStrip(V.normed, { hue: 0.06 }), S.PRE1 + 8);
+      ghost = makeGhost(hero); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      setCam(DEFAULT_CAM);
+    }
+  },
+  /* 7 ─────────────────────────────── */
+  {
+    name: 'Attention:分裂 Q/K/V',
+    async play() {
+      hud('第六關:Attention — 分裂 Q/K/V', '4 頭注意力', '穿過紫環,方塊列分裂成三條分身:Q(我在找什麼)、K(我是什麼)、V(我要給什麼),各染成 4 段顏色 —— 4 個注意力頭,每頭負責 4 維。',
+        'q = linear(x, attn_wq)\nk = linear(x, attn_wk)\nv = linear(x, attn_wv)');
+      setCam(WIDE_CAM);
+      await travel(S.ATTN, 1300, easeIn);
+      impact(pathPos(S.ATTN), 0xc084fc, { count: 110, shake: 0.9 });
+      gatePulse(gates.attn);
+      hero.visible = false;
+      attn = makeQKVStrips(0.2);
+      await tween(700, k => {
+        [attn.qs, attn.ks, attn.vs].forEach(s => { s.scale.setScalar(0.2 + 0.8 * easeOut(k)); });
+      });
+    },
+    final() {
+      setHero(makeStrip(V.normed, { hue: 0.06 }), S.ATTN);
+      hero.visible = false;
+      ghost = makeGhost(makeStrip(V.normed, { hue: 0.06 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      attn = makeQKVStrips(1);
+      setCam(WIDE_CAM);
+    }
+  },
+  /* 8 ─────────────────────────────── */
+  {
+    name: 'K/V 存入記憶',
+    async play() {
+      hud('第七關:K/V 存入記憶', 'KV cache', '這一格的 K 和 V 被複製一份,飛進右側的「記憶艙」存起來 —— 之後的每一個字母都能回頭查到它。對面漂浮的 BOS 記憶艙,就是上一格存進去的。',
+        'keys[li].append(k)\nvalues[li].append(v)');
+      const pod = buildSelfPod();
+      pod.scale.setScalar(0.01);
+      const miniK = makeStrip(V.k.slice(0, 4), { cube: 1.7, pitch: 2.2 });
+      const miniV = makeStrip(V.v.slice(0, 4), { cube: 1.7, pitch: 2.2 });
+      const fromK = attn.ks.position.clone(), fromV = attn.vs.position.clone();
+      miniK.position.copy(fromK); miniV.position.copy(fromV);
+      dynamicG.add(miniK, miniV);
+      await tween(900, k => {
+        miniK.position.lerpVectors(fromK, pod.position, easeIn(k));
+        miniV.position.lerpVectors(fromV, pod.position, easeIn(k));
+        miniK.scale.setScalar(1 - 0.55 * k);
+        miniV.scale.setScalar(1 - 0.55 * k);
+      });
+      impact(pod.position, 0xf0abfc, { count: 50, shake: 0.4 });
+      disposeObj(miniK); disposeObj(miniV);
+      await tween(500, k => pod.scale.setScalar(easeOut(k)));
+    },
+    final() { buildSelfPod(); }
+  },
+  /* 9 ─────────────────────────────── */
+  {
+    name: '切成 4 個頭',
+    async play() {
+      hud('第八關:切成 4 個頭', 'multi-head', 'Q、K、V 各裂成 4 段,每段 4 維,分給 4 個頭。留下頭 1 在主軌道當特寫,其他 3 個頭帶著自己的那份滑到左側工作台 —— 等一下它們會平行做一模一樣的事。',
+        'q_h = q[hs:hs+head_dim]  # 每頭只看自己的 4 維');
+      // 原本的三大條淡出
+      await tween(500, k => {
+        [attn.qs, attn.ks, attn.vs].forEach(s => {
+          s.scale.setScalar(1 - 0.4 * k);
+          s.children.forEach(m => { if (m.material) m.material.opacity = 0.95 * (1 - k); });
+        });
+      });
+      [attn.qs, attn.ks, attn.vs].forEach(disposeObj);
+      attn.qs = attn.ks = attn.vs = null;
+      // 4 個頭從中央誕生:頭 1 留下,頭 2–4 滑向左側
+      const center = pathPos(S.ATTN + 6);
+      attn.heads = [0, 1, 2, 3].map(h => {
+        const g = makeHeadGroup(h, false);
+        g.position.copy(center);
+        g.scale.setScalar(0.15);
+        return g;
+      });
+      impact(center, 0xc084fc, { count: 80, shake: 0.5 });
+      await tween(1000, k => {
+        attn.heads.forEach((g, h) => {
+          const kk = clamp(k * 1.4 - h * 0.1, 0, 1), e = easeOut(kk);
+          if (h === 0) {
+            g.scale.setScalar(0.15 + 0.85 * e);
+          } else {
+            g.position.lerpVectors(center, headHomePos(h), e);
+            g.scale.setScalar(0.15 + 0.70 * e);
+          }
+        });
+      }, k => k);
+      attn.heads.forEach((g, h) => { g.position.copy(headHomePos(h)); g.scale.setScalar(h === 0 ? 1 : 0.85); });
+    },
+    final() {
+      if (attn.qs) { [attn.qs, attn.ks, attn.vs].filter(Boolean).forEach(disposeObj); attn.qs = attn.ks = attn.vs = null; }
+      attn.heads = [0, 1, 2, 3].map(h => makeHeadGroup(h, false));
+    }
+  },
+  /* 10 ─────────────────────────────── */
+  {
+    name: '注意力光束(單頭特寫)',
+    async play() {
+      hud('第九關:注意力光束(以頭 1 為例)', 'Q·K → 權重', '頭 1 的 q 對記憶中的每個 k 射出光束:對 BOS 算出 0.38,對自己算出 0.62 —— 光束粗細就是注意力權重;v 沿光束被吸進來加權融合,頭 1 得到一條 4 維的結果。看左邊:另外 3 個頭同時在做一模一樣的事,只是各算各的權重。',
+        'attn_weights = softmax(attn_logits)  # 頭 1:0.38 vs 0.62');
+      const head0 = attn.heads[0];
+      const qPos = head0.position.clone().add(new THREE.Vector3(0, 6, 0));
+      const r = makeAttnBeams(qPos);
+      attn.beams = r.beams; attn.wlabels = r.wlabels;
+      attn.beams.forEach(b => { b.material.opacity = 0; });
+      // 側邊三頭的微型光束
+      const minis = [];
+      for (let h = 1; h <= 3; h++) {
+        const p = attn.heads[h].position.clone();
+        const m1 = makeBeam(p.clone(), bosPod.position.clone(), 0.22, HEAD_COLORS[h]);
+        const m2 = makeBeam(p.clone(), selfPod.position.clone(), 0.22, HEAD_COLORS[h]);
+        m1.material.opacity = 0; m2.material.opacity = 0;
+        minis.push(m1, m2);
+      }
+      await tween(500, k => {
+        attn.beams.forEach(b => { b.material.opacity = 0.55 * k; });
+        minis.forEach(b => { b.material.opacity = 0.15 * k; });
+      }, easeOut);
+      // 側邊三頭同步脈衝:它們也在算
+      const pulseSide = tween(1600, k => {
+        attn.heads.slice(1).forEach(g => {
+          const p = 0.35 + Math.abs(Math.sin(k * Math.PI * 2)) * 0.9;
+          ['q', 'k', 'v'].forEach(key => {
+            const s = g.userData[key];
+            if (s) s.userData.cubes.forEach(m => { m.material.emissiveIntensity = p; });
+          });
+        });
+      }, k => k);
+      // v 沿光束吸入頭 1
+      const suck1 = makeStrip(Array.from({ length: 4 }, () => gauss() * 0.5), { cube: 1.7, pitch: 2.2 });
+      const suck2 = makeStrip(Array.from({ length: 4 }, () => gauss() * 0.5), { cube: 1.7, pitch: 2.2 });
+      suck1.position.copy(bosPod.position);
+      suck2.position.copy(selfPod.position);
+      dynamicG.add(suck1, suck2);
+      const target = head0.position.clone().add(new THREE.Vector3(0, -6, 0));
+      await tween(900, k => {
+        suck1.position.lerpVectors(bosPod.position, target, easeIn(k));
+        suck2.position.lerpVectors(selfPod.position, target, easeIn(k));
+        suck1.scale.setScalar(1 - 0.6 * k);
+        suck2.scale.setScalar(1 - 0.6 * k);
+      });
+      impact(target, 0xf472b6, { count: 60, shake: 0.4 });
+      disposeObj(suck1); disposeObj(suck2);
+      // 頭 1 的 q/k/v 融合成一條輸出
+      const out0 = swapHeadToOut(head0, 0);
+      out0.scale.setScalar(0.1);
+      await tween(450, k => out0.scale.setScalar(0.1 + 0.9 * easeOut(k)));
+      await pulseSide;
+      // 側邊三頭也各自完成,依序換成輸出條
+      for (let h = 1; h <= 3; h++) {
+        const out = swapHeadToOut(attn.heads[h], h);
+        out.scale.setScalar(0.1);
+        burst(attn.heads[h].position, new THREE.Color(HEAD_COLORS[h]).getHex(), 30, 14);
+        tween(350, k => out.scale.setScalar(0.1 + 0.9 * easeOut(k)));
+        await wait(160);
+      }
+      // 微型光束退場,主光束轉暗保留
+      await tween(450, k => {
+        minis.forEach(b => { b.material.opacity = 0.15 * (1 - k); });
+        attn.beams.forEach(b => { b.material.opacity = 0.55 - 0.33 * k; });
+      });
+      minis.forEach(disposeObj);
+    },
+    final() {
+      attn.heads.forEach((g, h) => swapHeadToOut(g, h));
+      const r = makeAttnBeams(attn.heads[0].position.clone(), true);
+      attn.beams = r.beams; attn.wlabels = r.wlabels;
+    }
+  },
+  /* 11 ─────────────────────────────── */
+  {
+    name: '四頭合併',
+    async play() {
+      hud('第十關:四頭合併', 'concat', '4 個頭都算完了 —— 各自帶著 4 維的結果飛回主軌道,首尾相接併成一條 16 維的 x_attn。每一段還留著自己頭的顏色:等一下 wo 會把它們攪拌均勻。',
+        'x_attn.extend(head_out)  # 4 頭 × 4 維 → 16 維');
+      // 光束與權重標籤退場
+      await tween(400, k => {
+        attn.beams.forEach(b => { b.material.opacity = 0.22 * (1 - k); });
+        attn.wlabels.forEach(w => { w.material.opacity = 1 - k; });
+      });
+      attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj);
+      attn.beams = []; attn.wlabels = [];
+      // 四份輸出飛回各自的段位
+      const center = pathPos(S.ATTN + 6);
+      const starts = attn.heads.map(g => g.position.clone());
+      const targets = attn.heads.map((g, h) => center.clone().add(new THREE.Vector3((4 * h - 6) * 3.9, 0, 0)));
+      await tween(900, k => {
+        attn.heads.forEach((g, h) => {
+          const kk = clamp(k * 1.3 - h * 0.08, 0, 1), e = easeIO(kk);
+          g.position.lerpVectors(starts[h], targets[h], e);
+          const s0 = h === 0 ? 1 : 0.85;
+          g.scale.setScalar(s0 + (1.18 - s0) * e);
+          if (g.userData.label) g.userData.label.material.opacity = 1 - kk;
+        });
+      }, k => k);
+      impact(center, 0xffffff, { count: 120, shake: 1.0 });
+      attn.heads.forEach(disposeObj);
+      attn.heads = null;
+      // 併成完整的 16 塊 x_attn
+      const strip16 = makeStrip(V.attnCat, { opacity: 0.95 });
+      tintByHeads(strip16);
+      const xl = textSprite('x_attn(4 頭拼接)', { color: '#c084fc', fs: 36, bg: false });
+      xl.position.set(0, 11, 0);
+      strip16.add(xl);
+      strip16.userData.label = xl;
+      strip16.position.copy(center);
+      dynamicG.add(strip16);
+      attn.vs = strip16;
+      await stripPulse(strip16, 450);
+    },
+    final() {
+      if (attn.beams) { attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj); attn.beams = []; attn.wlabels = []; }
+      if (attn.heads) { attn.heads.forEach(disposeObj); attn.heads = null; }
+      const strip16 = makeStrip(V.attnCat, { opacity: 0.95 });
+      tintByHeads(strip16);
+      const xl = textSprite('x_attn(4 頭拼接)', { color: '#c084fc', fs: 36, bg: false });
+      xl.position.set(0, 11, 0);
+      strip16.add(xl);
+      strip16.userData.label = xl;
+      strip16.position.copy(pathPos(S.ATTN + 6));
+      dynamicG.add(strip16);
+      attn.vs = strip16;
+    }
+  },
+  /* 10 ─────────────────────────────── */
+  {
+    name: 'wo 混合',
+    async play() {
+      hud('第十一關:wo 混合', '4 頭 → 16 維', '帶著上下文的合併結果穿過 wo 關卡,把 4 個頭各自的發現重新攪拌回一條 16 維向量 —— 段落分明的頭色消失,回到數值配色。Attention 至此完成:這條方塊列已經「看過」前面的字母了。',
+        'x = linear(x_attn, attn_wo)');
+      if (attn.beams && attn.beams.length) {
+        await tween(300, k => {
+          attn.beams.forEach(b => { b.material.opacity *= (1 - k); });
+          attn.wlabels.forEach(w => { w.material.opacity = 1 - k; });
+        });
+        attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj);
+      }
+      const vs = attn.vs;
+      attn = null;
+      if (vs.userData.label) { vs.remove(vs.userData.label); disposeObj(vs.userData.label); vs.userData.label = null; }
+      // vs 成為新本體,滑回主軌道
+      const vsWorld = vs.position.clone();
+      setHero(vs, S.ATTN + 6, vsWorld.y - pathPos(S.ATTN + 6).y);
+      await tween(500, k => { heroLift = (vsWorld.y - pathPos(S.ATTN + 6).y) * (1 - k); syncHero(); });
+      heroLift = 0;
+      await travel(S.WO, 900, easeIn);
+      impact(pathPos(S.WO), 0xc084fc, { count: 70, shake: 0.6 });
+      gatePulse(gates.wo);
+      // wo:4 頭混色恢復成數值配色
+      await tween(700, k => {
+        hero.userData.cubes.forEach((m, i) => {
+          const c0 = new THREE.Color(HEAD_COLORS[Math.floor(i / 4)]);
+          const v = V.attnCat[i] + (V.attnOut[i] - V.attnCat[i]) * k;
+          const c1 = valColor(v, 0.06);
+          m.material.color.copy(c0).lerp(c1, k);
+          m.material.emissive.copy(m.material.color);
+          m.scale.y = valScaleY(v);
+          m.scale.x = m.scale.z = valScaleXZ(v);
+        });
+      });
+      hero.userData.cubes.forEach((m, i) => { m.userData.v = V.attnOut[i]; });
+      hero.userData.vals = V.attnOut.slice();
+      hero.userData.hue = 0.06;
+      await travel(S.JOIN1 - 6, 700);
+    },
+    final() {
+      if (attn) {
+        [attn.qs, attn.ks, attn.vs, ...(attn.heads || []), ...(attn.beams || []), ...(attn.wlabels || [])]
+          .filter(Boolean).forEach(disposeObj);
+        attn = null;
+      }
+      setHero(makeStrip(V.attnOut, { hue: 0.06 }), S.JOIN1 - 6);
+      setCam(WIDE_CAM);
+    }
+  },
+  /* 8 ─────────────────────────────── */
+  {
+    name: '殘差回撞',
+    async play() {
+      hud('第十二關:殘差回撞', 'x + x_residual', '遠處旁觀的分身被召回:先拉回主軌道正上方、變得清晰,然後俯衝而下撞回本體 —— 逐元素相加。整條方塊列白熱一閃,大小重新洗牌、色調再度偏移:Attention 的產出不是取代原始資料,而是「疊加」上去。這就是殘差連接。',
+        'x = [a + b for a, b in zip(x, x_residual)]');
+      setCam(DEFAULT_CAM);
+      await travel(S.JOIN1, 500);
+      // 把分身從遠處拉回來
+      await tween(600, k => {
+        ghostSide = GHOST_SIDE * (1 - k);
+        if (ghost) ghost.userData.cubes.forEach(m => { m.material.opacity = 0.22 + 0.16 * k; });
+        syncHero();
+      });
+      await tween(700, k => { ghostLift = GHOST_LIFT * (1 - easeIn(k)); syncHero(); });
+      impact(pathPos(S.JOIN1), 0xffffff, { count: 120, shake: 1.2 });
+      if (ghost) { disposeObj(ghost); ghost = null; }
+      await Promise.all([
+        tween(600, k => setStripValues(hero, V.afterRes1, k, 0.12), easeOut),
+        stripPulse(hero, 700)
+      ]);
+      setStripValues(hero, V.afterRes1, 1, 0.12);
+      await travel(S.FORK2 - 2, 700);
+    },
+    final() { setHero(makeStrip(V.afterRes1, { hue: 0.12 }), S.FORK2 - 2); ghost = null; buildSelfPod(); setCam(DEFAULT_CAM); }
+  },
+  /* 9 ─────────────────────────────── */
+  {
+    name: '殘差分岔 2',
+    async play() {
+      hud('第十三關:殘差分岔 2', 'residual', '進 MLP 之前,和 Attention 前一樣:方塊列再複製一條半透明分身,飄到左上遠處旁觀。本體接著穿過小 rmsnorm 珠 —— 這次它是有感的:剛剛殘差相加把尺度弄亂了,珠子把方塊重新壓平,MLP 才好處理。',
+        'x_residual = x\nx = rmsnorm(x)  # 這次真的有壓平');
+      setCam(DEFAULT_CAM);
+      ghost = makeGhost(hero); ghostLift = 0; ghostSide = 0; syncHero();
+      await Promise.all([
+        travel(S.PRE2, 800),
+        tween(800, k => {
+          ghostLift = GHOST_LIFT * easeOut(k);
+          ghostSide = GHOST_SIDE * easeOut(k);
+          syncHero();
+        })
+      ]);
+      impact(pathPos(S.PRE2), 0x2dd4a7, { count: 30, shake: 0.25, flash: 120 });
+      gatePulse(gates.pre2);
+      await tween(600, k => setStripValues(hero, V.norm2, k), easeOut);
+      setStripValues(hero, V.norm2, 1);
+      await travel(S.PRE2 + 6, 500);
+    },
+    final() {
+      setHero(makeStrip(V.norm2, { hue: 0.12 }), S.PRE2 + 6);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(DEFAULT_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: 'MLP 升維',
+    async play() {
+      hud('第十四關:MLP 升維 16 → 64', 'mlp_fc1', '方塊列撞進 MLP 關卡:16 塊瞬間爆開成 64 塊 —— 每塊分裂成 4。維度變寬,是為了給模型更大的空間去「思考」剛剛看到的東西。',
+        'x = linear(x, mlp_fc1)  # 16 → 64');
+      setCam(WIDE_CAM);
+      await travel(S.MLP, 900, easeIn);
+      impact(pathPos(S.MLP), 0x4ade80, { count: 140, shake: 1.1 });
+      gatePulse(gates.mlp);
+      const strip64 = makeStrip(V.h64, { cube: 1.5, pitch: 2.02, hue: 0.12 });
+      strip64.userData.cubes.forEach((m, i) => {
+        m.userData.tx = m.position.x;
+        m.position.x = hero.userData.cubes[Math.floor(i / 4)].position.x;
+        m.scale.setScalar(0.1);
+      });
+      const oldHero = hero;
+      hero = null;
+      disposeObj(oldHero);
+      setHero(strip64, S.MLP);
+      await tween(900, k => {
+        strip64.userData.cubes.forEach((m, i) => {
+          const kk = clamp(k * 1.5 - i * 0.008, 0, 1), e = easeOut(kk);
+          m.position.x += (m.userData.tx - m.position.x) * e;
+          const sy = valScaleY(m.userData.v);
+          m.scale.set(0.1 + 0.9 * e, 0.1 + (sy - 0.1) * e, 0.1 + 0.9 * e);
+        });
+      }, k => k);
+      strip64.userData.cubes.forEach(m => { m.position.x = m.userData.tx; });
+      await travel(S.MLP + 6, 500);
+    },
+    final() {
+      setHero(buildStrip64(false), S.MLP + 6);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(WIDE_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: 'ReLU 削負',
+    async play() {
+      hud('第十五關:ReLU 閘門', '負值歸零', '64 塊穿過紅色 ReLU 閘門:正值方塊原樣通過,負值方塊被削平塌陷、變灰熄滅 —— 歸零。這個「只留正面訊號」的動作,就是神經網路的非線性。',
+        'x = [xi.relu() for xi in x]  # max(0, xi)');
+      await travel(S.RELU, 900, easeIn);
+      impact(pathPos(S.RELU), 0xf87171, { count: 80, shake: 0.7 });
+      const strip64 = hero;
+      await tween(800, k => {
+        strip64.userData.cubes.forEach((m, i) => {
+          if (V.h64[i] >= 0) return;
+          const kk = clamp(k * 1.7 - i * 0.008, 0, 1);
+          m.scale.y = valScaleY(V.h64[i]) * (1 - kk) + 0.12 * kk;
+          m.material.color.lerpColors(valColor(V.h64[i], 0.12), new THREE.Color(0x475569), kk);
+          m.material.emissive.copy(m.material.color);
+          m.material.emissiveIntensity = 0.25 * (1 - kk);
+        });
+      }, k => k);
+      await travel(S.RELU + 4, 500);
+    },
+    final() {
+      setHero(buildStrip64(true), S.RELU + 4);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(WIDE_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: '降維 64→16',
+    async play() {
+      hud('第十六關:降維 64 → 16', 'mlp_fc2', '思考完畢:64 塊撞上壓縮環,四塊併一塊,濃縮回 16 維 —— 寬度恢復,但內容已經是「思考過」的版本。',
+        'x = linear(x, mlp_fc2)  # 64 → 16');
+      await travel(S.SQUEEZE, 800, easeIn);
+      impact(pathPos(S.SQUEEZE), 0x4ade80, { count: 100, shake: 0.9 });
+      gatePulse(gates.squeeze);
+      const strip64 = hero;
+      const strip16 = makeStrip(V.mlpOut, { hue: 0.12 });
+      strip16.userData.cubes.forEach((m, i) => { m.userData.tx = m.position.x; });
+      await tween(700, k => {
+        strip64.userData.cubes.forEach((m, i) => {
+          const targetX = strip16.userData.cubes[Math.floor(i / 4)].userData.tx;
+          m.position.x += (targetX - m.position.x) * easeIn(k) * 0.4;
+          m.scale.multiplyScalar(1 - 0.5 * k * 0.1);
+          if (m.material) { m.material.transparent = true; m.material.opacity = 1 - k * 0.8; }
+        });
+      });
+      setHero(strip16, S.SQUEEZE);
+      strip16.userData.cubes.forEach(m => { m.scale.x = 0.2; m.scale.z = 0.2; });
+      await tween(500, k => {
+        strip16.userData.cubes.forEach(m => { m.scale.x = 0.2 + 0.8 * easeOut(k); m.scale.z = m.scale.x; });
+      });
+      await travel(S.SQUEEZE + 6, 500);
+    },
+    final() {
+      setHero(makeStrip(V.mlpOut, { hue: 0.12 }), S.SQUEEZE + 6);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(WIDE_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: '殘差回撞 2',
+    async play() {
+      hud('第十七關:殘差回撞 2', 'x + x_residual', '遠處的分身再度被召回:拉回主軌道正上方、變清晰,俯衝相撞 —— MLP 的思考結果疊加到原始資料上,白熱一閃,色調再偏移一階。一個 Transformer Block 到此走完。',
+        'x = [a + b for a, b in zip(x, x_residual)]');
+      setCam(DEFAULT_CAM);
+      await travel(S.JOIN2, 700);
+      await tween(500, k => {
+        ghostSide = GHOST_SIDE * (1 - k);
+        if (ghost) ghost.userData.cubes.forEach(m => { m.material.opacity = 0.22 + 0.16 * k; });
+        syncHero();
+      });
+      await tween(600, k => { ghostLift = GHOST_LIFT * (1 - easeIn(k)); syncHero(); });
+      impact(pathPos(S.JOIN2), 0xffffff, { count: 110, shake: 1.1 });
+      if (ghost) { disposeObj(ghost); ghost = null; }
+      await Promise.all([
+        tween(600, k => setStripValues(hero, V.afterRes2, k, 0.18), easeOut),
+        stripPulse(hero, 700)
+      ]);
+      setStripValues(hero, V.afterRes2, 1, 0.18);
+      await travel(S.JOIN2 + 10, 600);
+    },
+    final() { setHero(makeStrip(V.afterRes2, { hue: 0.18 }), S.JOIN2 + 10); ghost = null; buildSelfPod(); setCam(DEFAULT_CAM); }
+  },
+  /* 10 ─────────────────────────────── */
+  {
+    name: 'lm_head',
+    async play() {
+      hud('第十八關:lm_head 高牆', '16 維 → 27 個 logits', '旅程終點:方塊列越飛越亮、蓄滿能量,全速撞上一面有 27 個柱槽的高牆。16 維的能量灌進去,升起 27 根高低不一的柱子 —— 每根對應一個字母(a–z + 結束符),高度是「模型認為下一個字是它」的原始分數(logits)。',
+        "logits = linear(x, state_dict['lm_head'])");
+      await Promise.all([
+        travel(S.WALL - 4, 1400, easeIn),
+        tween(1400, k => {
+          if (hero) hero.userData.cubes.forEach(m => { m.material.emissiveIntensity = 0.25 + k * 1.0; });
+        }, easeIn)
+      ]);
+      impact(pathPos(S.WALL - 2), 0x7aa2ff, { count: 200, shake: 1.6, flash: 500 });
+      setHero(null);
+      setMidGatesVisible(false); // 中途關卡會擋在高牆視角前,先收起來
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 2, 0)));
+      buildBars(V.logits, 3.6, false);
+      await tween(1200, k => {
+        bars.children.forEach((b, i) => {
+          const kk = clamp(k * 2.2 - i * 0.045, 0, 1);
+          b.scale.y = Math.max(0.01, barH(V.logits[i], 3.6) * easeOut(kk));
+        });
+      }, k => k);
+      bars.children.forEach((b, i) => { b.scale.y = Math.max(0.15, barH(V.logits[i], 3.6)); });
+    },
+    final() {
+      setHero(null); ghost = null; buildSelfPod();
+      buildBars(V.logits, 3.6, true);
+      setMidGatesVisible(false);
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 2, 0)));
+    }
+  },
+  /* 11 ─────────────────────────────── */
+  {
+    name: 'Softmax',
+    async play() {
+      hud('第十九關:Softmax + 溫度', 'logits → 機率', '27 根柱子集體變形:先除以溫度 0.5(差距放大、分布變尖),再取指數、歸一化 —— 全部變成正數、總和為 1。現在每根柱子的高度就是「下一個字母是它」的機率。m 一枝獨秀:畢竟是 emma。',
+        'probs = softmax([l / temperature for l in logits])  # T=0.5');
+      wallLabel.visible = false; // 牆標籤換成本階段的說明
+      const tl = textSprite('softmax:logits ÷ 溫度 0.5 → 機率', { color: '#fbbf24', fs: 44 });
+      tl.position.copy(wallLabel.position);
+      tl.material.opacity = 0;
+      dynamicG.add(tl);
+      softmaxLabel = tl;
+      await tween(500, k => { tl.material.opacity = k; }, easeOut);
+      const probH = V.probs.map(p => p * 52);
+      await tween(1400, k => {
+        bars.children.forEach((b, i) => {
+          const h0 = Math.max(0.15, barH(V.logits[i], 3.6));
+          const h1 = Math.max(0.15, probH[i]);
+          b.scale.y = h0 + (h1 - h0) * k;
+          const c = new THREE.Color(i === 12 ? 0xf0abfc : 0x2dd4a7);
+          b.material.color.lerp(c, k * 0.9);
+          b.material.emissive.copy(b.material.color);
+        });
+      });
+      await wait(300); // 標籤留在場上,抽樣時仍能看到「這些是機率」
+    },
+    final() {
+      setHero(null); ghost = null; buildSelfPod();
+      buildBars(V.probs.map(p => p * 52), 1, true, true);
+      setMidGatesVisible(false);
+      wallLabel.visible = false;
+      const tl = textSprite('softmax:logits ÷ 溫度 0.5 → 機率', { color: '#fbbf24', fs: 44 });
+      tl.position.copy(wallLabel.position);
+      dynamicG.add(tl);
+      softmaxLabel = tl;
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 2, 0)));
+    }
+  },
+  /* 12 ─────────────────────────────── */
+  {
+    name: '抽樣與循環',
+    async play() {
+      hud('終章:抽樣 → 自迴歸循環', 'random.choices', '一顆球從天而降,落在依機率分寬的軌道上 —— 機率越大,格子越寬,越容易被滾進去。球滾進了 m 的格子:m 就是下一個字母!新的 m 方塊誕生,轉身飛回遠處的起點 —— 整條管線再跑一次。這就是自迴歸:一次生一個字,生生不息。',
+        'token_id = random.choices(range(vocab_size), weights=probs)[0]  # → m');
+      // 機率分寬軌道
+      const rulerW = 110, rulerY = -22, rulerZoff = -20;
+      const ruler = new THREE.Group();
+      let acc = 0;
+      V.probs.forEach((p, i) => {
+        const w = p * rulerW;
+        if (w < 0.35) { acc += w; return; }
+        const seg = new THREE.Mesh(
+          new THREE.BoxGeometry(Math.max(0.3, w - 0.3), 1.4, 7),
+          new THREE.MeshStandardMaterial({
+            color: i === 12 ? 0xf0abfc : (i % 2 ? 0x24406e : 0x1a2f52),
+            emissive: i === 12 ? 0xf0abfc : 0x101c36, emissiveIntensity: i === 12 ? 0.5 : 0.4
+          })
+        );
+        seg.position.x = rulerW / 2 - acc - w / 2; // 與 logits 柱同向:a→z 由左至右
+        seg.userData.i = i;
+        ruler.add(seg);
+        if (p > 0.04) {
+          const lb = textSprite(letters[i] || '∅', { color: i === 12 ? '#f0abfc' : '#93a4c8', fs: 38, bg: false });
+          lb.position.set(seg.position.x, -4, 0);
+          ruler.add(lb);
+        }
+        acc += w;
+      });
+      ruler.position.copy(wallCenter).addScaledVector(DIR, rulerZoff).add(new THREE.Vector3(0, rulerY + 14, 0));
+      dynamicG.add(ruler);
+      await tween(600, k => ruler.scale.set(easeOut(k), 1, 1));
+      // m 格中心 x
+      let mx = 0; acc = 0;
+      for (let i = 0; i < 27; i++) { const w = V.probs[i] * rulerW; if (i === 12) { mx = rulerW / 2 - acc - w / 2; break; } acc += w; }
+      // 球落下 → 彈跳 → 滾進 m
+      const ball = new THREE.Mesh(
+        new THREE.SphereGeometry(2.4, 24, 24),
+        new THREE.MeshStandardMaterial({ color: 0xfff7ed, emissive: 0xfbbf24, emissiveIntensity: 0.7, roughness: 0.2 })
+      );
+      const ballBase = ruler.position.clone();
+      ball.position.copy(ballBase).add(new THREE.Vector3(mx * 0.2, 46, 0));
+      dynamicG.add(ball);
+      await tween(900, k => {
+        const t = easeIn(k);
+        ball.position.y = ballBase.y + 46 - 46 * t + 3.2;
+        ball.position.x = ballBase.x + mx * 0.2 + (mx * 0.55 - mx * 0.2) * k;
+      });
+      impact(ball.position, 0xfbbf24, { count: 50, shake: 0.5 });
+      await tween(700, k => { // 一次小彈跳 + 滾到 m 中心
+        ball.position.y = ballBase.y + 3.2 + Math.abs(Math.sin(k * Math.PI)) * 12 * (1 - k);
+        ball.position.x = ballBase.x + mx * 0.55 + (mx - mx * 0.55) * k;
+        ball.rotation.z -= 0.15;
+      });
+      impact(ball.position, 0xf0abfc, { count: 90, shake: 0.8 });
+      // m 方塊誕生
+      const mCube = CUBE_M();
+      mCube.add(glowSprite(0xf472b6, 30));
+      mCube.position.copy(ball.position).add(new THREE.Vector3(0, 6, 0));
+      mCube.scale.setScalar(0.05);
+      dynamicG.add(mCube);
+      await tween(700, k => {
+        mCube.scale.setScalar(0.05 + 0.95 * easeOut(k));
+        mCube.position.y = ball.position.y + 6 + 10 * easeOut(k);
+        mCube.rotation.y = k * Math.PI * 2;
+      });
+      disposeObj(ball);
+      // 拉遠鏡頭,m 飛回起點
+      const loopLb = textSprite('m 成為下一個輸入 → 自迴歸循環', { color: '#f0abfc', fs: 52 });
+      loopLb.position.copy(pathPos(150)).add(new THREE.Vector3(115, 25, 0));
+      dynamicG.add(loopLb);
+      if (softmaxLabel) { disposeObj(softmaxLabel); softmaxLabel = null; }
+      wallLabel.visible = true;
+      setMidGatesVisible(true); // 拉遠看整條管線,恢復所有關卡
+      showAllLabels = true;     // 全景地圖模式:所有標籤一起亮
+      makeReturnArc();          // 自迴歸回程:從高牆繞回起點的虛線弧
+      setCam(FINALE_CAM, pathPos(150));
+      const p0 = mCube.position.clone();
+      const p1 = pathPos(S.START);
+      const mid = pathPos(150).add(new THREE.Vector3(165, 70, 0)); // 沿回程弧飛
+      await tween(3400, k => {
+        const a = new THREE.Vector3().lerpVectors(p0, mid, k);
+        const b = new THREE.Vector3().lerpVectors(mid, p1, k);
+        mCube.position.lerpVectors(a, b, k); // 二次貝茲曲線
+        mCube.rotation.y += 0.04;
+      }, easeIO);
+      impact(p1, 0xf472b6, { count: 60, shake: 0.3, flash: 150 });
+      setHero(mCube, S.START);
+      hud('一圈跑完', '', '按 R 重播整段旅程;按 ← 可回到任何一關的定格慢慢講。', '');
+    },
+    final() {
+      ghost = null; buildSelfPod();
+      buildBars(V.probs.map(p => p * 52), 1, true, true);
+      setMidGatesVisible(true);
+      showAllLabels = true;
+      wallLabel.visible = true;
+      makeReturnArc();
+      const m = CUBE_M();
+      m.add(glowSprite(0xf472b6, 30));
+      setHero(m, S.START);
+      const loopLb = textSprite('m 成為下一個輸入 → 自迴歸循環', { color: '#f0abfc', fs: 52 });
+      loopLb.position.copy(pathPos(150)).add(new THREE.Vector3(115, 25, 0));
+      dynamicG.add(loopLb);
+      setCam(FINALE_CAM, pathPos(150));
+    }
+  }
+];
+
+/* ---- 共用建構:Q/K/V 三條分身、自己的 K/V 記憶艙、logits/機率柱 ---- */
+function makeQKVStrips(scaleIn = 1) {
+  const mk = (vals, lift, tag, col) => {
+    const s = makeStrip(vals, { opacity: 0.95 });
+    tintByHeads(s);
+    const lb = textSprite(tag, { color: col, fs: 36, bg: false, onTop: true });
+    lb.position.set(-46, 4, 0);
+    s.add(lb);
+    s.userData.label = lb;
+    s.position.copy(pathPos(S.ATTN + 6));
+    s.position.y += lift;
+    s.scale.setScalar(scaleIn);
+    dynamicG.add(s);
+    return s;
+  };
+  return {
+    qs: mk(V.q, 14, 'Q(我在找什麼)', '#f9a8d4'),
+    ks: mk(V.k, 0, 'K(我是什麼)', '#c4b5fd'),
+    vs: mk(V.v, -14, 'V(我要給什麼)', '#93c5fd'),
+    beams: [], wlabels: []
+  };
+}
+// 單色上染(同一個頭的小段共用頭色,q/k/v 以亮度區分)
+function tintSolid(strip, colorHex, emiss = 0.4) {
+  const c = new THREE.Color(colorHex);
+  strip.userData.cubes.forEach(m => {
+    m.material.color.copy(c);
+    m.material.emissive.copy(c);
+    m.material.emissiveIntensity = emiss;
+  });
+}
+// 頭 h 的停泊位:頭 1 在主軌道,頭 2–4 在左側工作台
+function headHomePos(h) {
+  const base = pathPos(S.ATTN + 6);
+  if (h === 0) return base;
+  return base.add(new THREE.Vector3(-78, 38 - (h - 1) * 30, 0));
+}
+// 一個頭的工作組:q/k/v 三小條(各 4 塊),或算完後的單條輸出
+function makeHeadGroup(h, withOut = false) {
+  const grp = new THREE.Group();
+  const col = HEAD_COLORS[h];
+  if (withOut) {
+    const out = makeStrip(V.attnCat.slice(h * 4, h * 4 + 4), { cube: 2.6, pitch: 3.3, opacity: 0.98 });
+    tintSolid(out, col, 0.55);
+    grp.add(out);
+    grp.userData.out = out;
+  } else {
+    const mkPart = (arr, y, emiss, tag) => {
+      const s = makeStrip(arr.slice(h * 4, h * 4 + 4), { cube: 2.4, pitch: 3.1, opacity: 0.95 });
+      tintSolid(s, col, emiss);
+      s.position.y = y;
+      if (h === 0) {
+        const t = textSprite(tag, { color: colToCss(col), fs: 30, bg: false, onTop: true });
+        t.position.set(-11, 0, 0);
+        s.add(t);
+      }
+      grp.add(s);
+      return s;
+    };
+    grp.userData.q = mkPart(V.q, 6, 0.65, 'q');
+    grp.userData.k = mkPart(V.k, 0, 0.35, 'k');
+    grp.userData.v = mkPart(V.v, -6, 0.18, 'v');
+  }
+  const lb = textSprite(`頭 ${h + 1}`, { color: colToCss(col), fs: 30, bg: false, onTop: true });
+  lb.position.set(0, 13, 0);
+  grp.add(lb);
+  grp.userData.label = lb;
+  grp.position.copy(headHomePos(h));
+  if (h > 0) grp.scale.setScalar(0.85);
+  dynamicG.add(grp);
+  return grp;
+}
+// 頭算完:q/k/v 三小條換成單條輸出
+function swapHeadToOut(head, h) {
+  ['q', 'k', 'v'].forEach(key => {
+    const s = head.userData[key];
+    if (s) { head.remove(s); disposeObj(s); head.userData[key] = null; }
+  });
+  const out = makeStrip(V.attnCat.slice(h * 4, h * 4 + 4), { cube: 2.6, pitch: 3.3, opacity: 0.98 });
+  tintSolid(out, HEAD_COLORS[h], 0.55);
+  head.add(out);
+  head.userData.out = out;
+  return out;
+}
+function makeAttnBeams(fromPos, dim = false) {
+  const op = dim ? 0.22 : 0.55;
+  const b1 = makeBeam(fromPos.clone(), bosPod.position.clone(), V.attnW[0] * 2.6, 0xc084fc);
+  const b2 = makeBeam(fromPos.clone(), selfPod.position.clone(), V.attnW[1] * 2.6, 0xf0abfc);
+  b1.material.opacity = op; b2.material.opacity = op;
+  const w1 = textSprite('0.38', { color: '#c084fc', fs: 40 });
+  w1.position.lerpVectors(fromPos, bosPod.position, 0.42).add(new THREE.Vector3(0, 8, 0));
+  const w2 = textSprite('0.62', { color: '#f0abfc', fs: 40 });
+  w2.position.lerpVectors(fromPos, selfPod.position, 0.26).add(new THREE.Vector3(0, 10, 0));
+  dynamicG.add(w1, w2);
+  return { beams: [b1, b2], wlabels: [w1, w2] };
+}
+
+let selfPod = null;
+let softmaxLabel = null; // softmax 階段取代牆標籤的文字
+// 終章:自迴歸回程的虛線弧(從高牆繞回起點)
+function makeReturnArc() {
+  const curve = new THREE.QuadraticBezierCurve3(
+    pathPos(S.WALL - 20).add(new THREE.Vector3(40, 12, 0)),
+    pathPos(150).add(new THREE.Vector3(165, 70, 0)),
+    pathPos(S.START + 10)
+  );
+  const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(64));
+  const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
+    color: 0xf472b6, dashSize: 3, gapSize: 2.6, transparent: true, opacity: 0.65
+  }));
+  line.computeLineDistances();
+  dynamicG.add(line);
+  return line;
+}
+function buildSelfPod() {
+  if (selfPod) { // 冪等:重建定格時不疊加
+    const i = fadeLabels.findIndex(e => e.sprite === selfPod.userData.fadeLabel);
+    if (i >= 0) fadeLabels.splice(i, 1);
+    disposeObj(selfPod); selfPod = null;
+  }
+  const pod = new THREE.Group();
+  const k = makeStrip(V.k.slice(0, 4), { cube: 1.7, pitch: 2.2, opacity: 0.85 });
+  const v = makeStrip(V.v.slice(0, 4), { cube: 1.7, pitch: 2.2, opacity: 0.85 });
+  k.position.y = 2.2; v.position.y = -2.2;
+  pod.add(k, v);
+  const kT = textSprite('K', { fs: 26, color: '#c4b5fd', bg: false, onTop: true });
+  kT.position.set(-7.5, 2.2, 0);
+  const vT = textSprite('V', { fs: 26, color: '#93c5fd', bg: false, onTop: true });
+  vT.position.set(-7.5, -2.2, 0);
+  pod.add(kT, vT);
+  const lb = textSprite('e 的 K/V(存入記憶)', { color: '#f0abfc', fs: 40 });
+  lb.position.y = 9;
+  pod.add(lb);
+  pod.userData.fadeLabel = lb;
+  fadeLabels.push({ sprite: lb, s: S.ATTN + 8 });
+  pod.position.copy(pathPos(S.ATTN + 8)).add(new THREE.Vector3(52, 16, 0));
+  dynamicG.add(pod);
+  selfPod = pod;
+  return pod;
+}
+// 64 維中間層(可選擇已套用 ReLU 的定格狀態)
+function buildStrip64(reluApplied) {
+  const s = makeStrip(V.h64, { cube: 1.5, pitch: 2.02, hue: 0.12 });
+  if (reluApplied) {
+    s.userData.cubes.forEach((m, i) => {
+      if (V.h64[i] >= 0) return;
+      m.scale.y = 0.12;
+      m.material.color.set(0x475569);
+      m.material.emissive.copy(m.material.color);
+      m.material.emissiveIntensity = 0;
+    });
+  }
+  return s;
+}
+function barH(logit, k) { return Math.max(0.15, (logit + 2.6) * k); }
+function buildBars(vals, hScale, applyHeights, probMode = false) {
+  if (bars) { disposeObj(bars); bars = null; }
+  if (barLabels) { disposeObj(barLabels); barLabels = null; }
+  bars = new THREE.Group();
+  barLabels = new THREE.Group();
+  const origin = wallCenter.clone().addScaledVector(DIR, -14);
+  for (let i = 0; i < 27; i++) {
+    const geo = new THREE.BoxGeometry(3.1, 1, 3.1);
+    geo.translate(0, 0.5, 0);
+    const isM = i === 12;
+    const bar = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: probMode ? (isM ? 0xf0abfc : 0x2dd4a7) : (isM ? 0x93c5fd : 0x60a5fa),
+      emissive: probMode ? (isM ? 0xf0abfc : 0x2dd4a7) : 0x1e3a5f,
+      emissiveIntensity: isM ? 0.55 : 0.3,
+      roughness: 0.35, metalness: 0.3
+    }));
+    bar.position.set((13 - i) * 4.35, origin.y - 10, origin.z); // 螢幕上 a→z 由左至右
+    bar.scale.y = applyHeights ? Math.max(0.15, probMode ? vals[i] : barH(vals[i], hScale)) : 0.01;
+    bars.add(bar);
+    const lb = textSprite(letters[i] || '∅', { color: isM ? '#f0abfc' : '#7d90b8', fs: 34, bg: false });
+    lb.position.set(bar.position.x, bar.position.y - 3.4, bar.position.z);
+    barLabels.add(lb);
+  }
+  dynamicG.add(bars, barLabels);
+}
+
+/* ================= 導覽狀態機 ================= */
+function resetWorld() {
+  for (const b of bursts) { dynamicG.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); }
+  bursts.length = 0;
+  tweens.clear();
+  [...dynamicG.children].forEach(disposeObj);
+  hero = null; ghost = null; bars = null; barLabels = null; selfPod = null; attn = null;
+  heroS = S.START; heroLift = 0; ghostLift = 0; ghostSide = 0;
+  timeScale = 1; shakeAmp = 0; flashLight.intensity = 0;
+  showAllLabels = false;
+  softmaxLabel = null;
+  if (wallLabel) wallLabel.visible = true;
+  setMidGatesVisible(true);
+  Object.values(gates).forEach(g => g.userData.wire.scale.setScalar(1));
+}
+function rebuildTo(n) {
+  resetWorld();
+  for (let i = 0; i < n; i++) steps[i].final();
+  idx = n;
+  if (n === 0) {
+    $('info').classList.add('hidden');
+    setCam(DEFAULT_CAM);
+    camFocus.copy(pathPos(S.START));
+  } else {
+    const st = steps[n - 1];
+    hud(`定格:${st.name}`, `${n} / ${steps.length}`, '按空白鍵繼續,← 再往回。', '');
+  }
+  hudProgress();
+}
+async function next() {
+  if (playing) { timeScale = 6; $('fastfwd').classList.add('on'); return; }
+  if (idx >= steps.length) return;
+  $('intro').classList.add('hidden');
+  playing = true;
+  hudProgress();
+  try { await steps[idx].play(); } catch (e) { console.error(e); }
+  playing = false;
+  timeScale = 1;
+  $('fastfwd').classList.remove('on');
+  idx++;
+  hudProgress();
+}
+function prev() {
+  if (playing || idx <= 0) return;
+  rebuildTo(idx - 1);
+}
+
+addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowRight') { e.preventDefault(); next(); }
+  else if (e.code === 'ArrowLeft') prev();
+  else if (e.code === 'KeyR') { if (!playing) { rebuildTo(0); } }
+  else if (e.code === 'KeyF') {
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  }
+});
+addEventListener('pointerdown', () => next());
+
+// #n 直達某關定格
+{
+  const h = parseInt(location.hash.slice(1), 10);
+  if (h >= 1 && h <= steps.length) { $('intro').classList.add('hidden'); rebuildTo(h); }
+}
+
+/* ================= 主迴圈 ================= */
+const clock = new THREE.Clock();
+const tmpV = new THREE.Vector3();
+const tmpL = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  stepTweens(dt);
+  stepBursts(dt);
+
+  // 關卡待機動畫
+  gates.id.userData.wire.rotation.y += dt * 0.5;
+  gates.wte.userData.wire.rotation.y -= dt * 0.4;
+  gates.wpe.userData.wire.rotation.y += dt * 0.45;
+  gates.rms.userData.wire.rotation.z += dt * 0.3;
+  gates.attn.userData.wire.rotation.z -= dt * 0.25;
+  gates.mlp.userData.wire.rotation.z += dt * 0.25;
+  gates.squeeze.userData.wire.rotation.z -= dt * 0.25;
+  bosPod.position.y += Math.sin(t * 1.3) * 0.012;
+  bosPod.rotation.y = Math.sin(t * 0.6) * 0.15;
+
+  // 單一方塊待機自轉
+  if (hero && hero.userData.spinMesh) {
+    hero.userData.spinMesh.rotation.y += dt * 0.8;
+    hero.userData.spinMesh.rotation.x += dt * 0.3;
+  }
+
+  // 相機:跟拍 + 平滑 + 震動
+  const focusT = focusMode === 'hero' && hero ? hero.getWorldPosition(tmpV) : (focusMode === 'fixed' ? focusFixed : camFocus);
+  camFocus.lerp(focusT, 1 - Math.exp(-3 * dt));
+  camOff.lerp(camOffTarget, 1 - Math.exp(-2.2 * dt));
+  camera.position.copy(camFocus).add(camOff);
+  if (shakeAmp > 0.001) {
+    camera.position.x += (Math.random() - 0.5) * shakeAmp * 2;
+    camera.position.y += (Math.random() - 0.5) * shakeAmp * 2;
+    shakeAmp *= Math.exp(-5 * dt);
+  }
+  camera.lookAt(camFocus);
+
+  // 閃光衰減
+  flashLight.intensity *= Math.exp(-6 * dt);
+
+  // 關卡標籤:1) 離鏡頭太近淡出 2) 未來步驟的標籤在主角接近前不出現
+  for (const e of fadeLabels) {
+    const d = e.sprite.getWorldPosition(tmpL).distanceTo(camera.position);
+    const near = clamp((d - 46) / 30, 0, 1);
+    const ahead = e.s - heroS;
+    const win = showAllLabels ? 1 : clamp(1 - (ahead - 7) / 7, 0, 1);
+    // 走遠之後的舊關卡標籤也淡出,避免和當前步驟混淆
+    const winB = showAllLabels ? 1 : clamp(1 - (-ahead - 22) / 18, 0, 1);
+    e.sprite.material.opacity = near * win * winB;
+  }
+
+  renderer.render(scene, camera);
+});
+camFocus.copy(pathPos(S.START));
+</script>
+</body>
+</html>
