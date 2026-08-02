@@ -23,6 +23,16 @@ html{scroll-behavior:auto}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow-x:hidden}
 a{color:var(--c-bus)}
 
+/* ── 太空層（星空 / 速度線 / 粒子）── */
+#space{position:fixed;inset:0;z-index:5;pointer-events:none}
+#busWrap{position:relative;perspective:900px;perspective-origin:50% 30%}
+#ship{transform-style:preserve-3d;will-change:transform}
+#ship .val{transition:opacity .22s}
+#ship.warping .cell .val{opacity:0}
+#ship.warping{filter:blur(.6px)}
+#kvDock{position:absolute;right:0;top:100%;margin-top:40px;font-family:var(--mono);font-size:11px;
+  color:var(--c-kv);letter-spacing:.14em;opacity:0;transition:opacity .3s}
+
 /* ── 左側路線圖 rail ── */
 #rail{position:fixed;left:0;top:0;bottom:0;width:46px;z-index:30;display:flex;flex-direction:column;
   justify-content:center;gap:10px;align-items:center;border-right:1px solid var(--border);background:rgba(13,13,13,.7);backdrop-filter:blur(4px)}
@@ -184,6 +194,7 @@ a{color:var(--c-bus)}
 <body>
 
 <div id="rail" aria-hidden="true"></div>
+<canvas id="space" aria-hidden="true"></canvas>
 
 <div id="scrolly">
   <div id="graphic">
@@ -226,8 +237,11 @@ a{color:var(--c-bus)}
           <div id="busTitle"><span class="name" id="busName"></span><span id="busBadge"></span></div>
           <div id="embChip" style="opacity:0">wte 表・第 <b>12</b> 列 ↓</div>
           <div id="headsMerge" style="opacity:0"></div>
-          <div class="strip" id="strip"></div>
-          <div class="zeroline"></div>
+          <div id="ship">
+            <div class="strip" id="strip"></div>
+            <div class="zeroline"></div>
+          </div>
+          <div id="kvDock">▸ KV CACHE 停泊格</div>
           <div id="ghostWrap" style="opacity:0">
             <div id="ghostTitle"></div>
             <div class="strip mini" id="ghost"></div>
@@ -476,6 +490,110 @@ for (let i = 0; i < VOCAB; i++) {
 }
 const topCh = FLOW.top[0];
 
+/* ── 太空 FX 引擎：星空、速度線、粒子爆炸、光尾 ──
+   規則：位置類效果一律是 (scene, f, scrollY) 的純函數，可來回 scrub；
+   爆炸為 keyed 觸發（反向捲回會解除，重捲會重播），純裝飾不帶狀態。 */
+const spaceCv = document.getElementById('space'), sctx = spaceCv.getContext('2d');
+let DPR = 1;
+function sizeSpace(){ DPR = Math.min(2, devicePixelRatio || 1); spaceCv.width = innerWidth * DPR; spaceCv.height = innerHeight * DPR; }
+sizeSpace(); addEventListener('resize', sizeSpace);
+const world = { warp: 0, shipX: innerWidth/2, shipY: innerHeight*0.6, fires: new Map(), parts: [], streaks: [], conv: null, ring: null };
+const hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const STARS = Array.from({length: 210}, (_, i) => ({x: hash(i), y: hash(i + 500), z: 0.25 + (i % 3) / 3 * 0.75, tw: hash(i + 900)}));
+
+function fireBurst(key, x, y, color, n = 26, spread = 3.2) {
+  if (world.fires.has(key)) return;
+  world.fires.set(key, scrollY);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + hash(i) * 0.7, sp = (0.8 + hash(i + 40) * 1.6) * spread;
+    world.parts.push({x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, life: 1, color, sz: 1.5 + hash(i + 80) * 3});
+  }
+}
+function cleanFires() {
+  for (const [k, y] of world.fires) if (scrollY < y - 40) world.fires.delete(k);
+}
+
+function drawSpace() {
+  sctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  sctx.clearRect(0, 0, innerWidth, innerHeight);
+  const W = innerWidth, H = innerHeight, warp = reduced ? 0 : world.warp;
+  // 星空：scrollY 視差 + warp 拉成流線
+  for (const st of STARS) {
+    const x = ((st.x * W + scrollY * 0.06 * st.z) % W + W) % W;
+    const y = ((st.y * H + scrollY * 0.22 * st.z) % H + H) % H;
+    const a = (0.16 + st.z * 0.3) * (0.7 + 0.3 * Math.sin(st.tw * 40 + scrollY * 0.01));
+    sctx.strokeStyle = `rgba(195,205,225,${a.toFixed(3)})`;
+    sctx.lineWidth = st.z * 1.4;
+    sctx.beginPath(); sctx.moveTo(x, y);
+    sctx.lineTo(x, y - 2 - (st.z > 0.55 ? warp * 16 * st.z : 0)); sctx.stroke();
+  }
+  // 飛船後方速度線
+  if (warp > 0.05 && !reduced) {
+    for (let i = 0; i < 6; i++) {
+      const off = (hash(i + 33) - 0.5) * 300, len = 24 + warp * 90 * hash(i + 7);
+      const x = world.shipX + off, y0 = world.shipY + 30 + hash(i + 61) * 60;
+      sctx.strokeStyle = `rgba(57,135,229,${(warp * 0.3 * hash(i + 13)).toFixed(3)})`;
+      sctx.lineWidth = 1.2;
+      sctx.beginPath(); sctx.moveTo(x, y0); sctx.lineTo(x, y0 + len); sctx.stroke();
+    }
+  }
+  // 光尾（回歸中的 head、飛入中的融合體）
+  for (const s of world.streaks) {
+    const g = sctx.createLinearGradient(s.x - s.dx * 0.5, s.y - s.dy * 0.5, s.x, s.y);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, s.c);
+    sctx.strokeStyle = g; sctx.lineWidth = 2.4;
+    sctx.beginPath(); sctx.moveTo(s.x - s.dx * 0.5, s.y - s.dy * 0.5); sctx.lineTo(s.x, s.y); sctx.stroke();
+  }
+  // 物化收束（embedding：粒子凝聚成船）
+  if (world.conv && !reduced) {
+    const { t, rect } = world.conv;
+    for (let i = 0; i < 40; i++) {
+      const tx = rect.left + (i % 16 + 0.5) / 16 * rect.width, ty = rect.top + rect.height / 2;
+      const sx = tx + (hash(i) - 0.5) * 700 * (1 - t), sy = ty + (hash(i + 200) - 0.5) * 500 * (1 - t) - 120 * (1 - t);
+      sctx.fillStyle = `rgba(57,135,229,${(0.15 + 0.5 * t).toFixed(3)})`;
+      sctx.fillRect(sx, sy, 2.5, 2.5);
+    }
+  }
+  // 校準環（rmsnorm）
+  if (world.ring) {
+    const { t, rect } = world.ring;
+    const rx = rect.left + rect.width * t;
+    const g2 = sctx.createRadialGradient(rx, rect.top + rect.height / 2, 2, rx, rect.top + rect.height / 2, 70);
+    g2.addColorStop(0, 'rgba(57,135,229,.5)'); g2.addColorStop(1, 'rgba(57,135,229,0)');
+    sctx.fillStyle = g2;
+    sctx.fillRect(rx - 70, rect.top - 70, 140, rect.height + 140);
+    sctx.strokeStyle = 'rgba(120,180,255,.8)'; sctx.lineWidth = 2;
+    sctx.beginPath(); sctx.ellipse(rx, rect.top + rect.height / 2, 10, rect.height / 2 + 26, 0, 0, Math.PI * 2); sctx.stroke();
+  }
+  // 爆炸粒子
+  for (const p of world.parts) {
+    p.x += p.vx * 2.2; p.y += p.vy * 2.2; p.vy += 0.05; p.life -= 0.022;
+    sctx.fillStyle = p.color;
+    sctx.globalAlpha = Math.max(0, p.life);
+    sctx.fillRect(p.x, p.y, p.sz, p.sz);
+  }
+  sctx.globalAlpha = 1;
+  world.parts = world.parts.filter(p => p.life > 0);
+  requestAnimationFrame(drawSpace);
+}
+
+/* 飛船姿態：每站從遠方飛入（approach 0–0.3），停靠後數字銳化 */
+const shipEl = document.getElementById('ship');
+const kvDockEl = document.getElementById('kvDock');
+function applyShipPose(f, s) {
+  const a = ease(clamp01(f / 0.3));
+  let bump = 0;
+  if (s.ghost) { const t = (f - 0.4) / 0.16; if (t > 0 && t < 1) bump = Math.sin(t * Math.PI) * 10; }
+  const z = (1 - a) * -1050, y = (1 - a) * -170, rx = (1 - a) * 32;
+  const bank = (1 - a) * Math.sin(f * 14) * 2.5;
+  shipEl.style.transform = `translate3d(0,${(y + bump).toFixed(1)}px,${z.toFixed(0)}px) rotateX(${rx.toFixed(1)}deg) rotateZ(${bank.toFixed(2)}deg)`;
+  shipEl.classList.toggle('warping', a < 0.72 && !reduced);
+  world.warp = (1 - a) * 0.9;
+  const r = shipEl.getBoundingClientRect();
+  world.shipX = (r.left + r.right) / 2; world.shipY = (r.top + r.bottom) / 2;
+  return r;
+}
+
 /* ── 場景切換與渲染 ── */
 /* tokenize 場景 DOM */
 const vocabStripEl = document.getElementById('vocabStrip');
@@ -506,7 +624,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const lerp = (a, b, f) => a + (b - a) * f;
 const lerpV = (a, b, f) => a.map((v, i) => lerp(v, b[i], f));
-const ease = f => f < .5 ? 2 * f * f : 1 - (1 - f) * (1 - f) * 2 + (2 * f - 1); // smooth-ish
+const ease = f => f < .5 ? 2 * f * f : 1 - 2 * (1 - f) * (1 - f); // easeInOutQuad
 const clamp01 = v => Math.max(0, Math.min(1, v));
 
 function prevVec(i) {
@@ -536,6 +654,13 @@ function render() {
 
   for (const key in sceneEls) sceneEls[key].classList.toggle('show', key === s.scene);
   dots.forEach((d, i) => d.classList.toggle('on', i === active));
+  world.streaks = [];
+  cleanFires();
+  if (s.scene !== 'bus') {
+    world.warp = s.scene === 'finale' ? 0.6 : 0.05;
+    world.conv = null; world.ring = null;
+    shipEl.classList.remove('warping');
+  }
 
   if (s.scene === 'tok') {
     // 三段：字母現身 → 查字典 → 拿到 ID
@@ -545,12 +670,20 @@ function render() {
     vocabStripEl.style.opacity = String(clamp01((f - 0.25) * 4));
     tokIdEl.style.opacity = String(clamp01((f - 0.55) * 4));
     tokNote.style.opacity = String(clamp01((f - 0.7) * 4));
+    if (f > 0.55 && !reduced) {
+      const hc = vocabStripEl.children[M_ID].getBoundingClientRect();
+      fireBurst(`s${active}:hit`, hc.left + hc.width / 2, hc.top + hc.height / 2, NOW, 18, 2.2);
+    }
   }
   else if (s.scene === 'bus') {
+    const shipRect = applyShipPose(s.merge ? 1 : f, s); // 合併站：船已在場等待 head 回歸
+    const railC = {bus: BUS, attn: ATTN, mlp: MLPC, kv: KV, now: NOW, rand: RAND}[s.rail[0]] || BUS;
     const from = prevVec(active);
     // 逐格波浪 morph：由左至右一格一格滑向新值，變動中的格子發光
     const vec = [];
-    const fBase = s.merge ? clamp01((f - 0.55) / 0.45) : f; // 合併場景：等 head 落下才開始 morph
+    const fBase = s.merge ? clamp01((f - 0.62) / 0.38)      // 合併場景：等 head 落下才 morph
+               : s.ghost ? clamp01((f - 0.42) / 0.5)        // 融合場景：等撞擊才 morph
+               : clamp01((f - 0.3) / 0.7);                  // 一般：停靠後才 morph
     for (let i = 0; i < 16; i++) {
       const fi = clamp01(fBase * 1.55 - i * 0.035);
       vec.push(lerp(from[i], s.vec[i], fi));
@@ -560,46 +693,85 @@ function render() {
     paintCells(stripCells, vec, 0.6);
     busName.textContent = s.name;
     busBadge.textContent = s.badge || '';
+    // 一般站：轉換瞬間爆一次（融合/合併/物化站有自己的爆點）
+    if (f > 0.42 && !s.ghost && !s.merge && !s.reveal && from !== s.vec)
+      fireBurst(`s${active}:tx`, world.shipX, world.shipY - 12, railC, 22, 2.6);
+    world.ring = (s.id === 'norm' && f > 0.32 && f < 0.92 && !reduced) ? {t: (f - 0.32) / 0.6, rect: shipRect} : null;
     if (s.reveal) {
-      // tokenizer → embedding：id 牌現身，表格列由左至右「抄」出來
+      // tokenizer → embedding：粒子從四方凝聚成船，表格列由左至右「抄」出來
+      world.conv = (f < 0.6 && !reduced) ? {t: ease(clamp01(f / 0.6)), rect: shipRect} : null;
       embChipEl.style.opacity = String(clamp01(f * 3) * clamp01((0.9 - f) * 6));
       for (let i = 0; i < 16; i++) {
         const on = clamp01(f * 2.2 - i * 0.09);
         stripCells[i].el.style.opacity = String(0.06 + 0.94 * on);
         stripCells[i].el.style.transform = `translateY(${((1 - on) * -14).toFixed(1)}px)`;
       }
+      if (f > 0.6) fireBurst(`s${active}:born`, world.shipX, world.shipY, BUS, 26, 2.4);
     } else {
+      world.conv = null;
       embChipEl.style.opacity = '0';
       for (const c of stripCells) { c.el.style.opacity = ''; c.el.style.transform = ''; }
     }
     if (s.merge) {
-      // 四份 head 收穫：先分開站好，滑近、併攏，然後落進主條
-      const gather = clamp01(f / 0.55), drop = clamp01((f - 0.55) / 0.45);
-      headsMergeEl.style.opacity = String((1 - drop) * clamp01(f * 4 + 0.25));
+      // 算完的四份 head 從畫面四角帶光尾飛回，會合後轟一聲融進船身
+      const arrive = clamp01(f / 0.58), drop = clamp01((f - 0.62) / 0.38);
+      headsMergeEl.style.opacity = String((1 - drop) * clamp01(f * 6 + 0.1));
       headsMergeEl.style.transform = `translateY(${(drop * 26).toFixed(1)}px)`;
-      const gap = lerp(34, 2, ease(gather));
+      const CORNERS = [[-0.46, -0.34], [0.44, -0.4], [-0.5, 0.3], [0.48, 0.34]];
       hmGroups.forEach((g, h) => {
-        g.style.marginLeft = h === 0 ? '0' : gap + 'px';
-        g.querySelector('.hlab').style.opacity = String(1 - gather);
+        const eh = ease(clamp01(arrive * 1.45 - h * 0.12));
+        const dx = CORNERS[h][0] * innerWidth * (1 - eh), dy = CORNERS[h][1] * innerHeight * (1 - eh);
+        g.style.marginLeft = h === 0 ? '0' : lerp(30, 3, ease(clamp01((arrive - 0.65) / 0.35))) + 'px';
+        g.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px)`;
+        g.querySelector('.hlab').style.opacity = String(eh * (1 - drop));
+        if (eh > 0.02 && eh < 0.98) {
+          const r = g.getBoundingClientRect();
+          world.streaks.push({x: r.left + r.width / 2, y: r.top + r.height / 2, dx: -CORNERS[h][0] * 220, dy: -CORNERS[h][1] * 220, c: 'rgba(217,89,38,.5)'});
+        }
       });
-      // 主條在 head 併攏後才亮起，並從 x_attn 滑向 wo_out
+      if (f > 0.62) fireBurst(`s${active}:fuse`, world.shipX, world.shipY - 10, ATTN, 42, 3.6);
       document.getElementById('strip').style.opacity = String(0.12 + 0.88 * drop);
     } else {
       headsMergeEl.style.opacity = '0';
       document.getElementById('strip').style.opacity = '';
     }
     if (s.ghost) {
-      ghostWrap.style.opacity = String(clamp01(1.2 - f * 1.4));
-      ghostWrap.style.transform = `translateY(${(-f * 26).toFixed(1)}px)`;
+      // 外來向量 = 另一艘小船：從右上帶光尾俯衝、撞進主船，逐格炸開融合
+      const t = ease(clamp01(f / 0.42));
+      ghostWrap.style.opacity = String(clamp01(t * 2.5) * (1 - clamp01((f - 0.82) / 0.14)));
+      ghostWrap.style.transform = `translate(${((1 - t) * 46).toFixed(2)}vw, ${((1 - t) * -42).toFixed(2)}vh) rotate(${((1 - t) * -7).toFixed(1)}deg)`;
       ghostTitle.textContent = s.ghost.title;
       paintCells(ghostCells, s.ghost.vec, 0.6, KV, KV);
+      if (t > 0.05 && t < 0.95) {
+        const gr = ghostWrap.getBoundingClientRect();
+        world.streaks.push({x: gr.left + gr.width / 2, y: gr.top + 10, dx: -260, dy: 238, c: 'rgba(144,133,233,.5)'});
+      }
+      for (let qd = 0; qd < 4; qd++)
+        if (f > 0.44 + qd * 0.07)
+          fireBurst(`s${active}:g${qd}`, shipRect.left + shipRect.width * (qd + 0.5) / 4, shipRect.top + shipRect.height / 2, KV, 12, 2.2);
     } else ghostWrap.style.opacity = '0';
     if (s.qkv) {
-      qkvEl.style.opacity = String(clamp01(f * 1.6));
+      // 飛船拆下自己的一部分：q 衝出畫面去計算，k/v 滑進 KV cache 停泊格
+      qkvEl.style.opacity = String(clamp01(f * 1.8));
       paintCells(qCells, M.q, 0.6, ATTN, ATTN);
       paintCells(kCells, M.k, 0.6, KV, KV);
       paintCells(vCells, M.v, 0.6, KV, KV);
-    } else qkvEl.style.opacity = '0';
+      const rows = qkvEl.children;
+      const born = ease(clamp01((f - 0.1) / 0.3));   // 從船身剝離
+      const out = ease(clamp01((f - 0.55) / 0.4));   // 各奔前程
+      rows[0].style.transform = `translate(${(-out * 78).toFixed(2)}vw, ${((1 - born) * -22 - out * 160).toFixed(1)}px)`;
+      rows[0].style.opacity = String(1 - out * 0.92);
+      for (let ri = 1; ri < 3; ri++) rows[ri].style.transform = `translate(${(out * 8).toFixed(2)}vw, ${((1 - born) * -22).toFixed(1)}px)`;
+      kvDockEl.style.opacity = String(out);
+      if (out > 0.02 && out < 0.98) {
+        const r0 = rows[0].getBoundingClientRect();
+        world.streaks.push({x: r0.left + r0.width / 2, y: r0.top + r0.height / 2, dx: -240, dy: -70, c: 'rgba(217,89,38,.55)'});
+      }
+      if (f > 0.6) fireBurst(`s${active}:undock`, world.shipX, world.shipY, ATTN, 16, 2);
+    } else {
+      qkvEl.style.opacity = '0';
+      kvDockEl.style.opacity = '0';
+    }
   }
   else if (s.scene === 'attn') {
     headEls.forEach((el, h) => {
@@ -613,6 +785,10 @@ function render() {
   else if (s.scene === 'mlp') {
     const relu = clamp01((f - 0.55) / 0.35); // 後半段套 ReLU
     document.getElementById('mlpStage').textContent = relu > 0.5 ? 'ReLU：負值歸零' : 'fc1：64 個偵測器的反應';
+    if (relu > 0.4 && !reduced) {
+      const gr = mlpGridEl.getBoundingClientRect();
+      fireBurst(`s${active}:relu`, gr.left + gr.width / 2, gr.top + gr.height / 2, MLPC, 24, 3);
+    }
     for (let i = 0; i < 64; i++) {
       const pre = M.fc1_pre[i];
       const val = lerp(pre, M.fc1_relu[i], relu);
@@ -642,6 +818,13 @@ function render() {
       barEls[i].rect.setAttribute('fill', toProb > 0.6 && isTop ? RAND : BUS);
       barEls[i].text.setAttribute('fill', toProb > 0.6 && isTop ? RAND : getCss('--ink3'));
     }
+    if (s.mode === 'probs' && f > 0.6 && !reduced) {
+      const ti = TOKLBL.indexOf(topCh.ch);
+      if (ti >= 0) {
+        const br = barEls[ti].rect.getBoundingClientRect();
+        fireBurst(`s${active}:land`, br.left + br.width / 2, br.top, RAND, 30, 3);
+      }
+    }
     const w = document.getElementById('winner');
     if (s.mode === 'probs' && f > 0.55) {
       w.innerHTML = `<span class="ch">${topCh.ch === '<END>' ? '␃' : topCh.ch}</span>` +
@@ -668,6 +851,7 @@ for (const [c, t] of ROUTE) {
 }
 
 render();
+requestAnimationFrame(drawSpace);
 }
 </script>
 </body>
