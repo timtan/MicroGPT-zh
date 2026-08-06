@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MicroGPT — 一顆 token 的旅程：M 流過 4,192 個數字</title>
+<style>
+:root{
+  --bg:#0d0d0d; --panel:#1a1a19; --panel2:#222221;
+  --border:rgba(255,255,255,.10); --grid:#2c2c2a; --baseline:#383835;
+  --ink:#ffffff; --ink2:#c3c2b7; --ink3:#898781;
+  --c-bus:#3987e5;  /* 主幹 / 16 維向量 */
+  --c-attn:#d95926; /* Attention */
+  --c-mlp:#199e70;  /* MLP */
+  --c-now:#c98500;  /* 當前 token */
+  --c-kv:#9085e9;   /* KV cache */
+  --c-rand:#e66767; /* 隨機性（全場唯一） */
+  --sans:system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:auto}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow-x:hidden}
+a{color:var(--c-bus)}
+
+/* ── 太空層（星空 / 速度線 / 粒子）── */
+#space{position:fixed;inset:0;z-index:5;pointer-events:none}
+#busWrap{position:relative;perspective:900px;perspective-origin:50% 30%}
+#ship{transform-style:preserve-3d;will-change:transform}
+#ship .val{transition:opacity .22s}
+#ship.warping .cell .val{opacity:0}
+#ship.warping{filter:blur(.6px)}
+#kvDock{position:absolute;right:0;top:100%;margin-top:40px;font-family:var(--mono);font-size:11px;
+  color:var(--c-kv);letter-spacing:.14em;opacity:0;transition:opacity .3s}
+
+/* ── 左側路線圖 rail ── */
+#rail{position:fixed;left:0;top:0;bottom:0;width:46px;z-index:30;display:flex;flex-direction:column;
+  justify-content:center;gap:10px;align-items:center;border-right:1px solid var(--border);background:rgba(13,13,13,.7);backdrop-filter:blur(4px)}
+#rail .dot{width:8px;height:8px;border-radius:50%;background:var(--grid);position:relative;transition:background .25s,transform .25s}
+#rail .dot.on{transform:scale(1.5)}
+#rail .dot[data-c=bus].on{background:var(--c-bus)}
+#rail .dot[data-c=attn].on{background:var(--c-attn)}
+#rail .dot[data-c=mlp].on{background:var(--c-mlp)}
+#rail .dot[data-c=now].on{background:var(--c-now)}
+#rail .dot[data-c=rand].on{background:var(--c-rand)}
+#rail .dot .lbl{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink3);
+  white-space:nowrap;opacity:0;transition:opacity .25s;pointer-events:none;font-family:var(--mono)}
+#rail .dot.on .lbl{opacity:1;color:var(--ink2)}
+
+/* ── scrolly 主結構 ── */
+#scrolly{position:relative}
+#graphic{position:sticky;top:0;height:100vh;width:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#steps{position:relative;z-index:20;pointer-events:none}
+.step{min-height:105vh;display:flex;align-items:center;justify-content:flex-end;padding-right:44px}
+.step .card{pointer-events:auto;max-width:230px;background:rgba(20,20,19,.72);border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;padding:13px 15px;backdrop-filter:blur(6px)}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.kicker b{font-weight:600}
+.k-bus{color:var(--c-bus)} .k-attn{color:var(--c-attn)} .k-mlp{color:var(--c-mlp)}
+.k-now{color:var(--c-now)} .k-kv{color:var(--c-kv)} .k-rand{color:var(--c-rand)}
+.card h2{font-size:15px;font-weight:700;margin-bottom:6px;letter-spacing:.01em;color:var(--ink2)}
+.card p{font-size:12px;line-height:1.65;color:var(--ink3)}
+.card p b{color:var(--ink2)}
+.card p+p{margin-top:8px}
+.card code{font-family:var(--mono);font-size:12.5px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:5px;padding:1px 6px;color:var(--ink)}
+.card .num{font-family:var(--mono);color:var(--ink)}
+
+/* ── 視覺區內容 ── */
+.scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .35s}
+.scene.show{opacity:1}
+/* 圖形是主角：置中於扣掉右側文字卡（約 360px）後的區域 */
+.scene-inner{width:min(880px,64vw);margin-left:calc((100vw - min(880px,64vw) - 290px)/2)}
+@media (max-width:1100px){
+  .step{padding-right:24px}
+  .scene-inner{margin-left:4vw;width:90vw}
+  #graphic{opacity:.5}
+}
+
+/* hero */
+#hero .big{font-family:var(--mono);font-size:min(120px,12vw);font-weight:700;letter-spacing:.06em;display:flex;gap:.12em}
+#hero .big .tk{padding:.05em .12em;border-radius:.12em;border:2px solid transparent}
+#hero .big .tk.done{color:var(--c-kv);border-color:var(--c-kv);opacity:.85}
+#hero .big .tk.now{color:var(--c-now);border-color:var(--c-now);animation:pulse 1.6s ease-in-out infinite}
+#hero .big .tk.ghost{color:var(--ink3);opacity:.28}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(201,133,0,.0)}50%{box-shadow:0 0 26px 2px rgba(201,133,0,.35)}}
+#hero .sub{margin-top:22px;color:var(--ink2);font-size:15px;line-height:1.8}
+#hero .legend{margin-top:14px;display:flex;gap:18px;font-size:12.5px;font-family:var(--mono);color:var(--ink3)}
+#hero .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* tokenize：字母 → ID */
+#tokBox{width:100%;text-align:center}
+#tokGlyph{font-family:var(--mono);font-size:120px;font-weight:700;color:var(--c-now);line-height:1;transition:opacity .3s,transform .3s}
+#tokArrow{font-family:var(--mono);font-size:22px;color:var(--ink3);margin:18px 0;transition:opacity .3s}
+#vocabStrip{display:grid;grid-template-columns:repeat(27,1fr);gap:3px;margin:0 auto;max-width:820px;transition:opacity .3s}
+#vocabStrip .vc{border:1px solid var(--border);border-radius:5px;padding:7px 0 5px;font-family:var(--mono);font-size:12px;color:var(--ink3);background:var(--panel)}
+#vocabStrip .vc .vi{display:block;font-size:8.5px;color:var(--ink3);opacity:.7;margin-top:3px}
+#vocabStrip .vc.hit{color:#0d0d0d;background:var(--c-now);border-color:var(--c-now);font-weight:700}
+#vocabStrip .vc.hit .vi{color:#0d0d0d;opacity:.85}
+#tokId{font-family:var(--mono);font-size:26px;color:var(--ink);margin-top:22px;transition:opacity .3s}
+#tokId b{color:var(--c-now)}
+#tokNote{font-size:13px;color:var(--ink3);margin-top:10px;transition:opacity .3s}
+
+/* 16 維向量條（bus） */
+#busWrap{width:100%}
+#busTitle{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--ink3);margin-bottom:14px;
+  text-transform:uppercase;display:flex;justify-content:space-between;align-items:baseline}
+#busTitle .name{color:var(--ink);font-size:15px}
+#busTitle .name em{font-style:normal;color:var(--c-bus)}
+#busBadge{font-size:11px;color:var(--ink3)}
+.strip{display:grid;grid-template-columns:repeat(16,1fr);gap:5px}
+.cell{position:relative;border:1px solid var(--border);border-radius:7px;height:86px;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;overflow:hidden;background:var(--panel)}
+.cell .val{font-family:var(--mono);font-size:11.5px;color:var(--ink);z-index:2;padding-bottom:6px;font-variant-numeric:tabular-nums}
+.cell .bar{position:absolute;left:0;right:0;z-index:1}
+.cell .idx{position:absolute;top:4px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:9px;color:var(--ink3);z-index:2}
+.zeroline{height:1px;background:var(--baseline);margin:6px 0 0}
+#ghostWrap{margin-top:16px;transition:opacity .3s,transform .3s}
+#ghostTitle{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink3);margin-bottom:8px;text-transform:uppercase}
+.strip.mini .cell{height:44px;border-radius:5px}
+.strip.mini .cell .val{font-size:9.5px;padding-bottom:3px}
+
+/* Wo：四個 head 併成一條 */
+#headsMerge{display:flex;justify-content:center;margin-bottom:18px;transition:opacity .25s}
+#headsMerge .hg{display:grid;grid-template-columns:repeat(4,44px);gap:5px;position:relative;transition:margin .1s linear}
+#headsMerge .hg .hlab{position:absolute;top:-18px;left:0;right:0;text-align:center;font-family:var(--mono);
+  font-size:10px;color:var(--c-attn);transition:opacity .2s}
+/* embedding：從表格抄出來 */
+#embChip{font-family:var(--mono);font-size:13px;color:var(--c-now);margin-bottom:12px;transition:opacity .25s}
+#embChip b{font-size:16px}
+
+/* q/k/v 三條 */
+#qkv{margin-top:18px;display:grid;gap:10px;transition:opacity .3s}
+.qkvRow{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
+.qkvRow .tag{font-family:var(--mono);font-size:13px;text-align:right}
+
+/* attention 場景 */
+#attnBox{width:100%}
+.attnHead{display:grid;grid-template-columns:64px 1fr;gap:14px;margin-bottom:16px;align-items:center;
+  opacity:0;transform:translateY(10px);transition:opacity .4s,transform .4s}
+.attnHead.on{opacity:1;transform:none}
+.attnHead .hlabel{font-family:var(--mono);font-size:12px;color:var(--c-attn);text-align:right}
+.attnRowSet{display:grid;gap:6px}
+.aRow{display:grid;grid-template-columns:58px 1fr 120px;gap:10px;align-items:center;font-family:var(--mono);font-size:12px}
+.aRow .who{text-align:right;color:var(--c-kv)}
+.aRow.now .who{color:var(--c-now)}
+.aRow .track{height:14px;background:var(--panel2);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+.aRow .fill{height:100%;background:var(--c-attn);width:0%;border-radius:3px;transition:width .25s}
+.aRow.now .fill{background:var(--c-now)}
+.aRow .w{color:var(--ink2);font-variant-numeric:tabular-nums}
+#attnNote{margin-top:6px;font-size:12.5px;color:var(--ink3);font-family:var(--mono)}
+
+/* MLP 64 維網格 */
+#mlpBox{width:100%}
+#mlpGrid{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;margin-top:14px}
+.mcell{height:34px;border-radius:5px;border:1px solid var(--border);background:var(--panel);position:relative;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .3s}
+.mcell .mv{font-family:var(--mono);font-size:8.5px;color:var(--ink2);z-index:2;font-variant-numeric:tabular-nums}
+.mcell.dead{opacity:.18}
+.mcell .mfill{position:absolute;inset:0;background:var(--c-mlp);z-index:1}
+#mlpTitle{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--c-mlp);text-transform:uppercase;display:flex;justify-content:space-between}
+#mlpTitle .st{color:var(--ink3)}
+
+/* logits / probs 條 */
+#barsBox{width:100%}
+#barsTitle{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--ink3);margin-bottom:10px;text-transform:uppercase;
+  display:flex;justify-content:space-between}
+#barsSvg{width:100%;height:340px;display:block}
+#barsSvg text{font-family:var(--mono)}
+#winner{margin-top:14px;font-family:var(--mono);font-size:14px;color:var(--ink2);min-height:44px}
+#winner .ch{display:inline-block;font-size:30px;font-weight:700;color:var(--c-rand);padding:0 8px;
+  border:2px solid var(--c-rand);border-radius:8px;margin-right:10px;vertical-align:middle}
+
+/* finale */
+#finale .routes{display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:13px}
+#finale .routes .r{display:flex;align-items:center;gap:10px;color:var(--ink2)}
+#finale .routes .r i{width:10px;height:10px;border-radius:50%;display:inline-block}
+#finale h2{font-size:26px;margin-bottom:18px}
+#finale .foot{margin-top:22px;font-size:14px;color:var(--ink3)}
+
+/* 進度提示 */
+#hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:12px;
+  color:var(--ink3);z-index:40;letter-spacing:.15em;animation:bob 2s ease-in-out infinite;transition:opacity .5s}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}
+#hint.gone{opacity:0}
+#noData[hidden]{display:none}
+#noData{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:60;background:var(--bg);
+  color:var(--ink2);font-family:var(--mono);text-align:center;line-height:2}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important}
+}
+</style>
+</head>
+<body>
+
+<div id="rail" aria-hidden="true"></div>
+<canvas id="space" aria-hidden="true"></canvas>
+
+<div id="scrolly">
+  <div id="graphic">
+
+    <div class="scene" id="hero">
+      <div class="scene-inner">
+        <div class="big">
+          <span class="tk done">e</span><span class="tk now">m</span><span class="tk ghost">?</span><span class="tk ghost">?</span>
+        </div>
+        <div class="sub">
+          模型正在拼一個名字。<b style="color:var(--c-kv)">e</b> 已經走完流程、把線索存進了 KV cache；<br>
+          現在輪到 <b style="color:var(--c-now)">m</b> 進場。往下捲動，跟著它走完 MicroGPT 的一整趟。<br>
+          <span style="color:var(--ink3);font-size:13px">頁面上的每一個數字，都是真的從訓練好的 4,192 個參數算出來的。</span>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--c-bus)"></i>16 維向量</span>
+          <span><i style="background:var(--c-attn)"></i>Attention</span>
+          <span><i style="background:var(--c-mlp)"></i>MLP</span>
+          <span><i style="background:var(--c-kv)"></i>KV cache</span>
+          <span><i style="background:var(--c-rand)"></i>隨機性</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene" id="tokScene">
+      <div class="scene-inner">
+        <div id="tokBox">
+          <div id="tokGlyph">m</div>
+          <div id="tokArrow">↓ 查字典（26 個字母 + 結束符）</div>
+          <div id="vocabStrip"></div>
+          <div id="tokId"></div>
+          <div id="tokNote">模型從頭到尾只認得這個號碼，不認得字母本身</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene" id="busScene">
+      <div class="scene-inner">
+        <div id="busWrap">
+          <div id="busTitle"><span class="name" id="busName"></span><span id="busBadge"></span></div>
+          <div id="embChip" style="opacity:0">wte 表・第 <b>12</b> 列 ↓</div>
+          <div id="headsMerge" style="opacity:0"></div>
+          <div id="ship">
+            <div class="strip" id="strip"></div>
+            <div class="zeroline"></div>
+          </div>
+          <div id="kvDock">▸ KV CACHE 停泊格</div>
+          <div id="ghostWrap" style="opacity:0">
+            <div id="ghostTitle"></div>
+            <div class="strip mini" id="ghost"></div>
+          </div>
+          <div id="qkv" style="opacity:0">
+            <div class="qkvRow"><span class="tag" style="color:var(--c-attn)">q</span><div class="strip mini" id="qs"></div></div>
+            <div class="qkvRow"><span class="tag" style="color:var(--c-kv)">k</span><div class="strip mini" id="ks"></div></div>
+            <div class="qkvRow"><span class="tag" style="color:var(--c-kv)">v</span><div class="strip mini" id="vs"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene" id="attnScene">
+      <div class="scene-inner">
+        <div id="attnBox">
+          <div id="busTitle" style="margin-bottom:16px"><span class="name">m 的 <em style="color:var(--c-attn)">q</em>，逐一面試 cache 裡的 <em style="color:var(--c-kv)">k</em></span></div>
+          <div id="attnHeads"></div>
+          <div id="attnNote">權重 w 相加 = 1：每個 head 決定要「聽」哪個位置多一點</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene" id="mlpScene">
+      <div class="scene-inner">
+        <div id="mlpBox">
+          <div id="mlpTitle"><span>MLP：16 維 → 64 維</span><span class="st" id="mlpStage"></span></div>
+          <div id="mlpGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene" id="barsScene">
+      <div class="scene-inner">
+        <div id="barsBox">
+          <div id="barsTitle"><span id="barsName">lm_head → 27 個 logits</span><span id="barsBadge"></span></div>
+          <svg id="barsSvg" viewBox="0 0 880 340" preserveAspectRatio="none"></svg>
+          <div id="winner"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene" id="finale">
+      <div class="scene-inner">
+        <h2>這，就是一顆 token 的一生</h2>
+        <div class="routes" id="routeList"></div>
+        <div class="foot">
+          「e」先走過同一條路，把 k/v 留在 cache；「m」走的時候回頭讀了它——<br>
+          這就是 GPT 一次生一個字、卻記得前文的原因。<br><br>
+          想看程式碼逐行拆解 → <a href="slides.html">投影片版</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="steps"></div>
+</div>
+
+<div id="hint">▼ 往下捲動</div>
+<div id="noData" hidden>資料尚未注入。<br>請先執行 <code>uv run python scripts/dump_flow.py</code></div>
+
+<script>
+/*__FLOW_DATA_START__*/
+const FLOW = {"meta": {"context": "em", "labels": ["<BOS>", "e", "m"], "chars": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"], "token_labels": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "<END>"], "bos": 26, "checkpoint": "microgpt-en-1l-1000-seed42.pkl", "completed_steps": 1000, "n_embd": 16, "n_head": 4, "head_dim": 4, "temperature": 0.5}, "steps": [{"token_id": 26, "pos_id": 0, "tok_emb": [0.0468, -0.1421, -0.6656, -0.1026, -0.0418, 0.0298, -0.0329, -0.0768, -0.1314, 0.3481, 0.1105, -0.1031, -0.0445, -0.0371, 0.0478, 0.0581], "pos_emb": [-0.0576, -0.1757, -0.7257, -0.0125, 0.0215, -0.0939, -0.1664, 0.04, 0.0622, 0.3039, 0.049, 0.0136, -0.0244, -0.0106, -0.2555, -0.016], "x_sum": [-0.0107, -0.3178, -1.3913, -0.1152, -0.0203, -0.0641, -0.1993, -0.0368, -0.0692, 0.652, 0.1596, -0.0895, -0.0689, -0.0477, -0.2077, 0.0421], "x_norm0": [-0.0266, -0.7867, -3.444, -0.2851, -0.0503, -0.1587, -0.4934, -0.091, -0.1713, 1.614, 0.395, -0.2216, -0.1706, -0.1181, -0.5141, 0.1043], "ln1": [-0.0266, -0.7867, -3.4441, -0.2851, -0.0504, -0.1587, -0.4934, -0.091, -0.1713, 1.614, 0.395, -0.2216, -0.1706, -0.1181, -0.5141, 0.1043], "q": [-0.2752, 1.0538, 0.3216, -0.3966, 0.1326, -0.0617, 0.5266, -0.4655, -1.2356, -0.6248, 0.89, 0.5476, 0.1516, 0.3693, -1.6226, -0.9567], "k": [-0.0018, -0.3021, 0.7879, 0.3307, 0.0585, 0.2651, -0.8461, -0.0866, 0.2582, -0.701, -1.0561, 0.5566, 0.1338, 0.0621, 0.4493, -0.0068], "v": [-0.121, -0.0647, 0.0566, 0.1464, 0.0191, 0.1344, -0.0033, 0.06, -0.0381, 0.1498, -0.0943, 0.0388, 0.1696, -0.0351, -0.4289, 0.1221], "heads": [{"q_h": [-0.2752, 1.0538, 0.3216, -0.3966], "attn_logits": [-0.0978], "attn_weights": [1.0], "head_out": [-0.121, -0.0647, 0.0566, 0.1464]}, {"q_h": [0.1326, -0.0617, 0.5266, -0.4655], "attn_logits": [-0.2069], "attn_weights": [1.0], "head_out": [0.0191, 0.1344, -0.0033, 0.06]}, {"q_h": [-1.2356, -0.6248, 0.89, 0.5476], "attn_logits": [-0.2581], "attn_weights": [1.0], "head_out": [-0.0381, 0.1498, -0.0943, 0.0388]}, {"q_h": [0.1516, 0.3693, -1.6226, -0.9567], "attn_logits": [-0.3397], "attn_weights": [1.0], "head_out": [0.1696, -0.0351, -0.4289, 0.1221]}], "x_attn": [-0.121, -0.0647, 0.0566, 0.1464, 0.0191, 0.1344, -0.0033, 0.06, -0.0381, 0.1498, -0.0943, 0.0388, 0.1696, -0.0351, -0.4289, 0.1221], "wo_out": [0.0242, 0.0213, 0.0515, -0.0346, -0.0127, 0.0385, -0.0132, 0.0983, 0.0132, 0.2145, 0.0257, -0.0839, 0.0243, -0.0462, -0.1352, 0.0566], "resid1": [-0.0024, -0.7654, -3.3925, -0.3197, -0.0631, -0.1203, -0.5066, 0.0073, -0.1581, 1.8285, 0.4207, -0.3055, -0.1463, -0.1643, -0.6493, 0.1608], "ln2": [-0.0024, -0.7513, -3.3299, -0.3138, -0.0619, -0.118, -0.4972, 0.0072, -0.1552, 1.7947, 0.413, -0.2999, -0.1436, -0.1612, -0.6374, 0.1579], "fc1_pre": [-0.7971, -0.2313, -0.1816, -0.4473, -0.3635, -0.397, -0.1321, -1.0344, -0.2903, -0.0495, -0.5437, -1.0244, -0.2814, -1.1618, -0.6701, -0.7841, -0.2374, -0.3075, -0.2261, -0.4835, -0.4789, -0.7853, -1.1401, -1.0037, -0.2735, -0.7632, -0.8318, -0.1218, -0.4881, -0.4557, -0.7227, -0.1111, -0.9936, -0.3874, -0.783, -0.1965, -0.5185, -0.6322, -0.1388, -0.6101, -0.8608, -1.2434, -1.0253, -0.13, -1.1361, -0.9236, -0.5882, -0.1763, -0.3668, -1.1152, 0.1814, -0.6953, -1.0672, -0.4976, -0.0427, -0.0656, -0.1936, -0.1033, -0.5202, -1.0099, -0.2884, -0.1679, -0.4541, -0.0561], "fc1_relu": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1814, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "fc2": [-0.0012, 0.043, -0.0453, 0.0477, 0.0112, -0.002, 0.0562, 0.0344, -0.0473, -0.0724, -0.0311, -0.0057, 0.0031, 0.0085, -0.023, 0.0095], "resid2": [-0.0036, -0.7224, -3.4378, -0.2719, -0.0519, -0.1222, -0.4503, 0.0418, -0.2054, 1.756, 0.3896, -0.3113, -0.1432, -0.1557, -0.6724, 0.1703], "logits": [1.025, -0.5182, -0.035, 0.0223, 0.0082, -1.5035, -1.4213, -0.8433, -0.6859, 0.4611, 0.5588, 0.0095, 0.4387, -0.3463, -0.8835, -1.3946, -4.6428, -0.2768, 0.3226, -0.3446, -2.2053, -1.1774, -1.9637, -2.7166, -1.1075, -0.297, -2.5016], "probs": [0.1416, 0.0303, 0.0491, 0.052, 0.0512, 0.0113, 0.0123, 0.0219, 0.0256, 0.0806, 0.0889, 0.0513, 0.0788, 0.0359, 0.021, 0.0126, 0.0005, 0.0385, 0.0702, 0.036, 0.0056, 0.0157, 0.0071, 0.0034, 0.0168, 0.0378, 0.0042], "probs_t05": [0.3085, 0.0141, 0.037, 0.0415, 0.0404, 0.002, 0.0023, 0.0074, 0.0101, 0.0999, 0.1214, 0.0405, 0.0955, 0.0199, 0.0068, 0.0024, 0.0, 0.0228, 0.0757, 0.0199, 0.0005, 0.0038, 0.0008, 0.0002, 0.0043, 0.0219, 0.0003]}, {"token_id": 4, "pos_id": 1, "tok_emb": [-0.047, -0.3167, 0.2571, 0.0209, 0.0758, -0.2597, -0.2677, -0.248, 0.0504, 0.1233, 0.4045, -0.0585, 0.1663, -0.011, -0.4766, 0.0402], "pos_emb": [-0.0893, -0.0629, -0.3199, -0.0722, -0.1758, -0.0157, 0.2937, -0.0477, -0.3107, 0.1501, 0.0664, -0.349, 0.1434, -0.031, -0.0054, 0.0574], "x_sum": [-0.1364, -0.3797, -0.0628, -0.0513, -0.0999, -0.2755, 0.0261, -0.2957, -0.2602, 0.2735, 0.4708, -0.4075, 0.3097, -0.042, -0.482, 0.0976], "x_norm0": [-0.4952, -1.3788, -0.2281, -0.1861, -0.3629, -1.0003, 0.0946, -1.074, -0.945, 0.9931, 1.7097, -1.48, 1.1247, -0.1526, -1.7504, 0.3543], "ln1": [-0.4952, -1.3788, -0.2281, -0.1862, -0.363, -1.0003, 0.0946, -1.0741, -0.945, 0.9932, 1.7098, -1.4801, 1.1248, -0.1526, -1.7505, 0.3543], "q": [-0.1219, 0.7053, -0.2886, -0.1082, -0.5375, -0.5517, 2.0042, 0.0752, -1.1016, 0.9453, 1.8007, -0.529, -1.0142, 0.6265, -2.0244, -1.701], "k": [-0.2177, -0.7335, -0.6365, -0.7267, 0.8658, 0.8624, -0.4154, -0.5579, -0.1576, 0.3391, 0.0247, 0.1688, 0.9158, -0.9851, 1.8138, 1.2589], "v": [-0.7206, 0.3004, 0.6417, 0.975, 0.5304, 0.3816, 0.0014, 0.5398, 0.0032, 0.1727, -0.5361, 0.3358, 0.3558, -0.5734, 0.1601, 0.3693], "heads": [{"q_h": [-0.1219, 0.7053, -0.2886, -0.1082], "attn_logits": [-0.238, -0.1143], "attn_weights": [0.4691, 0.5309], "head_out": [-0.4393, 0.1291, 0.3673, 0.5863]}, {"q_h": [-0.5375, -0.5517, 2.0042, 0.0752], "attn_logits": [-0.94, -0.9079], "attn_weights": [0.492, 0.508], "head_out": [0.2789, 0.26, -0.0009, 0.3037]}, {"q_h": [-1.1016, 0.9453, 1.8007, -0.529], "attn_logits": [-1.5716, 0.2247], "attn_weights": [0.1423, 0.8577], "head_out": [-0.0027, 0.1695, -0.4732, 0.2936]}, {"q_h": [-1.0142, 0.6265, -2.0244, -1.701], "attn_logits": [-0.4975, -3.6797], "attn_weights": [0.9602, 0.0398], "head_out": [0.177, -0.0566, -0.4054, 0.1319]}], "x_attn": [-0.4393, 0.1291, 0.3673, 0.5863, 0.2789, 0.26, -0.0009, 0.3037, -0.0027, 0.1695, -0.4732, 0.2936, 0.177, -0.0566, -0.4054, 0.1319], "wo_out": [-0.1598, -0.0295, 0.1454, -0.1137, -0.0199, 0.0567, -0.1312, 0.065, 0.1412, 0.4331, 0.0283, 0.0405, -0.3693, 0.1446, -0.4636, 0.1892], "resid1": [-0.655, -1.4083, -0.0827, -0.2999, -0.3828, -0.9436, -0.0366, -1.009, -0.8038, 1.4262, 1.738, -1.4395, 0.7553, -0.0079, -2.214, 0.5435], "ln2": [-0.6157, -1.3238, -0.0778, -0.2819, -0.3599, -0.887, -0.0344, -0.9485, -0.7556, 1.3407, 1.6338, -1.3532, 0.7101, -0.0075, -2.0812, 0.5109], "fc1_pre": [-0.8414, -0.6093, -0.7846, -0.3453, -0.439, -0.7682, -1.2427, -0.3117, -0.7758, -0.4283, -0.9564, -1.8563, -0.3505, -1.4657, -0.5099, -1.2674, -0.5016, -0.6391, -1.419, -0.6264, -0.4958, -0.1812, -1.2839, -1.158, -1.1198, -1.0446, -1.5378, -0.4729, -0.3294, -0.8075, -0.977, -0.7333, -0.981, -0.0705, -0.6963, -0.2154, -1.0669, -0.4351, -0.2154, -0.5818, -1.2189, -0.9799, -0.5813, -1.2731, -1.206, -1.1582, -0.6259, -0.7469, -0.9927, -0.9979, -0.0813, -1.3853, -1.5421, -1.0926, -0.5157, -0.7003, -0.2328, -0.6166, -1.0452, -1.5467, -1.4772, -0.0408, -1.3654, -0.9438], "fc1_relu": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "fc2": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "resid2": [-0.655, -1.4083, -0.0827, -0.2999, -0.3828, -0.9436, -0.0366, -1.009, -0.8038, 1.4262, 1.738, -1.4395, 0.7553, -0.0079, -2.214, 0.5435], "logits": [0.43, -1.3013, -0.9047, 0.4147, -0.0806, -2.9857, -2.3021, -1.6727, -0.6714, -1.608, -0.106, 2.005, 0.4957, 1.1036, -0.6972, -2.9274, -6.9102, 1.1717, -0.0006, -1.4684, -2.2898, -0.6927, -2.5536, -2.3681, -0.2497, -0.6229, -1.0948], "probs": [0.0589, 0.0104, 0.0155, 0.058, 0.0353, 0.0019, 0.0038, 0.0072, 0.0196, 0.0077, 0.0344, 0.2844, 0.0629, 0.1155, 0.0191, 0.002, 0.0, 0.1236, 0.0383, 0.0088, 0.0039, 0.0192, 0.003, 0.0036, 0.0298, 0.0205, 0.0128], "probs_t05": [0.0272, 0.0009, 0.0019, 0.0264, 0.0098, 0.0, 0.0001, 0.0004, 0.003, 0.0005, 0.0093, 0.6351, 0.031, 0.1047, 0.0029, 0.0, 0.0, 0.12, 0.0115, 0.0006, 0.0001, 0.0029, 0.0001, 0.0001, 0.007, 0.0033, 0.0013]}, {"token_id": 12, "pos_id": 2, "tok_emb": [-0.1241, 0.2457, -0.0684, 0.136, -0.0799, 0.1542, 0.0159, 0.2043, -0.1799, -0.032, -0.3895, 0.1296, 0.122, 0.0744, -0.047, 0.1828], "pos_emb": [0.2247, 0.0931, -0.2786, -0.2171, -0.1233, -0.2623, 0.0989, 0.0548, -0.0657, 0.2532, -0.0076, -0.3207, 0.3767, 0.1311, -0.292, 0.0009], "x_sum": [0.1006, 0.3387, -0.347, -0.0811, -0.2031, -0.108, 0.1149, 0.2591, -0.2456, 0.2212, -0.3972, -0.1911, 0.4988, 0.2055, -0.3391, 0.1838], "x_norm0": [0.3787, 1.2754, -1.3067, -0.3054, -0.7649, -0.4068, 0.4325, 0.9756, -0.9248, 0.8329, -1.4955, -0.7194, 1.8781, 0.7738, -1.2766, 0.692], "ln1": [0.3787, 1.2754, -1.3068, -0.3054, -0.765, -0.4068, 0.4325, 0.9757, -0.9249, 0.833, -1.4956, -0.7195, 1.8782, 0.7739, -1.2767, 0.692], "q": [0.4838, 0.4188, -0.6209, 0.9812, -0.4378, -0.3663, 0.0803, 0.2534, -0.8698, 0.2459, 0.8756, 2.1372, 0.5588, 0.178, 0.6, -0.0335], "k": [-0.6422, 0.6065, 0.6546, -1.1594, 0.9531, 0.9696, -0.3584, -0.5996, 0.312, 1.2829, -0.3775, -1.9975, -0.3245, 0.2582, 0.7546, 0.5083], "v": [-0.1135, -0.3425, -0.5012, -0.1558, -0.1434, 0.478, 0.1249, -0.0113, -0.426, 0.1231, 0.2133, -0.6474, -0.3061, -0.4704, -0.1019, 0.0227], "heads": [{"q_h": [0.4838, 0.4188, -0.6209, 0.9812], "attn_logits": [-0.146, -0.3652, -0.8003], "attn_weights": [0.4305, 0.3458, 0.2238], "head_out": [-0.3266, -0.0006, 0.1341, 0.3653]}, {"q_h": [-0.4378, -0.3663, 0.0803, 0.2534], "attn_logits": [-0.1063, -0.4348, -0.4766], "attn_weights": [0.4148, 0.2987, 0.2865], "head_out": [0.1253, 0.3067, 0.0348, 0.1829]}, {"q_h": [-0.8698, 0.2459, 0.8756, 2.1372], "attn_logits": [-0.066, 0.3015, -2.2777], "attn_weights": [0.3916, 0.5655, 0.0429], "head_out": [-0.0314, 0.1616, -0.3309, 0.1774]}, {"q_h": [0.5588, 0.178, 0.6, -0.0335], "attn_logits": [0.1778, 0.6913, 0.1502], "attn_weights": [0.2744, 0.4586, 0.267], "head_out": [0.128, -0.3982, -0.0715, 0.2089]}], "x_attn": [-0.3266, -0.0006, 0.1341, 0.3653, 0.1253, 0.3067, 0.0348, 0.1829, -0.0314, 0.1616, -0.3309, 0.1774, 0.128, -0.3982, -0.0715, 0.2089], "wo_out": [-0.1183, 0.0831, 0.0471, -0.1297, 0.0847, 0.1167, -0.0491, 0.0495, 0.1199, 0.2741, 0.0633, 0.0756, -0.207, 0.0395, -0.2662, 0.1867], "resid1": [0.2604, 1.3585, -1.2596, -0.4351, -0.6803, -0.29, 0.3834, 1.0251, -0.8049, 1.107, -1.4322, -0.6439, 1.6711, 0.8133, -1.5428, 0.8787], "ln2": [0.2573, 1.3426, -1.2449, -0.43, -0.6723, -0.2867, 0.3789, 1.0132, -0.7955, 1.0941, -1.4155, -0.6364, 1.6516, 0.8038, -1.5249, 0.8684], "fc1_pre": [-0.8727, -0.6866, 0.4735, -0.9845, -0.3463, -0.8393, -0.4925, -0.628, -0.0588, -0.0823, -0.4155, -0.027, -0.3509, -0.1774, -0.692, -0.7881, 0.0878, -0.8726, -0.912, -0.7351, 0.5681, -2.1596, -0.8446, -0.7895, 0.0842, -0.5968, -0.3772, -0.9203, -0.1157, -1.0582, 0.0541, -0.2566, -1.3518, -1.1835, -0.8836, -1.6088, -0.2631, -1.1725, -0.1674, -0.2193, -0.1807, -1.0486, -0.7363, -0.8653, -0.8756, -0.5136, -1.3026, -1.2649, -0.8171, -1.0656, -1.8783, -0.7373, -0.1742, -0.3213, 0.0022, -0.8613, 1.3078, -0.6586, -0.6581, -1.0876, -0.4154, -0.4684, 0.7538, 0.1138], "fc1_relu": [0.0, 0.0, 0.4735, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0878, 0.0, 0.0, 0.0, 0.5681, 0.0, 0.0, 0.0, 0.0842, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0541, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0022, 0.0, 1.3078, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7538, 0.1138], "fc2": [-0.3692, 0.5913, 0.0366, 0.2062, -0.0672, -0.7288, 0.5835, 0.0574, -0.6492, -0.0007, -0.1357, 0.2755, 0.3151, -0.3094, -0.285, 0.1187], "resid2": [-0.1088, 1.9497, -1.223, -0.2289, -0.7475, -1.0189, 0.9669, 1.0826, -1.4541, 1.1063, -1.5679, -0.3684, 1.9861, 0.5039, -1.8279, 0.9974], "logits": [1.6205, -1.5987, -1.8215, -1.4679, 1.4529, -3.3708, -2.6085, -1.2909, 1.6332, -3.5867, -2.3789, -0.9057, -1.4719, -1.1524, 0.4261, -3.9389, -6.7591, 0.2413, -1.3353, -1.5533, -0.9083, -2.126, -3.0608, -4.0534, 0.7338, -1.1007, -0.8831], "probs": [0.2178, 0.0087, 0.007, 0.0099, 0.1842, 0.0015, 0.0032, 0.0118, 0.2206, 0.0012, 0.004, 0.0174, 0.0099, 0.0136, 0.066, 0.0008, 0.0, 0.0548, 0.0113, 0.0091, 0.0174, 0.0051, 0.002, 0.0007, 0.0897, 0.0143, 0.0178], "probs_t05": [0.3216, 0.0005, 0.0003, 0.0007, 0.2301, 0.0, 0.0001, 0.001, 0.3299, 0.0, 0.0001, 0.0021, 0.0007, 0.0013, 0.0295, 0.0, 0.0, 0.0204, 0.0009, 0.0006, 0.002, 0.0002, 0.0, 0.0, 0.0546, 0.0014, 0.0022]}], "kv_cache": [{"label": "<BOS>", "k": [-0.0018, -0.3021, 0.7879, 0.3307, 0.0585, 0.2651, -0.8461, -0.0866, 0.2582, -0.701, -1.0561, 0.5566, 0.1338, 0.0621, 0.4493, -0.0068], "v": [-0.121, -0.0647, 0.0566, 0.1464, 0.0191, 0.1344, -0.0033, 0.06, -0.0381, 0.1498, -0.0943, 0.0388, 0.1696, -0.0351, -0.4289, 0.1221], "k_heads": [[-0.0018, -0.3021, 0.7879, 0.3307], [0.0585, 0.2651, -0.8461, -0.0866], [0.2582, -0.701, -1.0561, 0.5566], [0.1338, 0.0621, 0.4493, -0.0068]], "v_heads": [[-0.121, -0.0647, 0.0566, 0.1464], [0.0191, 0.1344, -0.0033, 0.06], [-0.0381, 0.1498, -0.0943, 0.0388], [0.1696, -0.0351, -0.4289, 0.1221]]}, {"label": "e", "k": [-0.2177, -0.7335, -0.6365, -0.7267, 0.8658, 0.8624, -0.4154, -0.5579, -0.1576, 0.3391, 0.0247, 0.1688, 0.9158, -0.9851, 1.8138, 1.2589], "v": [-0.7206, 0.3004, 0.6417, 0.975, 0.5304, 0.3816, 0.0014, 0.5398, 0.0032, 0.1727, -0.5361, 0.3358, 0.3558, -0.5734, 0.1601, 0.3693], "k_heads": [[-0.2177, -0.7335, -0.6365, -0.7267], [0.8658, 0.8624, -0.4154, -0.5579], [-0.1576, 0.3391, 0.0247, 0.1688], [0.9158, -0.9851, 1.8138, 1.2589]], "v_heads": [[-0.7206, 0.3004, 0.6417, 0.975], [0.5304, 0.3816, 0.0014, 0.5398], [0.0032, 0.1727, -0.5361, 0.3358], [0.3558, -0.5734, 0.1601, 0.3693]]}, {"label": "m", "k": [-0.6422, 0.6065, 0.6546, -1.1594, 0.9531, 0.9696, -0.3584, -0.5996, 0.312, 1.2829, -0.3775, -1.9975, -0.3245, 0.2582, 0.7546, 0.5083], "v": [-0.1135, -0.3425, -0.5012, -0.1558, -0.1434, 0.478, 0.1249, -0.0113, -0.426, 0.1231, 0.2133, -0.6474, -0.3061, -0.4704, -0.1019, 0.0227], "k_heads": [[-0.6422, 0.6065, 0.6546, -1.1594], [0.9531, 0.9696, -0.3584, -0.5996], [0.312, 1.2829, -0.3775, -1.9975], [-0.3245, 0.2582, 0.7546, 0.5083]], "v_heads": [[-0.1135, -0.3425, -0.5012, -0.1558], [-0.1434, 0.478, 0.1249, -0.0113], [-0.426, 0.1231, 0.2133, -0.6474], [-0.3061, -0.4704, -0.1019, 0.0227]]}], "top": [{"ch": "i", "p": 0.3299, "p_raw": 0.2206}, {"ch": "a", "p": 0.3216, "p_raw": 0.2178}, {"ch": "e", "p": 0.2301, "p_raw": 0.1842}, {"ch": "y", "p": 0.0546, "p_raw": 0.0897}, {"ch": "o", "p": 0.0295, "p_raw": 0.066}, {"ch": "r", "p": 0.0204, "p_raw": 0.0548}, {"ch": "<END>", "p": 0.0022, "p_raw": 0.0178}, {"ch": "l", "p": 0.0021, "p_raw": 0.0174}]};
+/*__FLOW_DATA_END__*/
+</script>
+<script>
+'use strict';
+if (!FLOW) { document.getElementById('noData').hidden = false; }
+else { main(); }
+
+function main() {
+const M = FLOW.steps[2];           // 主角：token 'm'（pos 2）
+const E = FLOW.steps[1];
+const N_EMBD = FLOW.meta.n_embd, N_HEAD = FLOW.meta.n_head;
+const TOKLBL = FLOW.meta.token_labels;
+const POSLBL = FLOW.meta.labels;   // ['<BOS>','e','m']
+
+/* ── 場景腳本 ─────────────────────────────────────────────
+   每個 step 卡片對應一個場景；vec = 該場景結束時 bus 上的 16 維值。 */
+const SCENES = [
+  {id:'hero',  scene:'hero',  rail:['now','起點'],
+    kicker:['k-now','TOKEN "M" · 進場'], title:'一個字母，即將變成 16 個數字',
+    body:`<p>「m」進場。跟著它，看這串數字一路被改造。</p>`},
+  {id:'tok',   scene:'tok', rail:['now','變成 ID'],
+    kicker:['k-now','STATION 1 · TOKENIZER'], title:'先領號碼牌：m → 12',
+    body:`<p>字典 26 個字母＋結束符，「m」排第 <b>12</b> 格——從此模型只認得號碼 12。</p>`},
+  {id:'emb',   scene:'bus', reveal:true, vec:M.tok_emb, name:'wte[12] — token embedding', badge:'查表而來，還沒有任何上下文', rail:['bus','查表'],
+    kicker:['k-bus','STATION 2 · EMBEDDING'], title:'查表：領到出廠設定',
+    body:`<p>拿號碼 12 到 <code>wte</code> 表抄第 12 列。每個「m」領到的都是同一串。</p>`},
+  {id:'pos',   scene:'bus', vec:M.x_sum, ghost:{vec:M.pos_emb, title:'wpe[2] — 位置 2 的向量（幽靈條，正在併入）'}, name:'x = wte["m"] + wpe[2]', badge:'逐格相加：內容 + 位置', rail:['bus','加位置'],
+    kicker:['k-bus','STATION 3 · + POSITION'], title:'蓋章：你排在第 2 位',
+    body:`<p>位置 2 的向量逐格加進來——現在是「<b>排第 2 的</b> m」。</p>`},
+  {id:'norm',  scene:'bus', vec:M.x_norm0, name:'rmsnorm(x)', badge:'', rail:['bus','整隊'],
+    kicker:['k-bus','STATION 4 · RMSNORM'], title:'整隊：把音量轉到標準刻度',
+    body:`<p>整串等比例縮放到標準刻度；格子間的比例不變。</p>`},
+  {id:'qkv',   scene:'bus', vec:M.x_norm0, qkv:true, name:'x → q, k, v（三種分身）', badge:'m 的 k、v 同時存入 KV cache', rail:['kv','分身 q·k·v'],
+    kicker:['k-kv','STATION 5 · Q / K / V'], title:'一分為三：問題、名片、行李',
+    body:`<p>照三次鏡子：<b>q</b> 問題、<b>k</b> 名片、<b>v</b> 行李。k、v 存入 KV cache。</p>`},
+  {id:'attn',  scene:'attn', vec:M.x_attn, rail:['attn','Attention'],
+    kicker:['k-attn','STATION 6 · ATTENTION'], title:'回頭看：m 讀取 e 留下的線索',
+    body:`<p>m 拿 <b>q</b> 面試 BOS、e、自己——權重是真實算出的。<b>e 的資訊流進 m。</b></p>`},
+  {id:'wo',    scene:'bus', merge:true, vec:M.wo_out, name:'linear(x_attn, Wo)', badge:'四個 head 的收穫，混合成一條', rail:['attn','匯整'],
+    kicker:['k-attn','STATION 7 · 匯整'], title:'四份收穫，攪拌成一條',
+    body:`<p>4 個 head 各帶回 4 格：併攏、攪拌，落成一條 16 維。</p>`},
+  {id:'res1',  scene:'bus', vec:M.resid1, ghost:{vec:M.x_norm0, title:'residual — 進站前的自己（正在加回來）'}, name:'x = attention 輸出 + residual', badge:'原本的自己 + 新學到的', rail:['bus','殘差 +'],
+    kicker:['k-bus','STATION 8 · RESIDUAL'], title:'別忘了你是誰：加回原本的自己',
+    body:`<p>把進站前的自己加回來——學到的是<b>疊加</b>，不是取代。</p>`},
+  {id:'mlp1',  scene:'mlp', vec:M.resid1, rail:['mlp','MLP 爆開'],
+    kicker:['k-mlp','STATION 9 · MLP 16→64'], title:'爆開：16 維攤成 64 維',
+    body:`<p>攤上 64 維工作檯；ReLU 把負值歸零（暗掉的格子）。</p>`},
+  {id:'mlp2',  scene:'bus', vec:M.resid2, ghost:{vec:M.resid1, title:'residual — MLP 進站前的自己（正在加回來）'}, name:'x = MLP 輸出 + residual', badge:'第二次殘差疊加，主線完工', rail:['mlp','收回 + 殘差'],
+    kicker:['k-mlp','STATION 10 · MLP 64→16'], title:'收回 16 維，再疊一次自己',
+    body:`<p>壓回 16 維，再疊一次自己。主線完工。</p>`},
+  {id:'logits',scene:'bars', mode:'logits', rail:['bus','27 條跑道'],
+    kicker:['k-bus','STATION 11 · LM_HEAD'], title:'攤牌：對 27 個候選字打分數',
+    body:`<p>對 27 個候選字各打一個分數——還不是機率。</p>`},
+  {id:'probs', scene:'bars', mode:'probs', rail:['rand','機率與抽籤'],
+    kicker:['k-rand','STATION 12 · SOFTMAX + 抽籤'], title:'換算成機率，然後——擲骰子',
+    body:`<p>softmax 換算成機率（T=0.5），然後<b style="color:var(--c-rand)">抽一個</b>。</p>`},
+  {id:'fin',   scene:'finale', rail:['now','終點'],
+    kicker:['k-now','旅程結束'], title:'然後，一切重來',
+    body:`<p>新字接上「em」，從第一站重來——直到抽中結束符。</p>`},
+];
+
+/* ── 建 DOM ── */
+const stepsEl = document.getElementById('steps');
+for (const s of SCENES) {
+  const d = document.createElement('div');
+  d.className = 'step';
+  d.innerHTML = `<div class="card"><div class="kicker ${s.kicker[0]}"><b>${s.kicker[1]}</b></div><h2>${s.title}</h2>${s.body}</div>`;
+  stepsEl.appendChild(d);
+}
+const railEl = document.getElementById('rail');
+for (const s of SCENES) {
+  const d = document.createElement('div');
+  d.className = 'dot'; d.dataset.c = s.rail[0];
+  d.innerHTML = `<span class="lbl">${s.rail[1]}</span>`;
+  railEl.appendChild(d);
+}
+
+function mkCells(el, n, mini) {
+  el.innerHTML = '';
+  const cells = [];
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.innerHTML = (mini ? '' : `<span class="idx">${i}</span>`) + `<div class="bar"></div><span class="val"></span>`;
+    el.appendChild(c);
+    cells.push({bar: c.querySelector('.bar'), val: c.querySelector('.val'), el: c});
+  }
+  return cells;
+}
+const stripCells = mkCells(document.getElementById('strip'), 16, false);
+const ghostCells = mkCells(document.getElementById('ghost'), 16, true);
+const qCells = mkCells(document.getElementById('qs'), 16, true);
+const kCells = mkCells(document.getElementById('ks'), 16, true);
+const vCells = mkCells(document.getElementById('vs'), 16, true);
+
+const BUS = getCss('--c-bus'), ATTN = getCss('--c-attn'), NOW = getCss('--c-now'), KV = getCss('--c-kv'), MLPC = getCss('--c-mlp'), RAND = getCss('--c-rand');
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function paintCells(cells, vec, scale, posColor, negColor) {
+  const mx = Math.max(scale, ...vec.map(Math.abs));
+  for (let i = 0; i < cells.length; i++) {
+    const v = vec[i], a = Math.min(1, Math.abs(v) / mx);
+    const h = a * 46;
+    const c = cells[i];
+    c.val.textContent = v.toFixed(2);
+    c.bar.style.background = v >= 0 ? (posColor || BUS) : (negColor || ATTN);
+    c.bar.style.opacity = (0.25 + 0.65 * a).toFixed(2);
+    c.bar.style.bottom = '0'; c.bar.style.height = (18 + h) + 'px';
+  }
+}
+
+/* attention heads DOM（用 m 步驟的真實權重） */
+const attnHeadsEl = document.getElementById('attnHeads');
+const headEls = [];
+for (let h = 0; h < N_HEAD; h++) {
+  const hd = M.heads[h];
+  const box = document.createElement('div');
+  box.className = 'attnHead';
+  let rows = '';
+  for (let t = 0; t < hd.attn_weights.length; t++) {
+    const lbl = POSLBL[t] === '<BOS>' ? 'BOS' : POSLBL[t];
+    rows += `<div class="aRow ${t === 2 ? 'now' : ''}"><span class="who">${lbl}</span>
+      <div class="track"><div class="fill" data-w="${hd.attn_weights[t]}"></div></div>
+      <span class="w">w = ${hd.attn_weights[t].toFixed(3)}</span></div>`;
+  }
+  box.innerHTML = `<div class="hlabel">head ${h}<br><span style="color:var(--ink3);font-size:10px">q=[${hd.q_h.map(v=>v.toFixed(1)).join(', ')}]</span></div>
+    <div class="attnRowSet">${rows}</div>`;
+  attnHeadsEl.appendChild(box);
+  headEls.push(box);
+}
+
+/* Wo 四合一 overlay：4 組 × 4 小格（head_out 真實值） */
+const headsMergeEl = document.getElementById('headsMerge');
+const hmGroups = [], hmCells = [];
+for (let h = 0; h < N_HEAD; h++) {
+  const g = document.createElement('div');
+  g.className = 'hg';
+  g.innerHTML = `<span class="hlab">head ${h}</span>`;
+  headsMergeEl.appendChild(g);
+  hmGroups.push(g);
+  for (let j = 0; j < 4; j++) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.style.height = '44px'; c.style.borderRadius = '5px';
+    c.innerHTML = `<div class="bar"></div><span class="val" style="font-size:9.5px;padding-bottom:3px"></span>`;
+    g.appendChild(c);
+    hmCells.push({bar: c.querySelector('.bar'), val: c.querySelector('.val'), el: c});
+  }
+}
+paintCells(hmCells, M.x_attn, 0.6, ATTN, ATTN);
+const embChipEl = document.getElementById('embChip');
+
+/* MLP grid */
+const mlpGridEl = document.getElementById('mlpGrid');
+const mlpCells = [];
+for (let i = 0; i < 64; i++) {
+  const c = document.createElement('div');
+  c.className = 'mcell';
+  c.innerHTML = `<div class="mfill"></div><span class="mv"></span>`;
+  mlpGridEl.appendChild(c);
+  mlpCells.push({el: c, fill: c.querySelector('.mfill'), mv: c.querySelector('.mv')});
+}
+const mlpMax = Math.max(...M.fc1_pre.map(Math.abs));
+
+/* bars svg */
+const barsSvg = document.getElementById('barsSvg');
+const VOCAB = TOKLBL.length;
+const barW = 880 / VOCAB;
+const barEls = [];
+for (let i = 0; i < VOCAB; i++) {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  r.setAttribute('x', i * barW + 3); r.setAttribute('width', barW - 6);
+  r.setAttribute('rx', 3); r.setAttribute('fill', BUS);
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('x', i * barW + barW / 2); t.setAttribute('y', 334);
+  t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-size', '11'); t.setAttribute('fill', getCss('--ink3'));
+  t.textContent = TOKLBL[i] === '<END>' ? '␃' : TOKLBL[i];
+  g.appendChild(r); g.appendChild(t); barsSvg.appendChild(g);
+  barEls.push({rect: r, text: t});
+}
+const topCh = FLOW.top[0];
+
+/* ── 太空 FX 引擎：星空、速度線、粒子爆炸、光尾 ──
+   規則：位置類效果一律是 (scene, f, scrollY) 的純函數，可來回 scrub；
+   爆炸為 keyed 觸發（反向捲回會解除，重捲會重播），純裝飾不帶狀態。 */
+const spaceCv = document.getElementById('space'), sctx = spaceCv.getContext('2d');
+let DPR = 1;
+function sizeSpace(){ DPR = Math.min(2, devicePixelRatio || 1); spaceCv.width = innerWidth * DPR; spaceCv.height = innerHeight * DPR; }
+sizeSpace(); addEventListener('resize', sizeSpace);
+const world = { warp: 0, shipX: innerWidth/2, shipY: innerHeight*0.6, fires: new Map(), parts: [], streaks: [], conv: null, ring: null };
+const hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const STARS = Array.from({length: 210}, (_, i) => ({x: hash(i), y: hash(i + 500), z: 0.25 + (i % 3) / 3 * 0.75, tw: hash(i + 900)}));
+
+function fireBurst(key, x, y, color, n = 26, spread = 3.2) {
+  if (world.fires.has(key)) return;
+  world.fires.set(key, scrollY);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + hash(i) * 0.7, sp = (0.8 + hash(i + 40) * 1.6) * spread;
+    world.parts.push({x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, life: 1, color, sz: 1.5 + hash(i + 80) * 3});
+  }
+}
+function cleanFires() {
+  for (const [k, y] of world.fires) if (scrollY < y - 40) world.fires.delete(k);
+}
+
+function drawSpace() {
+  sctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  sctx.clearRect(0, 0, innerWidth, innerHeight);
+  const W = innerWidth, H = innerHeight, warp = reduced ? 0 : world.warp;
+  // 星空：scrollY 視差 + warp 拉成流線
+  for (const st of STARS) {
+    const x = ((st.x * W + scrollY * 0.06 * st.z) % W + W) % W;
+    const y = ((st.y * H + scrollY * 0.22 * st.z) % H + H) % H;
+    const a = (0.16 + st.z * 0.3) * (0.7 + 0.3 * Math.sin(st.tw * 40 + scrollY * 0.01));
+    sctx.strokeStyle = `rgba(195,205,225,${a.toFixed(3)})`;
+    sctx.lineWidth = st.z * 1.4;
+    sctx.beginPath(); sctx.moveTo(x, y);
+    sctx.lineTo(x, y - 2 - (st.z > 0.55 ? warp * 16 * st.z : 0)); sctx.stroke();
+  }
+  // 飛船後方速度線
+  if (warp > 0.05 && !reduced) {
+    for (let i = 0; i < 6; i++) {
+      const off = (hash(i + 33) - 0.5) * 300, len = 24 + warp * 90 * hash(i + 7);
+      const x = world.shipX + off, y0 = world.shipY + 30 + hash(i + 61) * 60;
+      sctx.strokeStyle = `rgba(57,135,229,${(warp * 0.3 * hash(i + 13)).toFixed(3)})`;
+      sctx.lineWidth = 1.2;
+      sctx.beginPath(); sctx.moveTo(x, y0); sctx.lineTo(x, y0 + len); sctx.stroke();
+    }
+  }
+  // 光尾（回歸中的 head、飛入中的融合體）
+  for (const s of world.streaks) {
+    const g = sctx.createLinearGradient(s.x - s.dx * 0.5, s.y - s.dy * 0.5, s.x, s.y);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, s.c);
+    sctx.strokeStyle = g; sctx.lineWidth = 2.4;
+    sctx.beginPath(); sctx.moveTo(s.x - s.dx * 0.5, s.y - s.dy * 0.5); sctx.lineTo(s.x, s.y); sctx.stroke();
+  }
+  // 物化收束（embedding：粒子凝聚成船）
+  if (world.conv && !reduced) {
+    const { t, rect } = world.conv;
+    for (let i = 0; i < 40; i++) {
+      const tx = rect.left + (i % 16 + 0.5) / 16 * rect.width, ty = rect.top + rect.height / 2;
+      const sx = tx + (hash(i) - 0.5) * 700 * (1 - t), sy = ty + (hash(i + 200) - 0.5) * 500 * (1 - t) - 120 * (1 - t);
+      sctx.fillStyle = `rgba(57,135,229,${(0.15 + 0.5 * t).toFixed(3)})`;
+      sctx.fillRect(sx, sy, 2.5, 2.5);
+    }
+  }
+  // 校準環（rmsnorm）
+  if (world.ring) {
+    const { t, rect } = world.ring;
+    const rx = rect.left + rect.width * t;
+    const g2 = sctx.createRadialGradient(rx, rect.top + rect.height / 2, 2, rx, rect.top + rect.height / 2, 70);
+    g2.addColorStop(0, 'rgba(57,135,229,.5)'); g2.addColorStop(1, 'rgba(57,135,229,0)');
+    sctx.fillStyle = g2;
+    sctx.fillRect(rx - 70, rect.top - 70, 140, rect.height + 140);
+    sctx.strokeStyle = 'rgba(120,180,255,.8)'; sctx.lineWidth = 2;
+    sctx.beginPath(); sctx.ellipse(rx, rect.top + rect.height / 2, 10, rect.height / 2 + 26, 0, 0, Math.PI * 2); sctx.stroke();
+  }
+  // 爆炸粒子
+  for (const p of world.parts) {
+    p.x += p.vx * 2.2; p.y += p.vy * 2.2; p.vy += 0.05; p.life -= 0.022;
+    sctx.fillStyle = p.color;
+    sctx.globalAlpha = Math.max(0, p.life);
+    sctx.fillRect(p.x, p.y, p.sz, p.sz);
+  }
+  sctx.globalAlpha = 1;
+  world.parts = world.parts.filter(p => p.life > 0);
+  requestAnimationFrame(drawSpace);
+}
+
+/* 飛船姿態：每站從遠方飛入（approach 0–0.3），停靠後數字銳化 */
+const shipEl = document.getElementById('ship');
+const kvDockEl = document.getElementById('kvDock');
+function applyShipPose(f, s) {
+  const a = ease(clamp01(f / 0.3));
+  let bump = 0;
+  if (s.ghost) { const t = (f - 0.4) / 0.16; if (t > 0 && t < 1) bump = Math.sin(t * Math.PI) * 10; }
+  const z = (1 - a) * -1050, y = (1 - a) * -170, rx = (1 - a) * 32;
+  const bank = (1 - a) * Math.sin(f * 14) * 2.5;
+  shipEl.style.transform = `translate3d(0,${(y + bump).toFixed(1)}px,${z.toFixed(0)}px) rotateX(${rx.toFixed(1)}deg) rotateZ(${bank.toFixed(2)}deg)`;
+  shipEl.classList.toggle('warping', a < 0.72 && !reduced);
+  world.warp = (1 - a) * 0.9;
+  const r = shipEl.getBoundingClientRect();
+  world.shipX = (r.left + r.right) / 2; world.shipY = (r.top + r.bottom) / 2;
+  return r;
+}
+
+/* ── 場景切換與渲染 ── */
+/* tokenize 場景 DOM */
+const vocabStripEl = document.getElementById('vocabStrip');
+const M_ID = M.token_id;
+for (let i = 0; i < TOKLBL.length; i++) {
+  const d = document.createElement('div');
+  d.className = 'vc' + (i === M_ID ? ' hit' : '');
+  d.innerHTML = `${TOKLBL[i] === '<END>' ? '␃' : TOKLBL[i]}<span class="vi">${i}</span>`;
+  vocabStripEl.appendChild(d);
+}
+document.getElementById('tokId').innerHTML = `"m" → token id = <b>${M_ID}</b>`;
+const tokGlyph = document.getElementById('tokGlyph'), tokArrow = document.getElementById('tokArrow'),
+      tokIdEl = document.getElementById('tokId'), tokNote = document.getElementById('tokNote');
+
+const sceneEls = {
+  hero: document.getElementById('hero'), bus: document.getElementById('busScene'),
+  tok: document.getElementById('tokScene'),
+  attn: document.getElementById('attnScene'), mlp: document.getElementById('mlpScene'),
+  bars: document.getElementById('barsScene'), finale: document.getElementById('finale'),
+};
+const busName = document.getElementById('busName'), busBadge = document.getElementById('busBadge');
+const ghostWrap = document.getElementById('ghostWrap'), ghostTitle = document.getElementById('ghostTitle');
+const qkvEl = document.getElementById('qkv');
+const dots = [...railEl.children];
+const stepEls = [...stepsEl.children];
+const hintEl = document.getElementById('hint');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const lerp = (a, b, f) => a + (b - a) * f;
+const lerpV = (a, b, f) => a.map((v, i) => lerp(v, b[i], f));
+const ease = f => f < .5 ? 2 * f * f : 1 - 2 * (1 - f) * (1 - f); // easeInOutQuad
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+function prevVec(i) {
+  for (let j = i - 1; j >= 0; j--) if (SCENES[j].vec) return SCENES[j].vec;
+  return SCENES[i].vec;
+}
+
+let ticking = false;
+addEventListener('scroll', () => {
+  if (!ticking) { ticking = true; requestAnimationFrame(() => { ticking = false; render(); }); }
+}, {passive: true});
+addEventListener('resize', render);
+
+function render() {
+  const vh = innerHeight;
+  // 每個 step 的子進度：卡片走過視窗中段的比例
+  let active = 0; const fs = [];
+  for (let i = 0; i < stepEls.length; i++) {
+    const r = stepEls[i].getBoundingClientRect();
+    const f = clamp01((vh * 0.82 - r.top) / (vh * 0.72));
+    fs.push(f);
+    if (f > 0.3) active = i;
+  }
+  const s = SCENES[active];
+  const f = reduced ? 1 : ease(clamp01((fs[active] - 0.3) / 0.7));
+  hintEl.classList.toggle('gone', scrollY > vh * .3);
+
+  for (const key in sceneEls) sceneEls[key].classList.toggle('show', key === s.scene);
+  dots.forEach((d, i) => d.classList.toggle('on', i === active));
+  world.streaks = [];
+  cleanFires();
+  if (s.scene !== 'bus') {
+    world.warp = s.scene === 'finale' ? 0.6 : 0.05;
+    world.conv = null; world.ring = null;
+    shipEl.classList.remove('warping');
+  }
+
+  if (s.scene === 'tok') {
+    // 三段：字母現身 → 查字典 → 拿到 ID
+    tokGlyph.style.opacity = '1';
+    tokGlyph.style.transform = `scale(${(1 - f * 0.25).toFixed(3)})`;
+    tokArrow.style.opacity = String(clamp01((f - 0.15) * 4));
+    vocabStripEl.style.opacity = String(clamp01((f - 0.25) * 4));
+    tokIdEl.style.opacity = String(clamp01((f - 0.55) * 4));
+    tokNote.style.opacity = String(clamp01((f - 0.7) * 4));
+    if (f > 0.55 && !reduced) {
+      const hc = vocabStripEl.children[M_ID].getBoundingClientRect();
+      fireBurst(`s${active}:hit`, hc.left + hc.width / 2, hc.top + hc.height / 2, NOW, 18, 2.2);
+    }
+  }
+  else if (s.scene === 'bus') {
+    const shipRect = applyShipPose(s.merge ? 1 : f, s); // 合併站：船已在場等待 head 回歸
+    const railC = {bus: BUS, attn: ATTN, mlp: MLPC, kv: KV, now: NOW, rand: RAND}[s.rail[0]] || BUS;
+    const from = prevVec(active);
+    // 逐格波浪 morph：由左至右一格一格滑向新值，變動中的格子發光
+    const vec = [];
+    const fBase = s.merge ? clamp01((f - 0.62) / 0.38)      // 合併場景：等 head 落下才 morph
+               : s.ghost ? clamp01((f - 0.42) / 0.5)        // 融合場景：等撞擊才 morph
+               : clamp01((f - 0.3) / 0.7);                  // 一般：停靠後才 morph
+    for (let i = 0; i < 16; i++) {
+      const fi = clamp01(fBase * 1.55 - i * 0.035);
+      vec.push(lerp(from[i], s.vec[i], fi));
+      const changing = fi > 0 && fi < 1 && Math.abs(s.vec[i] - from[i]) > 0.15;
+      stripCells[i].el.style.boxShadow = changing ? '0 0 14px rgba(57,135,229,.55), inset 0 0 0 1px rgba(57,135,229,.6)' : '';
+    }
+    paintCells(stripCells, vec, 0.6);
+    busName.textContent = s.name;
+    busBadge.textContent = s.badge || '';
+    // 一般站：轉換瞬間爆一次（融合/合併/物化站有自己的爆點）
+    if (f > 0.42 && !s.ghost && !s.merge && !s.reveal && from !== s.vec)
+      fireBurst(`s${active}:tx`, world.shipX, world.shipY - 12, railC, 22, 2.6);
+    world.ring = (s.id === 'norm' && f > 0.32 && f < 0.92 && !reduced) ? {t: (f - 0.32) / 0.6, rect: shipRect} : null;
+    if (s.reveal) {
+      // tokenizer → embedding：粒子從四方凝聚成船，表格列由左至右「抄」出來
+      world.conv = (f < 0.6 && !reduced) ? {t: ease(clamp01(f / 0.6)), rect: shipRect} : null;
+      embChipEl.style.opacity = String(clamp01(f * 3) * clamp01((0.9 - f) * 6));
+      for (let i = 0; i < 16; i++) {
+        const on = clamp01(f * 2.2 - i * 0.09);
+        stripCells[i].el.style.opacity = String(0.06 + 0.94 * on);
+        stripCells[i].el.style.transform = `translateY(${((1 - on) * -14).toFixed(1)}px)`;
+      }
+      if (f > 0.6) fireBurst(`s${active}:born`, world.shipX, world.shipY, BUS, 26, 2.4);
+    } else {
+      world.conv = null;
+      embChipEl.style.opacity = '0';
+      for (const c of stripCells) { c.el.style.opacity = ''; c.el.style.transform = ''; }
+    }
+    if (s.merge) {
+      // 算完的四份 head 從畫面四角帶光尾飛回，會合後轟一聲融進船身
+      const arrive = clamp01(f / 0.58), drop = clamp01((f - 0.62) / 0.38);
+      headsMergeEl.style.opacity = String((1 - drop) * clamp01(f * 6 + 0.1));
+      headsMergeEl.style.transform = `translateY(${(drop * 26).toFixed(1)}px)`;
+      const CORNERS = [[-0.46, -0.34], [0.44, -0.4], [-0.5, 0.3], [0.48, 0.34]];
+      hmGroups.forEach((g, h) => {
+        const eh = ease(clamp01(arrive * 1.45 - h * 0.12));
+        const dx = CORNERS[h][0] * innerWidth * (1 - eh), dy = CORNERS[h][1] * innerHeight * (1 - eh);
+        g.style.marginLeft = h === 0 ? '0' : lerp(30, 3, ease(clamp01((arrive - 0.65) / 0.35))) + 'px';
+        g.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px)`;
+        g.querySelector('.hlab').style.opacity = String(eh * (1 - drop));
+        if (eh > 0.02 && eh < 0.98) {
+          const r = g.getBoundingClientRect();
+          world.streaks.push({x: r.left + r.width / 2, y: r.top + r.height / 2, dx: -CORNERS[h][0] * 220, dy: -CORNERS[h][1] * 220, c: 'rgba(217,89,38,.5)'});
+        }
+      });
+      if (f > 0.62) fireBurst(`s${active}:fuse`, world.shipX, world.shipY - 10, ATTN, 42, 3.6);
+      document.getElementById('strip').style.opacity = String(0.12 + 0.88 * drop);
+    } else {
+      headsMergeEl.style.opacity = '0';
+      document.getElementById('strip').style.opacity = '';
+    }
+    if (s.ghost) {
+      // 外來向量 = 另一艘小船：從右上帶光尾俯衝、撞進主船，逐格炸開融合
+      const t = ease(clamp01(f / 0.42));
+      ghostWrap.style.opacity = String(clamp01(t * 2.5) * (1 - clamp01((f - 0.82) / 0.14)));
+      ghostWrap.style.transform = `translate(${((1 - t) * 46).toFixed(2)}vw, ${((1 - t) * -42).toFixed(2)}vh) rotate(${((1 - t) * -7).toFixed(1)}deg)`;
+      ghostTitle.textContent = s.ghost.title;
+      paintCells(ghostCells, s.ghost.vec, 0.6, KV, KV);
+      if (t > 0.05 && t < 0.95) {
+        const gr = ghostWrap.getBoundingClientRect();
+        world.streaks.push({x: gr.left + gr.width / 2, y: gr.top + 10, dx: -260, dy: 238, c: 'rgba(144,133,233,.5)'});
+      }
+      for (let qd = 0; qd < 4; qd++)
+        if (f > 0.44 + qd * 0.07)
+          fireBurst(`s${active}:g${qd}`, shipRect.left + shipRect.width * (qd + 0.5) / 4, shipRect.top + shipRect.height / 2, KV, 12, 2.2);
+    } else ghostWrap.style.opacity = '0';
+    if (s.qkv) {
+      // 飛船拆下自己的一部分：q 衝出畫面去計算，k/v 滑進 KV cache 停泊格
+      qkvEl.style.opacity = String(clamp01(f * 1.8));
+      paintCells(qCells, M.q, 0.6, ATTN, ATTN);
+      paintCells(kCells, M.k, 0.6, KV, KV);
+      paintCells(vCells, M.v, 0.6, KV, KV);
+      const rows = qkvEl.children;
+      const born = ease(clamp01((f - 0.1) / 0.3));   // 從船身剝離
+      const out = ease(clamp01((f - 0.55) / 0.4));   // 各奔前程
+      rows[0].style.transform = `translate(${(-out * 78).toFixed(2)}vw, ${((1 - born) * -22 - out * 160).toFixed(1)}px)`;
+      rows[0].style.opacity = String(1 - out * 0.92);
+      for (let ri = 1; ri < 3; ri++) rows[ri].style.transform = `translate(${(out * 8).toFixed(2)}vw, ${((1 - born) * -22).toFixed(1)}px)`;
+      kvDockEl.style.opacity = String(out);
+      if (out > 0.02 && out < 0.98) {
+        const r0 = rows[0].getBoundingClientRect();
+        world.streaks.push({x: r0.left + r0.width / 2, y: r0.top + r0.height / 2, dx: -240, dy: -70, c: 'rgba(217,89,38,.55)'});
+      }
+      if (f > 0.6) fireBurst(`s${active}:undock`, world.shipX, world.shipY, ATTN, 16, 2);
+    } else {
+      qkvEl.style.opacity = '0';
+      kvDockEl.style.opacity = '0';
+    }
+  }
+  else if (s.scene === 'attn') {
+    headEls.forEach((el, h) => {
+      const on = f > 0.12 + h * 0.16;
+      el.classList.toggle('on', on);
+      el.querySelectorAll('.fill').forEach(fill => {
+        fill.style.width = on ? (parseFloat(fill.dataset.w) * 100).toFixed(1) + '%' : '0%';
+      });
+    });
+  }
+  else if (s.scene === 'mlp') {
+    const relu = clamp01((f - 0.55) / 0.35); // 後半段套 ReLU
+    document.getElementById('mlpStage').textContent = relu > 0.5 ? 'ReLU：負值歸零' : 'fc1：64 個偵測器的反應';
+    if (relu > 0.4 && !reduced) {
+      const gr = mlpGridEl.getBoundingClientRect();
+      fireBurst(`s${active}:relu`, gr.left + gr.width / 2, gr.top + gr.height / 2, MLPC, 24, 3);
+    }
+    for (let i = 0; i < 64; i++) {
+      const pre = M.fc1_pre[i];
+      const val = lerp(pre, M.fc1_relu[i], relu);
+      const cell = mlpCells[i];
+      cell.mv.textContent = val.toFixed(1);
+      const a = Math.min(1, Math.abs(val) / mlpMax);
+      cell.fill.style.opacity = (a * 0.75).toFixed(2);
+      cell.fill.style.background = val >= 0 ? MLPC : ATTN;
+      cell.el.classList.toggle('dead', relu > 0.6 && pre <= 0);
+      cell.el.style.opacity = '';
+    }
+  }
+  else if (s.scene === 'bars') {
+    const logits = M.logits, probs = M.probs_t05;
+    const toProb = s.mode === 'probs' ? f : 0;
+    const lmin = Math.min(...logits), lmax = Math.max(...logits);
+    const pmax = Math.max(...probs);
+    document.getElementById('barsName').textContent = toProb > 0.5 ? 'softmax(logits / 0.5) → 機率' : 'lm_head → 27 個 logits';
+    document.getElementById('barsBadge').textContent = toProb > 0.5 ? '加總 = 1' : `範圍 ${lmin.toFixed(1)} … ${lmax.toFixed(1)}`;
+    for (let i = 0; i < VOCAB; i++) {
+      const hLogit = (logits[i] - lmin) / (lmax - lmin);
+      const hProb = probs[i] / pmax;
+      const hh = lerp(hLogit, hProb, toProb) * 300;
+      barEls[i].rect.setAttribute('y', 318 - hh);
+      barEls[i].rect.setAttribute('height', Math.max(1.5, hh));
+      const isTop = TOKLBL[i] === topCh.ch;
+      barEls[i].rect.setAttribute('fill', toProb > 0.6 && isTop ? RAND : BUS);
+      barEls[i].text.setAttribute('fill', toProb > 0.6 && isTop ? RAND : getCss('--ink3'));
+    }
+    if (s.mode === 'probs' && f > 0.6 && !reduced) {
+      const ti = TOKLBL.indexOf(topCh.ch);
+      if (ti >= 0) {
+        const br = barEls[ti].rect.getBoundingClientRect();
+        fireBurst(`s${active}:land`, br.left + br.width / 2, br.top, RAND, 30, 3);
+      }
+    }
+    const w = document.getElementById('winner');
+    if (s.mode === 'probs' && f > 0.55) {
+      w.innerHTML = `<span class="ch">${topCh.ch === '<END>' ? '␃' : topCh.ch}</span>` +
+        `「em」之後押注最大：機率 ${(topCh.p * 100).toFixed(1)}%　` +
+        `<span style="color:var(--ink3)">top-3： ${FLOW.top.slice(0, 3).map(e => `${e.ch === '<END>' ? '␃' : e.ch} ${(e.p * 100).toFixed(1)}%`).join(' ・ ')}</span>`;
+    } else w.innerHTML = '';
+  }
+}
+
+/* finale 路線回顧 */
+const routeList = document.getElementById('routeList');
+const ROUTE = [
+  ['--c-bus', '查表 wte，+位置 wpe，rmsnorm 整隊'],
+  ['--c-kv', '生出 q / k / v，k·v 存入 KV cache'],
+  ['--c-attn', 'Attention：回頭讀 e（與 BOS）的 v'],
+  ['--c-bus', '殘差：把原本的自己加回來（×2）'],
+  ['--c-mlp', 'MLP：爆開 64 維 → ReLU → 收回 16 維'],
+  ['--c-rand', 'lm_head 打分 → softmax → 抽籤'],
+];
+for (const [c, t] of ROUTE) {
+  const d = document.createElement('div'); d.className = 'r';
+  d.innerHTML = `<i style="background:var(${c})"></i>${t}`;
+  routeList.appendChild(d);
+}
+
+render();
+requestAnimationFrame(drawSpace);
+}
+</script>
+</body>
+</html>
