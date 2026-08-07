@@ -149,9 +149,10 @@ svg text{font-family:var(--sans)}
   <div class="fig">
     <svg viewBox="0 0 1180 560">
       <!-- 上半：迴圈 -->
+      <text x="120" y="34" class="td">本例採字元級 tokenizer：一個字母一個 token；BOS 標記序列開頭。</text>
       <rect x="120" y="60" width="260" height="70" class="tint-now"/>
       <text x="250" y="90" class="ts mid">已有的文字（context）</text>
-      <text x="250" y="115" class="tn mid">天 空 是</text>
+      <text x="250" y="115" class="tn mid">BOS e m</text>
       <path d="M380 95 H470" class="wire" marker-end="url(#ar-grey)"/>
       <rect x="474" y="48" width="220" height="94" class="tint-bus"/>
       <text x="584" y="90" class="th mid">模型走一遍</text>
@@ -159,7 +160,8 @@ svg text{font-family:var(--sans)}
       <path d="M694 95 H784" class="wire-bus" marker-end="url(#ar-bus)"/>
       <rect x="788" y="60" width="180" height="70" class="tint-now"/>
       <text x="878" y="90" class="ts mid">下一個 token</text>
-      <text x="878" y="116" class="tb mid" style="fill:var(--c-now)">藍</text>
+      <text x="878" y="116" class="tb mid" style="fill:var(--c-now)">m</text>
+      <text x="1112" y="116" class="td end">emma 的第 2 個 m</text>
       <path d="M878 130 V180 H250 V134" class="wire-now dash" marker-end="url(#ar-now)"/>
       <text x="564" y="172" class="td mid">接回 context，再走一遍</text>
 
@@ -169,21 +171,21 @@ svg text{font-family:var(--sans)}
 
       <g font-family="var(--mono)">
         <text x="150" y="308" class="td end">第 1 輪</text>
-        <text x="180" y="308" class="tn" style="font-size:17px">天 空 是</text>
+        <text x="180" y="308" class="tn" style="font-size:17px">BOS e m</text>
         <path d="M420 302 H480" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="496" y="308" class="tn" style="font-size:17px;fill:var(--c-now)">藍</text>
+        <text x="496" y="308" class="tn" style="font-size:17px;fill:var(--c-now)">m</text>
 
         <text x="150" y="358" class="td end">第 2 輪</text>
-        <text x="180" y="358" class="tn" style="font-size:17px">天 空 是 藍</text>
+        <text x="180" y="358" class="tn" style="font-size:17px">BOS e m m</text>
         <path d="M420 352 H480" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="496" y="358" class="tn" style="font-size:17px;fill:var(--c-now)">色</text>
+        <text x="496" y="358" class="tn" style="font-size:17px;fill:var(--c-now)">a</text>
 
         <text x="150" y="408" class="td end">第 3 輪</text>
-        <text x="180" y="408" class="tn" style="font-size:17px">天 空 是 藍 色</text>
+        <text x="180" y="408" class="tn" style="font-size:17px">BOS e m m a</text>
         <path d="M420 402 H480" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="496" y="408" class="tn" style="font-size:17px;fill:var(--c-now)">的</text>
+        <text x="496" y="408" class="tn" style="font-size:17px;fill:var(--c-now)">BOS</text>
 
-        <text x="180" y="452" class="td">⋮　直到產生結束符號，或達到長度上限</text>
+        <text x="180" y="452" class="td">BOS 再次出現＝「寫完了」，迴圈在此停止。</text>
       </g>
 
       <!-- 右下：白話框 -->
@@ -204,84 +206,128 @@ svg text{font-family:var(--sans)}
 <section class="slide std">
   <header>
     <h1><span class="figno">概念 2</span>推論的五個步驟</h1>
-    <span class="tagline">每一輪都完整走過這條線</span>
+    <span class="tagline">同一份資料，換五次形態</span>
   </header>
   <div class="fig">
     <svg viewBox="0 0 1180 560">
-      <!-- 主幹 -->
-      <text x="60" y="120" class="th">文字</text>
-      <text x="60" y="146" class="tn">「天空是」</text>
-      <path d="M170 130 H222" class="wire" marker-end="url(#ar-grey)"/>
+      <!-- ── A 帶：五個關卡 ── -->
+      <rect x="25" y="48" width="186" height="84" class="box"/>
+      <text x="118" y="76" class="td mid">① Tokenize</text>
+      <text x="118" y="100" class="ts mid">切成 token 編號</text>
+      <path d="M215 90 H255" class="wire" marker-end="url(#ar-grey)"/>
 
-      <rect x="226" y="86" width="150" height="88" class="box"/>
-      <text x="301" y="116" class="td mid">① Tokenize</text>
-      <text x="301" y="142" class="ts mid">切成 token</text>
-      <path d="M376 130 H428" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="261" y="48" width="186" height="84" class="tint-bus"/>
+      <text x="354" y="76" class="td mid" style="fill:var(--c-bus)">② Embedding</text>
+      <text x="354" y="100" class="ts mid">編號變向量</text>
+      <path d="M451 90 H491" class="wire-bus" marker-end="url(#ar-bus)"/>
 
-      <rect x="432" y="86" width="150" height="88" class="tint-bus"/>
-      <text x="507" y="116" class="td mid" style="fill:var(--c-bus)">② Embedding</text>
-      <text x="507" y="142" class="ts mid">編號變向量</text>
-      <path d="M582 130 H634" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="497" y="48" width="186" height="84" class="box"/>
+      <text x="590" y="72" class="td mid">③ Transformer ×N</text>
+      <text x="590" y="96" class="ts mid" style="fill:var(--c-attn)">Attention 只看前面</text>
+      <text x="590" y="118" class="ts mid" style="fill:var(--c-mlp)">MLP 加工</text>
+      <path d="M687 90 H727" class="wire-bus" marker-end="url(#ar-bus)"/>
 
-      <rect x="638" y="72" width="170" height="116" class="box"/>
-      <text x="723" y="102" class="td mid">③ Transformer ×N</text>
-      <text x="723" y="128" class="ts mid" style="fill:var(--c-attn)">Attention 看上下文</text>
-      <text x="723" y="152" class="ts mid" style="fill:var(--c-mlp)">MLP 加工</text>
-      <path d="M808 130 H860" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="733" y="48" width="186" height="84" class="tint-bus"/>
+      <text x="826" y="76" class="td mid" style="fill:var(--c-bus)">④ 打分（logits）</text>
+      <text x="826" y="100" class="ts mid">softmax 換成機率</text>
+      <path d="M923 90 H963" class="wire" marker-end="url(#ar-grey)"/>
 
-      <rect x="864" y="86" width="150" height="88" class="tint-bus"/>
-      <text x="939" y="116" class="td mid" style="fill:var(--c-bus)">④ 打分（logits）</text>
-      <text x="939" y="142" class="ts mid">softmax 換成機率</text>
-      <path d="M939 174 V216" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="969" y="48" width="186" height="84" class="tint-rand"/>
+      <text x="1062" y="76" class="td mid" style="fill:var(--c-rand)">⑤ 抽樣</text>
+      <text x="1062" y="100" class="ts mid">依機率選一個</text>
 
-      <rect x="864" y="220" width="150" height="88" class="tint-rand"/>
-      <text x="939" y="250" class="td mid" style="fill:var(--c-rand)">⑤ 抽樣</text>
-      <text x="939" y="276" class="ts mid">依機率選一個</text>
-      <path d="M864 264 H812" class="wire-now" marker-end="url(#ar-now)"/>
-      <text x="796" y="270" class="tb end" style="fill:var(--c-now)">「藍」</text>
+      <text x="590" y="156" class="ts mid">產生的 token 如何接回輸入，見概念 1。這頁只看「一輪之內」。</text>
 
-      <!-- 回饋 -->
-      <path d="M736 264 H100 V158" class="wire dash" marker-end="url(#ar-grey)"/>
-      <text x="420" y="256" class="td mid">新 token 併入文字，回到 ① 再走一輪（自回歸）</text>
+      <!-- ── B 帶：形態鏈（本頁主角）── -->
+      <text x="25" y="184" class="th">資料在各步驟之間的形態</text>
+      <text x="255" y="184" class="td">m 是字母表第 13 個字母，從 0 數起是 12；BOS 是開頭／結尾符號，編號 26。</text>
+      <text x="1155" y="184" class="td end" style="fill:var(--c-bus)">一柱＝一個 token 的向量，一格＝一個數字</text>
 
-      <!-- 資料形態列 -->
-      <text x="60" y="352" class="th">資料在各步驟之間的形態</text>
-      <g>
-        <text x="90" y="392" class="ts">文字</text>
-        <path d="M150 387 H196" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="210" y="392" class="ts">token 編號序列</text>
-        <path d="M328 387 H374" class="wire" marker-end="url(#ar-grey)"/>
-        <text x="388" y="392" class="ts" style="fill:var(--c-bus)">向量序列</text>
-        <path d="M462 387 H508" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="522" y="392" class="ts" style="fill:var(--c-bus)">帶上下文的向量</text>
-        <path d="M648 387 H694" class="wire-bus" marker-end="url(#ar-bus)"/>
-        <text x="708" y="392" class="ts">整個詞彙表的機率</text>
-        <path d="M852 387 H898" class="wire-rand" marker-end="url(#ar-rand)"/>
-        <text x="912" y="392" class="ts" style="fill:var(--c-now)">一個 token</text>
-      </g>
+      <!-- 欄 1：字元 -->
+      <text x="96" y="214" class="tb mid">字元</text>
+      <text x="96" y="234" class="td mid">人看得懂</text>
+      <rect x="34" y="276" width="48" height="28" class="box"/><text x="58" y="295" class="tn mid" style="fill:var(--ink3)">BOS</text>
+      <rect x="88" y="276" width="32" height="28" class="box"/><text x="104" y="295" class="tn mid" style="fill:var(--ink3)">e</text>
+      <rect x="126" y="276" width="32" height="28" class="tint-now"/><text x="142" y="295" class="tn mid" style="fill:var(--c-now)">m</text>
+      <path d="M172 290 H218" class="wire" marker-end="url(#ar-grey)"/>
 
-      <!-- 左下：① 實例 -->
-      <rect x="60" y="424" width="500" height="126" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-      <text x="84" y="458" class="tb">① 實例：文字 → 編號</text>
-      <text x="84" y="512" class="tn" style="font-size:15px">「天空是」</text>
-      <path d="M190 507 H236" class="wire" marker-end="url(#ar-grey)"/>
-      <rect x="246" y="492" width="44" height="26" class="box"/><text x="268" y="510" class="tn mid">天</text>
-      <rect x="296" y="492" width="44" height="26" class="box"/><text x="318" y="510" class="tn mid">空</text>
-      <rect x="346" y="492" width="44" height="26" class="box"/><text x="368" y="510" class="tn mid">是</text>
-      <path d="M396 505 H436" class="wire" marker-end="url(#ar-grey)"/>
-      <text x="448" y="510" class="td">1042 771 9</text>
+      <!-- 欄 2：編號 -->
+      <text x="294" y="214" class="tb mid">3 個編號</text>
+      <text x="294" y="234" class="td mid">整數序列</text>
+      <text x="254" y="295" class="tn mid" style="fill:var(--ink3)">26</text>
+      <text x="292" y="295" class="tn mid" style="fill:var(--ink3)">4</text>
+      <text x="328" y="295" class="tn mid" style="fill:var(--c-now)">12</text>
+      <path d="M370 290 H416" class="wire" marker-end="url(#ar-grey)"/>
 
-      <!-- 右下：⑤ 實例 -->
-      <rect x="600" y="424" width="520" height="126" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-      <rect x="600" y="436" width="4" height="102" class="f-rand"/>
-      <text x="624" y="458" class="tb">⑤ 實例：依機率轉一次輪盤</text>
-      <text x="1096" y="458" class="td end" style="fill:var(--c-rand)">全流程唯一的隨機</text>
-      <rect x="624" y="482" width="220" height="18" rx="4" class="bar-grey"/>
-      <rect x="624" y="482" width="101" height="18" rx="4" class="bar-rand" opacity=".85"/>
-      <path d="M706 474 V466" class="wire-rand"/>
-      <path d="M706 466 L701 474 L711 474 z" class="f-rand"/>
-      <text x="860" y="496" class="tb" style="fill:var(--c-now)">→「藍」</text>
-      <text x="624" y="534" class="td">溫度（temperature）調整分佈：低 → 分佈尖、輸出保守；高 → 分佈平、輸出多變。</text>
+      <!-- 欄 3：查表得到的向量 -->
+      <text x="492" y="214" class="tb mid" style="fill:var(--c-bus)">3 條向量</text>
+      <text x="492" y="234" class="td mid">還沒讀過任何字</text>
+      <rect x="439" y="252" width="26" height="18" class="tint-bus"/><rect x="439" y="273" width="26" height="18" class="tint-bus"/><rect x="439" y="294" width="26" height="18" class="tint-bus"/><rect x="439" y="315" width="26" height="18" class="tint-bus"/>
+      <rect x="479" y="252" width="26" height="18" class="tint-bus"/><rect x="479" y="273" width="26" height="18" class="tint-bus"/><rect x="479" y="294" width="26" height="18" class="tint-bus"/><rect x="479" y="315" width="26" height="18" class="tint-bus"/>
+      <rect x="519" y="252" width="26" height="18" class="tint-bus"/><rect x="519" y="273" width="26" height="18" class="tint-bus"/><rect x="519" y="294" width="26" height="18" class="tint-bus"/><rect x="519" y="315" width="26" height="18" class="tint-bus"/>
+      <rect x="515" y="248" width="34" height="89" rx="6" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
+      <text x="452" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">BOS</text>
+      <text x="492" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">e</text>
+      <text x="532" y="378" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
+      <path d="M568 290 H614" class="wire-bus" marker-end="url(#ar-bus)"/>
+
+      <!-- 欄 4：讀過前文的向量（形狀完全相同） -->
+      <text x="690" y="214" class="tb mid" style="fill:var(--c-bus)">3 條向量</text>
+      <text x="690" y="234" class="td mid">已讀過前面的字</text>
+      <rect x="637" y="252" width="26" height="18" class="tint-bus"/><rect x="637" y="273" width="26" height="18" class="tint-bus"/><rect x="637" y="294" width="26" height="18" class="tint-bus"/><rect x="637" y="315" width="26" height="18" class="tint-bus"/>
+      <rect x="677" y="252" width="26" height="18" class="tint-bus"/><rect x="677" y="273" width="26" height="18" class="tint-bus"/><rect x="677" y="294" width="26" height="18" class="tint-bus"/><rect x="677" y="315" width="26" height="18" class="tint-bus"/>
+      <rect x="717" y="252" width="26" height="18" class="tint-bus"/><rect x="717" y="273" width="26" height="18" class="tint-bus"/><rect x="717" y="294" width="26" height="18" class="tint-bus"/><rect x="717" y="315" width="26" height="18" class="tint-bus"/>
+      <rect x="713" y="248" width="34" height="89" rx="6" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
+      <path d="M650 338 Q680 368 707 346" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <path d="M688 340 Q698 362 706 354" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="650" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">BOS</text>
+      <text x="690" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">e</text>
+      <text x="730" y="378" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
+      <text x="800" y="313" class="td mid" style="fill:var(--c-now)">只取最後一條</text>
+      <path d="M752 291 H812" class="wire-now" marker-end="url(#ar-now)"/>
+
+      <!-- 欄 5：整個詞彙表的機率 -->
+      <text x="888" y="214" class="tb mid">1 組機率</text>
+      <text x="888" y="234" class="td mid">詞彙表 27 個</text>
+      <rect x="828" y="326" width="8" height="7" class="bar-grey"/>
+      <rect x="840" y="321" width="8" height="12" class="bar-grey"/>
+      <rect x="852" y="328" width="8" height="5" class="bar-grey"/>
+      <rect x="864" y="324" width="8" height="9" class="bar-grey"/>
+      <rect x="876" y="287" width="8" height="46" class="bar-rand"/>
+      <rect x="888" y="317" width="8" height="16" class="bar-grey"/>
+      <rect x="900" y="326" width="8" height="7" class="bar-grey"/>
+      <rect x="912" y="311" width="8" height="22" class="bar-grey"/>
+      <rect x="924" y="324" width="8" height="9" class="bar-grey"/>
+      <rect x="936" y="327" width="8" height="6" class="bar-grey"/>
+      <line x1="824" y1="333" x2="950" y2="333" class="axis"/>
+      <text x="880" y="350" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
+      <text x="1002" y="278" class="td mid" style="fill:var(--c-rand)">抽一次</text>
+      <path d="M958 290 H1046" class="wire-rand" marker-end="url(#ar-rand)"/>
+
+      <!-- 欄 6：一個 token -->
+      <text x="1086" y="214" class="tb mid" style="fill:var(--c-now)">1 個 token</text>
+      <text x="1086" y="234" class="td mid">人看得懂</text>
+      <rect x="1056" y="272" width="60" height="36" class="tint-now"/>
+      <text x="1086" y="296" class="tb mid" style="fill:var(--c-now)">m</text>
+      <text x="1086" y="330" class="td mid">本輪產生</text>
+      <text x="1086" y="350" class="td mid" style="fill:var(--c-now)">emma 的第 2 個 m</text>
+
+      <!-- ── C 帶：兩個重點 ── -->
+      <rect x="25" y="400" width="545" height="152" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="25" y="412" width="4" height="128" class="f-attn"/>
+      <text x="52" y="432" class="tb">③ 前後形狀完全沒變</text>
+      <text x="52" y="462" class="ts">3 條進、3 條出，每條長度也一樣——變的是內容：</text>
+      <text x="52" y="486" class="ts">m 這條，把 BOS 和 e 讀進來了。</text>
+      <text x="52" y="516" class="td">而且只看得到前面：還沒寫出來的字，它看不到。</text>
+      <text x="52" y="538" class="td" style="fill:var(--c-attn)">怎麼讀進來的？下一頁。</text>
+
+      <rect x="610" y="400" width="545" height="152" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="610" y="412" width="4" height="128" class="f-rand"/>
+      <text x="637" y="432" class="tb">④⑤ 一整串進去，一個 token 出來</text>
+      <text x="637" y="462" class="ts">只取最後一個位置（m）的向量去打分，得到一組機率，</text>
+      <text x="637" y="486" class="ts">抽樣後成為一個 token。</text>
+      <text x="637" y="516" class="td">溫度（temperature）：低 → 分佈尖、輸出保守；高 → 分佈平、輸出多變。</text>
+      <text x="637" y="538" class="td" style="fill:var(--c-rand)">全流程唯一的隨機，就在這一步。</text>
     </svg>
   </div>
 </section>
@@ -420,7 +466,7 @@ svg text{font-family:var(--sans)}
     <div class="sub">推論＝「五步驟走一遍、產生一個 token」× 重複到寫完</div>
     <div class="cards">
       <div class="card"><h3 style="color:var(--c-now)">自回歸</h3><p>一次只產生一個 token，輸出接回輸入；長文是同一流程的重複。</p></div>
-      <div class="card"><h3 style="color:var(--c-bus)">五個步驟</h3><p>切字、變向量、看上下文、打分、抽樣——每一輪都完整走過。</p></div>
+      <div class="card"><h3 style="color:var(--c-bus)">五個步驟</h3><p>切字、變向量、只看前面、打分、抽樣——每一輪都完整走過。</p></div>
       <div class="card"><h3 style="color:var(--c-rand)">唯一的隨機</h3><p>前四步是固定計算，結果不變；隨機只發生在最後的抽樣。</p></div>
     </div>
   </div>
@@ -445,10 +491,10 @@ svg text{font-family:var(--sans)}
       <text x="250" y="172" class="ts mid">任務：接續任何文字</text>
       <text x="660" y="172" class="ts mid">任務：學人名（如 emma）產生下一個字母</text>
       <line x1="455" y1="44" x2="455" y2="182" class="axis"/>
-      <text x="450" y="216" class="td mid">token 的單位可大可小：大型模型多以詞塊為 token，MicroGPT 直接以單一字元為 token。</text>
+      <text x="450" y="216" class="td mid">前面示範用的就是 MicroGPT 的字元級 tokenizer；大型模型多以詞塊為 token，單位更大，原理相同。</text>
       <text x="450" y="240" class="td mid">BOS（begin of sequence）標記序列開頭，讓模型知道「從頭開始產生」。</text>
     </svg>
-    <div class="hint">接下來的 3D 流程以字母「e」為主角，沿同一條管線逐關展示每個步驟。</div>
+    <div class="hint">接下來的 3D 流程換 emma 的第一個字母「e」當主角，沿同一條管線逐關展示每個步驟。</div>
   </div>
 </section>
 
