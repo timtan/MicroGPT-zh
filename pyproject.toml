@@ -3,7 +3,9 @@ name = "noble-dolphin"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "torch>=2.13.0",
+]
 
 [dependency-groups]
 dev = [
