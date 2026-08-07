@@ -46,6 +46,23 @@
             border-radius: 10px; padding: 7px 14px; color: #8fa2c9; font-size: 12.5px; line-height: 1.5; }
   #legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
                 vertical-align: -1px; margin: 0 4px 0 10px; }
+
+  @media (max-width: 640px) {
+    #intro h1 { font-size: 26px; letter-spacing: 1px; }
+    #intro p  { font-size: 14px; padding: 0 20px; }
+    #intro .keys { font-size: 12px; }
+
+    #info { left: 10px; right: 10px; bottom: 10px; max-width: none;
+            padding: 10px 12px; border-radius: 10px; }
+    #info .t { font-size: 15px; }
+    #info .t small { display: block; margin-left: 0; margin-top: 2px; }
+    #info .d { font-size: 12px; line-height: 1.5; margin-top: 4px; }
+    #info .c { font-size: 10.5px; padding: 5px 8px; }
+
+    #progress { right: 10px; bottom: auto; top: 10px; font-size: 11px; padding: 5px 12px; }
+    #fastfwd { right: 10px; bottom: auto; top: 42px; font-size: 11px; }
+    #legend { display: none !important; }
+  }
 </style>
 <script type="importmap">
   { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
@@ -767,7 +784,7 @@ const steps = [
   {
     name: '開場:字母 m',
     async play() {
-      hud('開場:一個字母', 'emma 已經寫到 em', '故事從中途開始:BOS 和 e 都已經跑完整條管線,它們的 K/V 就躺在右邊的 KV Cache 裡。現在遠處飛來的是第三個字元 m —— 它只是一個字元,模型完全看不懂。它要沿著 45° 軌道一路變形,直到變成「下一個字母的機率」。',
+      hud('開場:一個字母', 'emma 已經寫到 em', 'BOS 與 e 已完成整條管線,K/V 存於右側 KV Cache。第三個字元 m 沿 45° 軌道進入,將依序轉換為「下一個字母的機率」。',
         "doc = 'emma'  # 已處理:BOS, e;這一輪輪到 m");
       setCam(CLOSE_CAM);
       setHero(CUBE_M(), S.START);
@@ -779,7 +796,7 @@ const steps = [
   {
     name: 'ID 轉換',
     async play() {
-      hud('第一關:ID 轉換', 'tokenizer', '字母方塊撞上「ID 轉換」球體 —— m 是字母表第 13 個字(從 0 數起是 12),於是 m 變成了整數 12。模型的世界裡沒有文字,只有編號。',
+      hud('第一關:ID 轉換', 'tokenizer', 'm 是字母表第 13 個字元,索引為 12。經 ID 轉換,字母 m 對應為整數 12 —— 模型內部僅處理編號,不處理文字。',
         "tokens = [BOS] + [uchars.index(ch) for ch in doc]  # m → 12");
       await travel(S.ID, 800, easeIn);
       impact(pathPos(S.ID), OP_MOVE, { shake: 0.9 });
@@ -797,7 +814,7 @@ const steps = [
   {
     name: 'Embedding 查表',
     async play() {
-      hud('第二關:Embedding 查表', 'wte', 'ID 方塊撞上查表關卡:用 12 當索引,從 wte 表撈出第 12 列 —— 一排 16 個數字。一顆方塊炸開,重組成 16 個連續立方塊:高度與顏色就是每一維的數值。',
+      hud('第二關:Embedding 查表', 'wte', '以 12 為索引查詢 wte 表,取出第 12 列共 16 個數值。方塊展開為 16 個立方塊,高度與顏色對應各維度數值。',
         "tok_emb = state_dict['wte'][token_id]  # 16 維");
       setCam(DEFAULT_CAM);
       await travel(S.WTE, 900, easeIn);
@@ -824,7 +841,7 @@ const steps = [
   {
     name: '位置融合 wpe',
     async play() {
-      hud('第三關:+ 位置 Embedding', 'wpe', '前方出現「+ 位置 Embedding」關卡。從相似的角度,另一條 16 連方塊斜飛而來 —— 它是「位置 2」的 embedding(BOS 是 0、e 是 1、m 是 2),只知道「你是第幾個字」。兩條方塊列在關卡上相撞、逐元素相加:融合之後大小參差、胖瘦不一,色調也偏移了 —— 這已經是新的資料。',
+      hud('第三關:+ 位置 Embedding', 'wpe', '位置 2 的 embedding(BOS 為 0、e 為 1、m 為 2)與 token embedding 逐元素相加。數值分布因此改變,色調隨之偏移。',
         'x = [t + p for t, p in zip(tok_emb, pos_emb)]');
       const posStrip = makeStrip(V.pos, { opacity: 0.92, hue: 0.12 });
       const lb = textSprite('位置 2 的 embedding(wpe)', { color: '#e879f9', fs: 40 });
@@ -867,7 +884,7 @@ const steps = [
   {
     name: 'RMSNorm',
     async play() {
-      hud('第四關:RMSNorm', '尺度校正', '高塔般參差的方塊列穿過 RMSNorm 圓環 —— 撞擊波從左掃到右,把每一維除以整體的均方根,誇張的高低起伏被壓回相近的大小,整條隊伍重新變得整齊。',
+      hud('第四關:RMSNorm', '尺度校正', '方塊列通過 RMSNorm:每一維除以整體均方根,數值範圍被壓縮到相近大小。',
         'x = rmsnorm(x)  # xi * (mean(x²)+1e-5)^-0.5');
       await travel(S.RMS, 1100, easeIn);
       impact(pathPos(S.RMS), OP_PURE, { count: 90, shake: 0.7 });
@@ -893,7 +910,7 @@ const steps = [
   {
     name: '殘差分岔',
     async play() {
-      hud('第五關:殘差分岔', 'residual', '進 Attention 之前,方塊列複製出一條半透明分身,飄到左上遠處的旁觀位 —— 這就是殘差連接:先留一份原始資料,等 Attention 算完再拉回來加上去。本體接著輕輕滑過一顆小 rmsnorm 珠:注意,方塊完全沒變 —— 剛剛才正規化過,再做一次前向等於沒做;程式仍寫了這行,因為上一關那次 rmsnorm 讓「存入殘差的就是正規化後的值」,訓練時的梯度需要這個安排。',
+      hud('第五關:殘差分岔', 'residual', '進入 Attention 前,方塊列複製一份半透明分身留存,即殘差連接:原始資料保留,待 Attention 完成後相加。本體接著通過第二個 rmsnorm——數值已正規化過,此次前向不改變數值,但此步驟對訓練時的梯度計算是必要的。',
         'x_residual = x\nx = rmsnorm(x)  # 前向此刻不變,為梯度而存在');
       ghost = makeGhost(hero);
       ghostLift = 0; ghostSide = 0;
@@ -923,7 +940,7 @@ const steps = [
   {
     name: 'Attention:分裂 Q/K/V',
     async play() {
-      hud('第六關:Attention — 分裂 Q/K/V', '4 頭注意力', '穿過金環,方塊列分裂成三條分身:Q(我在找什麼)、K(我是什麼)、V(我要給什麼),各染成 4 段顏色 —— 4 個注意力頭,每頭負責 4 維。金色代表這裡動用了訓練出來的知識:Q、K、V 是被 wq、wk、wv 三個學出來的矩陣乘出來的,768 個參數。',
+      hud('第六關:Attention — 分裂 Q/K/V', '4 頭注意力', '通過金環,方塊列分裂為三條:Q(查詢)、K(鍵)、V(值),各染 4 段顏色,對應 4 個注意力頭、每頭 4 維。Q、K、V 由訓練出的 wq、wk、wv 三個矩陣運算得出,共 768 個參數。',
         'q = linear(x, attn_wq)\nk = linear(x, attn_wk)\nv = linear(x, attn_wv)');
       setCam(WIDE_CAM);
       await travel(S.ATTN, 1300, easeIn);
@@ -947,7 +964,7 @@ const steps = [
   {
     name: 'K/V 存入記憶',
     async play() {
-      hud('第七關:K/V 存入記憶', 'KV cache', '這一格算出的 K 和 V 整條送進右側的 KV Cache,填進 BOS、e 下面那個空槽 —— 中央只留下 Q。BOS 和 e 那兩格是前兩輪算好就存著的,這一輪完全不用重算;之後每個頭要用的 K/V,都從這個櫃子裡查。',
+      hud('第七關:K/V 存入記憶', 'KV cache', 'K 與 V 存入右側 KV Cache 的空槽,中央僅保留 Q。BOS、e 兩格的 K/V 為前兩輪已存好的結果,本輪不需重算;後續各頭皆直接查表取用。',
         'keys[li].append(k)\nvalues[li].append(v)  # 櫃子從 2 格變 3 格');
       // 大標籤先淡出,免得跟著整條飛進櫃子
       const labels = [attn.ks.userData.label, attn.vs.userData.label].filter(Boolean);
@@ -985,7 +1002,7 @@ const steps = [
   {
     name: '切成 4 個頭',
     async play() {
-      hud('第八關:切成 4 個頭', 'multi-head', 'Q 裂成 4 段,每段 4 維,分給 4 個頭。留下頭 1 在主軌道當特寫,其他 3 個頭帶著自己的那份滑到左側工作台 —— 等一下它們會平行做一模一樣的事。K/V 已經躺在右邊的 cache 裡,每個頭到時候自己去查自己那 4 維。',
+      hud('第八關:切成 4 個頭', 'multi-head', 'Q 切成 4 段、每段 4 維,分配給 4 個注意力頭。頭 1 留在主軌道,頭 2–4 移至左側工作台,4 個頭並行運算;K/V 由各頭從右側 cache 查取。',
         'q_h = q[hs:hs+head_dim]  # 每頭只看自己的 4 維');
       // 中央的 Q 大條淡出(K/V 上一關已經存進 cache)
       await tween(500, k => {
@@ -1026,7 +1043,7 @@ const steps = [
   {
     name: '注意力光束(單頭特寫)',
     async play() {
-      hud('第九關:注意力光束(以頭 1 為例)', 'Q·K → 權重', '頭 1 拿著自己的 q,往右邊的 cache 射出三道光束,跟櫃子裡每一格的 k 比對:BOS 0.22、e 0.31、自己 0.47 —— 光束粗細就是注意力權重;接著 v 沿著光束從櫃子被吸回來加權融合,頭 1 得到一條 4 維的結果。前面兩格的 k/v 是前兩輪存下來的,這裡直接查、不用重算,這就是 KV Cache 省下來的工。看左邊:另外 3 個頭同時在做一模一樣的事,只是各算各的權重。注意這一整段是青綠色的:比對、softmax、加權和 —— 一個參數都沒有,全是固定的算術。剛才那個金環(wq/wk/wv)才是知識所在。',
+      hud('第九關:注意力光束(以頭 1 為例)', 'Q·K → 權重', '頭 1 的 q 與 cache 中每格的 k 比對,得注意力權重:BOS 0.22、e 0.31、自身 0.47(光束粗細對應權重)。v 依權重加權求和,得出 4 維結果。BOS、e 的 K/V 為前兩輪存下的結果,本輪直接查表。其餘 3 個頭並行執行相同運算。此段全為固定算術、不含參數;參數位於前一步的 wq/wk/wv。',
         'attn_weights = softmax(attn_logits)  # 頭 1:0.22 / 0.31 / 0.47');
       const head0 = attn.heads[0];
       const qPos = head0.position.clone().add(new THREE.Vector3(0, 2, 0));
@@ -1103,7 +1120,7 @@ const steps = [
   {
     name: '四頭合併',
     async play() {
-      hud('第十關:四頭合併', 'concat', '4 個頭都算完了 —— 各自帶著 4 維的結果飛回主軌道,首尾相接併成一條 16 維的 x_attn。每一段還留著自己頭的顏色:等一下 wo 會把它們攪拌均勻。',
+      hud('第十關:四頭合併', 'concat', '4 個頭的 4 維結果依序拼接為 16 維的 x_attn,各段仍保留原本頭的顏色,尚未混合。',
         'x_attn.extend(head_out)  # 4 頭 × 4 維 → 16 維');
       // 光束與權重標籤退場
       await tween(400, k => {
@@ -1158,7 +1175,7 @@ const steps = [
   {
     name: 'wo 混合',
     async play() {
-      hud('第十一關:wo 混合', '4 頭 → 16 維', '帶著上下文的合併結果穿過 wo 關卡,把 4 個頭各自的發現重新攪拌回一條 16 維向量 —— 段落分明的頭色消失,回到數值配色。Attention 至此完成:這條方塊列已經「看過」前面的字母了。',
+      hud('第十一關:wo 混合', '4 頭 → 16 維', 'x_attn 通過 wo 矩陣,4 個頭的結果混合為一條 16 維向量,頭色消失、恢復數值配色。Attention 運算至此完成。',
         'x = linear(x_attn, attn_wo)');
       if (attn.beams && attn.beams.length) {
         await tween(300, k => {
@@ -1209,7 +1226,7 @@ const steps = [
   {
     name: '殘差回撞',
     async play() {
-      hud('第十二關:殘差回撞', 'x + x_residual', '遠處旁觀的分身被召回:先拉回主軌道正上方、變得清晰,然後俯衝而下撞回本體 —— 逐元素相加。整條方塊列白熱一閃,大小重新洗牌、色調再度偏移:Attention 的產出不是取代原始資料,而是「疊加」上去。這就是殘差連接。',
+      hud('第十二關:殘差回撞', 'x + x_residual', '先前留存的分身回到主軌道,與本體逐元素相加。Attention 的輸出疊加在原始資料上,而非取代;數值與色調隨之改變。',
         'x = [a + b for a, b in zip(x, x_residual)]');
       setCam(DEFAULT_CAM);
       await travel(S.JOIN1, 500);
@@ -1235,7 +1252,7 @@ const steps = [
   {
     name: '殘差分岔 2',
     async play() {
-      hud('第十三關:殘差分岔 2', 'residual', '進 MLP 之前,和 Attention 前一樣:方塊列再複製一條半透明分身,飄到左上遠處旁觀。本體接著穿過小 rmsnorm 珠 —— 這次它是有感的:剛剛殘差相加把尺度弄亂了,珠子把方塊重新壓平,MLP 才好處理。',
+      hud('第十三關:殘差分岔 2', 'residual', '進入 MLP 前,方塊列再次複製分身留存。本體通過 rmsnorm:殘差相加後數值範圍已改變,此次正規化實際壓平數值,便於 MLP 處理。',
         'x_residual = x\nx = rmsnorm(x)  # 這次真的有壓平');
       setCam(DEFAULT_CAM);
       ghost = makeGhost(hero); ghostLift = 0; ghostSide = 0; syncHero();
@@ -1264,7 +1281,7 @@ const steps = [
   {
     name: 'MLP 升維',
     async play() {
-      hud('第十四關:MLP 升維 16 → 64', 'mlp_fc1', '方塊列撞進 MLP 關卡:16 塊瞬間爆開成 64 塊 —— 每塊分裂成 4。維度變寬,是為了給模型更大的空間去「思考」剛剛看到的東西。',
+      hud('第十四關:MLP 升維 16 → 64', 'mlp_fc1', '16 維方塊經 mlp_fc1 展開為 64 維,每塊分裂為 4。維度擴增提供更大的中間運算空間。',
         'x = linear(x, mlp_fc1)  # 16 → 64');
       setCam(WIDE_CAM);
       await travel(S.MLP, 900, easeIn);
@@ -1302,7 +1319,7 @@ const steps = [
   {
     name: 'ReLU 削負',
     async play() {
-      hud('第十五關:ReLU 閘門', '負值歸零', '64 塊穿過紅色 ReLU 閘門:正值方塊原樣通過,負值方塊被削平塌陷、變灰熄滅 —— 歸零。這個「只留正面訊號」的動作,就是神經網路的非線性。',
+      hud('第十五關:ReLU 閘門', '負值歸零', '64 個方塊通過 ReLU:正值不變,負值歸零。此為神經網路中的非線性運算。',
         'x = [xi.relu() for xi in x]  # max(0, xi)');
       await travel(S.RELU, 900, easeIn);
       impact(pathPos(S.RELU), OP_PURE, { count: 80, shake: 0.7 });
@@ -1330,7 +1347,7 @@ const steps = [
   {
     name: '降維 64→16',
     async play() {
-      hud('第十六關:降維 64 → 16', 'mlp_fc2', '思考完畢:64 塊撞上壓縮環,四塊併一塊,濃縮回 16 維 —— 寬度恢復,但內容已經是「思考過」的版本。',
+      hud('第十六關:降維 64 → 16', 'mlp_fc2', '64 維經 mlp_fc2 壓縮回 16 維,四塊併為一塊,恢復原始寬度。',
         'x = linear(x, mlp_fc2)  # 64 → 16');
       await travel(S.SQUEEZE, 800, easeIn);
       impact(pathPos(S.SQUEEZE), OP_LEARNED, { count: 100, shake: 0.9 });
@@ -1364,7 +1381,7 @@ const steps = [
   {
     name: '殘差回撞 2',
     async play() {
-      hud('第十七關:殘差回撞 2', 'x + x_residual', '遠處的分身再度被召回:拉回主軌道正上方、變清晰,俯衝相撞 —— MLP 的思考結果疊加到原始資料上,白熱一閃,色調再偏移一階。一個 Transformer Block 到此走完。',
+      hud('第十七關:殘差回撞 2', 'x + x_residual', '分身再次回到主軌道與本體相加,MLP 的輸出疊加到原始資料上。一個 Transformer Block 至此完成。',
         'x = [a + b for a, b in zip(x, x_residual)]');
       setCam(DEFAULT_CAM);
       await travel(S.JOIN2, 700);
@@ -1389,7 +1406,7 @@ const steps = [
   {
     name: 'lm_head',
     async play() {
-      hud('第十八關:lm_head 高牆', '16 維 → 27 個 logits', '旅程終點:方塊列越飛越亮、蓄滿能量,全速撞上一面有 27 個柱槽的高牆。16 維的能量灌進去,升起 27 根高低不一的柱子 —— 每根對應一個字母(a–z + 結束符),高度是「模型認為下一個字是它」的原始分數(logits)。',
+      hud('第十八關:lm_head 高牆', '16 維 → 27 個 logits', '16 維向量撞上 27 槽的 lm_head 高牆,升起 27 根柱子,分別對應 a–z 與結束符。柱高為原始分數(logits)。',
         "logits = linear(x, state_dict['lm_head'])");
       await Promise.all([
         travel(S.WALL - 4, 1400, easeIn),
@@ -1421,7 +1438,7 @@ const steps = [
   {
     name: 'Softmax',
     async play() {
-      hud('第十九關:Softmax + 溫度', 'logits → 機率', '27 根柱子集體變形:先除以溫度 0.5(差距放大、分布變尖),再取指數、歸一化 —— 全部變成正數、總和為 1。現在每根柱子的高度就是「下一個字母是它」的機率。m 一枝獨秀:模型看過的名字裡,em 後面常常還是 m。',
+      hud('第十九關:Softmax + 溫度', 'logits → 機率', '27 個 logits 先除以溫度 0.5,再取指數並歸一化,轉換為總和為 1 的機率分布。m 的機率最高,反映訓練資料中 em 後常接 m。',
         'probs = softmax([l / temperature for l in logits])  # T=0.5');
       wallLabel.visible = false; // 牆標籤換成本階段的說明
       const tl = textSprite('softmax:logits ÷ 溫度 0.5 → 機率', { color: colToCss(OP_PURE), fs: 44 });
@@ -1459,7 +1476,7 @@ const steps = [
   {
     name: '抽樣與循環',
     async play() {
-      hud('終章:抽樣 → 自迴歸循環', 'random.choices', '一顆球從天而降,落在依機率分寬的軌道上 —— 機率越大,格子越寬,越容易被滾進去。球滾進了 m 的格子:下一個字母又是 m —— emma 的第二個 m!新的 m 方塊誕生,轉身飛回遠處的起點 —— 整條管線再跑一次,只是這次 KV Cache 裡已經有三格(BOS、e、m),新的一輪會填第四格。這就是自迴歸:一次生一個字,生生不息。',
+      hud('終章:抽樣 → 自迴歸循環', 'random.choices', '按機率分寬的軌道進行抽樣:機率越高的格子越寬,越容易被選中。此次抽中 m,即 emma 的第二個 m。新字元產生後回到起點,重新跑一次管線;KV Cache 已存三格(BOS、e、m),下一輪填入第四格。此為自迴歸生成:逐字元產生序列。',
         'token_id = random.choices(range(vocab_size), weights=probs)[0]  # → m(第二個)');
       // 機率分寬軌道
       const rulerW = 110, rulerY = -22, rulerZoff = -20;
