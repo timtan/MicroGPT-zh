@@ -4,8 +4,9 @@
 
 ## 投影片
 
-- [slides.html](https://timtan.github.io/MicroGPT-zh/slides.html) — MicroGPT 概念投影片
+- [intro_slide.html](https://timtan.github.io/MicroGPT-zh/intro_slide.html) — 開場投影片
 - [flow3d.html](https://timtan.github.io/MicroGPT-zh/flow3d.html) — 3D 訓練流程動畫投影片
+- [slides.html](https://timtan.github.io/MicroGPT-zh/slides.html) — MicroGPT 概念投影片
 
 ## microgpt_en.py
 
