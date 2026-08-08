@@ -331,24 +331,24 @@ svg text{font-family:var(--sans)}
       <rect x="20" y="32" width="4" height="496" class="f-bus"/>
       <text x="44" y="56" class="tb">ⓐ 為什麼需要這一步</text>
 
-      <text x="44" y="96" class="ts">模型內部的運算全部是數字的加減</text>
-      <text x="44" y="118" class="ts">乘除，無法直接處理文字。</text>
+      <text x="44" y="96" class="ts">模型只做數字運算，讀不了文字。</text>
 
-      <text x="44" y="158" class="ts">因此先訂出一份固定的清單，稱為</text>
-      <text x="44" y="180" class="ts">詞彙表，並替表上每一項編號。</text>
+      <!-- 文字 ⇄ 編號，同一份表 -->
+      <rect x="44" y="132" width="96" height="34" class="box"/>
+      <text x="92" y="154" class="tn mid">文字</text>
+      <rect x="266" y="132" width="96" height="34" class="tint-bus"/>
+      <text x="314" y="154" class="tn mid" style="fill:var(--c-bus)">編號</text>
+      <path d="M148 143 H256" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <path d="M258 178 H150" class="wire" marker-end="url(#ar-grey)"/>
+      <text x="202" y="130" class="td mid">讀入</text>
+      <text x="202" y="200" class="td mid">產生</text>
 
-      <text x="44" y="220" class="ts">讀入時：文字 → 編號。</text>
-      <text x="44" y="242" class="ts">產生時：編號 → 文字。</text>
-      <text x="44" y="264" class="td">同一份表，兩個方向都用它。</text>
+      <text x="44" y="248" class="ts">中間靠的是一份固定的清單：詞彙表。</text>
 
-      <rect x="44" y="300" width="318" height="122" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
-      <text x="64" y="330" class="tb">表訂下去就固定了</text>
-      <text x="64" y="360" class="ts">模型終其一生只認得表上的項目。</text>
-      <text x="64" y="382" class="ts">表以外的字，它讀不進來，</text>
-      <text x="64" y="404" class="ts">也永遠寫不出來。</text>
-
-      <text x="44" y="464" class="td">第 ④ 步要為表上「每一項」算一個機率，</text>
-      <text x="44" y="486" class="td">所以這份表必須是有限、而且事先固定的。</text>
+      <rect x="44" y="292" width="318" height="96" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="322" class="tb">表訂下去就固定了</text>
+      <text x="64" y="352" class="ts">表以外的字，讀不進來，</text>
+      <text x="64" y="374" class="ts">也永遠寫不出來。</text>
 
       <!-- ⓑ 本次採用的切法 -->
       <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
@@ -358,7 +358,7 @@ svg text{font-family:var(--sans)}
 
       <text x="430" y="88" class="ts">一個字元就是一個 token。</text>
 
-      <text x="430" y="118" class="td">詞彙表</text>
+      <text x="430" y="118" class="td">詞彙表　26 個字母 ＋ BOS</text>
       <rect x="430" y="130" width="46" height="26" class="box"/><text x="453" y="148" class="tn mid">a</text>
       <rect x="482" y="130" width="46" height="26" class="box"/><text x="505" y="148" class="tn mid">b</text>
       <rect x="534" y="130" width="46" height="26" class="box"/><text x="557" y="148" class="tn mid">c</text>
@@ -377,7 +377,6 @@ svg text{font-family:var(--sans)}
       <text x="548" y="214" class="tn" style="fill:var(--ink3)">26</text>
 
       <text x="430" y="252" class="ts">BOS 標示一個名字的開頭與結尾。</text>
-      <text x="430" y="278" class="ts">26 個字母 ＋ BOS ＝ 27 項。</text>
 
       <text x="430" y="316" class="td">實例</text>
       <text x="430" y="346" class="tn" style="font-size:15px">emma</text>
@@ -389,11 +388,10 @@ svg text{font-family:var(--sans)}
       <rect x="704" y="326" width="30" height="24" class="box"/><text x="719" y="343" class="tn mid">a</text>
       <text x="430" y="380" class="tn" style="font-size:15px;fill:var(--ink3)">26　4　12　12　0</text>
 
-      <text x="430" y="424" class="ts">整個模型看到的，從此只有這串編號；</text>
-      <text x="430" y="446" class="ts">「字母」這件事在這一步之後就消失了。</text>
+      <text x="430" y="424" class="ts">往後模型看到的只有這串編號。</text>
 
-      <text x="430" y="492" class="td">後續各頁都以「emma 寫到第二個 m」</text>
-      <text x="430" y="514" class="td">這個時刻為例。</text>
+      <text x="430" y="470" class="td">後續各頁都以「emma 寫到第二個 m」</text>
+      <text x="430" y="492" class="td">這個時刻為例。</text>
 
       <!-- ⓒ 切法的取捨 -->
       <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
@@ -402,23 +400,26 @@ svg text{font-family:var(--sans)}
 
       <text x="816" y="96" class="ts">切得細或粗，是可以選的。</text>
 
-      <rect x="816" y="122" width="318" height="130" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <rect x="816" y="122" width="318" height="126" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
       <text x="836" y="152" class="tb" style="fill:var(--c-now)">字元級（本次）</text>
-      <text x="836" y="180" class="ts">表很小：27 項。</text>
-      <text x="836" y="202" class="ts">一次只寫出一個字母，</text>
-      <text x="836" y="224" class="ts">一個名字要走好幾輪。</text>
+      <text x="1114" y="152" class="td end" style="fill:var(--c-now)">27 項</text>
+      <rect x="836" y="172" width="34" height="26" class="tint-now"/><text x="853" y="190" class="tn mid" style="fill:var(--c-now)">e</text>
+      <rect x="874" y="172" width="34" height="26" class="tint-now"/><text x="891" y="190" class="tn mid" style="fill:var(--c-now)">m</text>
+      <rect x="912" y="172" width="34" height="26" class="tint-now"/><text x="929" y="190" class="tn mid" style="fill:var(--c-now)">m</text>
+      <rect x="950" y="172" width="34" height="26" class="tint-now"/><text x="967" y="190" class="tn mid" style="fill:var(--c-now)">a</text>
+      <text x="836" y="228" class="ts">一輪一個字母，走好幾輪。</text>
 
-      <rect x="816" y="268" width="318" height="130" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
-      <text x="836" y="298" class="tb" style="fill:var(--c-bus)">子詞級（大型模型）</text>
-      <text x="836" y="326" class="ts">表很大：十幾萬項。</text>
-      <text x="836" y="348" class="ts">一次可寫出一整個詞或詞根，</text>
-      <text x="836" y="370" class="ts">同樣的輪數能寫出更多內容。</text>
+      <rect x="816" y="272" width="318" height="126" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="302" class="tb" style="fill:var(--c-bus)">子詞級（大型模型）</text>
+      <text x="1114" y="302" class="td end" style="fill:var(--c-bus)">十幾萬項</text>
+      <rect x="836" y="322" width="72" height="26" class="tint-bus"/><text x="872" y="340" class="tn mid" style="fill:var(--c-bus)">emm</text>
+      <rect x="912" y="322" width="34" height="26" class="tint-bus"/><text x="929" y="340" class="tn mid" style="fill:var(--c-bus)">a</text>
+      <text x="836" y="378" class="ts">一輪可寫出一整個詞根。</text>
 
-      <text x="816" y="440" class="ts">兩者的五個步驟完全相同，</text>
-      <text x="816" y="462" class="ts">差別只在表的大小與每一輪的粒度。</text>
+      <text x="816" y="450" class="ts">五個步驟完全相同，</text>
+      <text x="816" y="472" class="ts">差別只在表的大小與粒度。</text>
 
-      <text x="816" y="506" class="td" style="fill:var(--c-kv)">所謂「一個 token」到底是多少東西，</text>
-      <text x="816" y="528" class="td" style="fill:var(--c-kv)">就是在這一步決定的。</text>
+      <text x="816" y="518" class="td" style="fill:var(--c-kv)">「一個 token 是多少東西」就在這步決定。</text>
     </svg>
   </div>
 </section>
