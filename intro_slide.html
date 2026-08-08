@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>LLM 推論概觀 — 模型如何產生文字</title>
+<title>MicroGPT — 一個看得完的語言模型</title>
 <style>
 /* ============ 色彩系統（與 slides.html 相同的 dataviz 深色驗證色板） ============ */
 :root{
@@ -115,32 +115,96 @@ svg text{font-family:var(--sans)}
 
 <div id="stage">
 
-<!-- ═══════════ 1 封面 ═══════════ -->
+<!-- ═══════════ 1 封面：MicroGPT ═══════════ -->
 <section class="slide hero">
   <div class="heroBox">
-    <div class="kicker">LLM · Inference</div>
-    <h1>大型語言模型如何產生文字</h1>
-    <div class="sub">模型只做一件事：依據已有的文字，計算下一個 token 的機率分佈</div>
-    <svg viewBox="0 0 900 150" style="width:900px;height:150px;margin-top:30px">
-      <rect x="30" y="46" width="200" height="48" class="tint-now"/>
-      <text x="130" y="76" class="ts mid">已有的文字</text>
-      <path d="M230 70 H286" class="wire" marker-end="url(#ar-grey)"/>
-      <rect x="290" y="34" width="180" height="72" class="tint-bus"/>
-      <text x="380" y="78" class="th mid">模型</text>
-      <path d="M470 70 H526" class="wire-bus" marker-end="url(#ar-bus)"/>
-      <rect x="530" y="46" width="190" height="48" class="box"/>
-      <text x="625" y="76" class="ts mid">下一個 token 的機率</text>
-      <path d="M720 70 H776" class="wire-rand" marker-end="url(#ar-rand)"/>
-      <rect x="780" y="46" width="90" height="48" class="tint-now"/>
-      <text x="825" y="76" class="tb mid" style="fill:var(--c-now)">token</text>
-      <path d="M825 94 V126 H130 V98" class="wire dash" marker-end="url(#ar-grey)"/>
-      <text x="480" y="144" class="td mid">產生的 token 接回輸入，重複同一件事</text>
+    <div class="kicker" style="color:var(--c-kv)">MicroGPT</div>
+    <h1>一個看得完的語言模型</h1>
+    <div class="sub">4192 個參數、199 行純 Python——結構與大型模型完全相同，只是縮小</div>
+    <svg viewBox="0 0 900 210" style="width:900px;height:210px;margin-top:26px">
+      <text x="250" y="30" class="th mid">大型語言模型</text>
+      <text x="660" y="30" class="th mid" style="fill:var(--c-kv)">MicroGPT</text>
+      <line x1="60" y1="44" x2="850" y2="44" class="axis"/>
+      <text x="250" y="76" class="ts mid">詞彙表：十幾萬個 token</text>
+      <text x="660" y="76" class="ts mid">27 個字元（a–z ＋ BOS）</text>
+      <text x="250" y="108" class="ts mid">向量：數千維</text>
+      <text x="660" y="108" class="ts mid">16 維</text>
+      <text x="250" y="140" class="ts mid">數十層 ・ 數十個 Attention 頭</text>
+      <text x="660" y="140" class="ts mid">1 層 ・ 4 個頭</text>
+      <text x="250" y="172" class="ts mid">任務：接續任何文字</text>
+      <text x="660" y="172" class="ts mid">任務：學人名，產生下一個字母</text>
+      <line x1="455" y1="44" x2="455" y2="182" class="axis"/>
     </svg>
     <div class="hint"><b>←</b> <b>→</b> 翻頁 ・ <b>f</b> 全螢幕</div>
   </div>
 </section>
 
-<!-- ═══════════ 2 自回歸 ═══════════ -->
+<!-- ═══════════ 2 執行結果 ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">先看結果</span>執行這支程式，會得到什麼</h1>
+    <span class="tagline">讀 32033 個真實人名，寫出 20 個不存在的名字</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <rect x="20" y="20" width="680" height="470" rx="12" fill="#141413" stroke="rgba(255,255,255,.10)"/>
+      <text x="44" y="56" class="td" style="font-family:var(--mono)">$ python microgpt.py</text>
+
+      <text x="44" y="88" class="tn">num docs: 32033</text>
+      <text x="44" y="112" class="tn">vocab size: 27</text>
+      <text x="44" y="136" class="tn" style="fill:var(--c-bus)">num params: 4192</text>
+      <text x="44" y="160" class="tn">step 1000 / 1000 | loss 2.6497</text>
+      <text x="44" y="192" class="tn" style="fill:var(--ink3)">--- inference (new, hallucinated names) ---</text>
+
+      <g style="fill:var(--c-now)">
+        <text x="48" y="228" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  1: kamon</text>
+        <text x="48" y="252" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  2: ann</text>
+        <text x="48" y="276" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  3: karai</text>
+        <text x="48" y="300" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  4: jaire</text>
+        <text x="48" y="324" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  5: vialan</text>
+        <text x="48" y="348" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  6: karia</text>
+        <text x="48" y="372" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  7: yeran</text>
+        <text x="48" y="396" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  8: anna</text>
+        <text x="48" y="420" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  9: areli</text>
+        <text x="48" y="444" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 10: kaina</text>
+        <text x="376" y="228" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 11: konna</text>
+        <text x="376" y="252" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 12: keylen</text>
+        <text x="376" y="276" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 13: liole</text>
+        <text x="376" y="300" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 14: alerin</text>
+        <text x="376" y="324" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 15: earan</text>
+        <text x="376" y="348" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 16: lenne</text>
+        <text x="376" y="372" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 17: kana</text>
+        <text x="376" y="396" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 18: lara</text>
+        <text x="376" y="420" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 19: alela</text>
+        <text x="376" y="444" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 20: anton</text>
+      </g>
+
+      <path d="M706 83 H726" class="wire"/>
+      <text x="736" y="88" class="ts">讀入 32033 個真實的英文名字</text>
+      <path d="M706 107 H726" class="wire"/>
+      <text x="736" y="112" class="ts">詞彙表 27 項：26 個字母 ＋ BOS</text>
+      <path d="M706 131 H726" class="wire-bus"/>
+      <text x="736" y="136" class="ts" style="fill:var(--c-bus)">模型的全部參數只有 4192 個</text>
+      <path d="M706 155 H726" class="wire"/>
+      <text x="736" y="160" class="ts">誤差指標：數字愈小，預測愈準</text>
+
+      <text x="736" y="234" class="tb" style="fill:var(--c-now)">這 20 個名字都不存在</text>
+      <text x="736" y="266" class="ts">讀進來的 32033 個名字裡，沒有</text>
+      <text x="736" y="288" class="ts">任何一個是這樣；全部由模型</text>
+      <text x="736" y="310" class="ts">一個字母、一個字母自己產生。</text>
+
+      <rect x="736" y="340" width="410" height="150" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="760" y="372" class="tb">這場演講要講的</text>
+      <text x="760" y="404" class="ts">就是這支程式從讀進名字、</text>
+      <text x="760" y="426" class="ts">到寫出上面這 20 個名字，</text>
+      <text x="760" y="448" class="ts">中間到底發生了什麼。</text>
+      <text x="760" y="474" class="td">本場只看模型如何寫出下一個字母這一段。</text>
+      <text x="736" y="518" class="td">後續各頁以資料裡的 emma 為例，拆解的是同一套流程。</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 3 自回歸 ═══════════ -->
 <section class="slide std">
   <header>
     <h1><span class="figno">概念 1</span>自回歸：一次一個 token</h1>
@@ -187,6 +251,7 @@ svg text{font-family:var(--sans)}
 
         <text x="180" y="452" class="td">BOS 再次出現＝「寫完了」，迴圈在此停止。</text>
       </g>
+      <text x="120" y="506" class="td" style="fill:var(--c-kv)">文字為什麼要先切成 token、又為什麼會切成這樣，見概念 3。</text>
 
       <!-- 右下：白話框 -->
       <rect x="660" y="252" width="440" height="240" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
@@ -197,304 +262,691 @@ svg text{font-family:var(--sans)}
       <text x="688" y="384" class="td">整段回覆不是一次成形，而是同一個流程</text>
       <text x="688" y="406" class="td">重複數百、數千次的結果。</text>
       <text x="688" y="442" class="td" style="fill:var(--c-kv)">實作上，各輪算過的中間結果（K/V）會留存</text>
-      <text x="688" y="464" class="td" style="fill:var(--c-kv)">為記憶，直接取用不必重算（詳見概念 3）。</text>
+      <text x="688" y="464" class="td" style="fill:var(--c-kv)">為記憶（KV cache），直接取用不必重算。</text>
     </svg>
   </div>
 </section>
 
-<!-- ═══════════ 3 五大步驟總覽 ═══════════ -->
+<!-- ═══════════ 4 五大步驟總覽 ═══════════ -->
 <section class="slide std">
   <header>
     <h1><span class="figno">概念 2</span>推論的五個步驟</h1>
-    <span class="tagline">同一份資料，換五次形態</span>
+    <span class="tagline">文字進來，一個 token 出去</span>
   </header>
   <div class="fig">
     <svg viewBox="0 0 1180 560">
-      <!-- ── A 帶：五個關卡 ── -->
-      <rect x="25" y="48" width="186" height="84" class="box"/>
-      <text x="118" y="76" class="td mid">① Tokenize</text>
-      <text x="118" y="100" class="ts mid">切成 token 編號</text>
-      <path d="M215 90 H255" class="wire" marker-end="url(#ar-grey)"/>
+      <text x="590" y="106" class="th mid">每產生一個 token，就完整走過這五個步驟</text>
+      <text x="590" y="140" class="ts mid">本頁只看「一輪之內」；產生的 token 如何接回輸入，見概念 1。</text>
 
-      <rect x="261" y="48" width="186" height="84" class="tint-bus"/>
-      <text x="354" y="76" class="td mid" style="fill:var(--c-bus)">② Embedding</text>
-      <text x="354" y="100" class="ts mid">編號變向量</text>
-      <path d="M451 90 H491" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="25" y="204" width="186" height="160" class="box"/>
+      <text x="118" y="244" class="tb mid">① Tokenize</text>
+      <text x="118" y="284" class="ts mid">把文字切開，</text>
+      <text x="118" y="308" class="ts mid">換成 token 編號</text>
+      <path d="M215 284 H255" class="wire" marker-end="url(#ar-grey)"/>
 
-      <rect x="497" y="48" width="186" height="84" class="box"/>
-      <text x="590" y="72" class="td mid">③ Transformer ×N</text>
-      <text x="590" y="96" class="ts mid" style="fill:var(--c-attn)">Attention 只看前面</text>
-      <text x="590" y="118" class="ts mid" style="fill:var(--c-mlp)">MLP 加工</text>
-      <path d="M687 90 H727" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="261" y="204" width="186" height="160" class="tint-bus"/>
+      <text x="354" y="244" class="tb mid" style="fill:var(--c-bus)">② Embedding</text>
+      <text x="354" y="284" class="ts mid">每個編號查表，</text>
+      <text x="354" y="308" class="ts mid">換成一條向量</text>
+      <path d="M451 284 H491" class="wire-bus" marker-end="url(#ar-bus)"/>
 
-      <rect x="733" y="48" width="186" height="84" class="tint-bus"/>
-      <text x="826" y="76" class="td mid" style="fill:var(--c-bus)">④ 打分（logits）</text>
-      <text x="826" y="100" class="ts mid">softmax 換成機率</text>
-      <path d="M923 90 H963" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="497" y="204" width="186" height="160" class="box"/>
+      <text x="590" y="244" class="tb mid">③ Transformer ×N</text>
+      <text x="590" y="284" class="ts mid" style="fill:var(--c-attn)">Attention 只看前面</text>
+      <text x="590" y="308" class="ts mid" style="fill:var(--c-mlp)">MLP 加工</text>
+      <text x="590" y="336" class="td mid">向量帶上了上下文</text>
+      <path d="M687 284 H727" class="wire-bus" marker-end="url(#ar-bus)"/>
 
-      <rect x="969" y="48" width="186" height="84" class="tint-rand"/>
-      <text x="1062" y="76" class="td mid" style="fill:var(--c-rand)">⑤ 抽樣</text>
-      <text x="1062" y="100" class="ts mid">依機率選一個</text>
+      <rect x="733" y="204" width="186" height="160" class="tint-bus"/>
+      <text x="826" y="244" class="tb mid" style="fill:var(--c-bus)">④ 打分</text>
+      <text x="826" y="284" class="ts mid">算出每個 token</text>
+      <text x="826" y="308" class="ts mid">各自的機率</text>
+      <path d="M923 284 H963" class="wire" marker-end="url(#ar-grey)"/>
 
-      <text x="590" y="156" class="ts mid">產生的 token 如何接回輸入，見概念 1。這頁只看「一輪之內」。</text>
+      <rect x="969" y="204" width="186" height="160" class="tint-rand"/>
+      <text x="1062" y="244" class="tb mid" style="fill:var(--c-rand)">⑤ 抽樣</text>
+      <text x="1062" y="284" class="ts mid">依機率取出</text>
+      <text x="1062" y="308" class="ts mid">一個 token</text>
 
-      <!-- ── B 帶：形態鏈（本頁主角）── -->
-      <text x="25" y="184" class="th">資料在各步驟之間的形態</text>
-      <text x="255" y="184" class="td">m 是字母表第 13 個字母，從 0 數起是 12；BOS 是開頭／結尾符號，編號 26。</text>
-      <text x="1155" y="184" class="td end" style="fill:var(--c-bus)">一柱＝一個 token 的向量，一格＝一個數字</text>
+      <text x="118" y="404" class="td mid" style="fill:var(--c-attn)">詳見概念 3</text>
+      <text x="354" y="404" class="td mid" style="fill:var(--c-attn)">詳見概念 4</text>
+      <text x="590" y="404" class="td mid" style="fill:var(--c-attn)">詳見概念 5、6</text>
+      <text x="944" y="404" class="td mid" style="fill:var(--c-attn)">詳見概念 7</text>
 
-      <!-- 欄 1：字元 -->
-      <text x="96" y="214" class="tb mid">字元</text>
-      <text x="96" y="234" class="td mid">人看得懂</text>
-      <rect x="34" y="276" width="48" height="28" class="box"/><text x="58" y="295" class="tn mid" style="fill:var(--ink3)">BOS</text>
-      <rect x="88" y="276" width="32" height="28" class="box"/><text x="104" y="295" class="tn mid" style="fill:var(--ink3)">e</text>
-      <rect x="126" y="276" width="32" height="28" class="tint-now"/><text x="142" y="295" class="tn mid" style="fill:var(--c-now)">m</text>
-      <path d="M172 290 H218" class="wire" marker-end="url(#ar-grey)"/>
-
-      <!-- 欄 2：編號 -->
-      <text x="294" y="214" class="tb mid">3 個編號</text>
-      <text x="294" y="234" class="td mid">整數序列</text>
-      <text x="254" y="295" class="tn mid" style="fill:var(--ink3)">26</text>
-      <text x="292" y="295" class="tn mid" style="fill:var(--ink3)">4</text>
-      <text x="328" y="295" class="tn mid" style="fill:var(--c-now)">12</text>
-      <path d="M370 290 H416" class="wire" marker-end="url(#ar-grey)"/>
-
-      <!-- 欄 3：查表得到的向量 -->
-      <text x="492" y="214" class="tb mid" style="fill:var(--c-bus)">3 條向量</text>
-      <text x="492" y="234" class="td mid">還沒讀過任何字</text>
-      <rect x="439" y="252" width="26" height="18" class="tint-bus"/><rect x="439" y="273" width="26" height="18" class="tint-bus"/><rect x="439" y="294" width="26" height="18" class="tint-bus"/><rect x="439" y="315" width="26" height="18" class="tint-bus"/>
-      <rect x="479" y="252" width="26" height="18" class="tint-bus"/><rect x="479" y="273" width="26" height="18" class="tint-bus"/><rect x="479" y="294" width="26" height="18" class="tint-bus"/><rect x="479" y="315" width="26" height="18" class="tint-bus"/>
-      <rect x="519" y="252" width="26" height="18" class="tint-bus"/><rect x="519" y="273" width="26" height="18" class="tint-bus"/><rect x="519" y="294" width="26" height="18" class="tint-bus"/><rect x="519" y="315" width="26" height="18" class="tint-bus"/>
-      <rect x="515" y="248" width="34" height="89" rx="6" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
-      <text x="452" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">BOS</text>
-      <text x="492" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">e</text>
-      <text x="532" y="378" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
-      <path d="M568 290 H614" class="wire-bus" marker-end="url(#ar-bus)"/>
-
-      <!-- 欄 4：讀過前文的向量（形狀完全相同） -->
-      <text x="690" y="214" class="tb mid" style="fill:var(--c-bus)">3 條向量</text>
-      <text x="690" y="234" class="td mid">已讀過前面的字</text>
-      <rect x="637" y="252" width="26" height="18" class="tint-bus"/><rect x="637" y="273" width="26" height="18" class="tint-bus"/><rect x="637" y="294" width="26" height="18" class="tint-bus"/><rect x="637" y="315" width="26" height="18" class="tint-bus"/>
-      <rect x="677" y="252" width="26" height="18" class="tint-bus"/><rect x="677" y="273" width="26" height="18" class="tint-bus"/><rect x="677" y="294" width="26" height="18" class="tint-bus"/><rect x="677" y="315" width="26" height="18" class="tint-bus"/>
-      <rect x="717" y="252" width="26" height="18" class="tint-bus"/><rect x="717" y="273" width="26" height="18" class="tint-bus"/><rect x="717" y="294" width="26" height="18" class="tint-bus"/><rect x="717" y="315" width="26" height="18" class="tint-bus"/>
-      <rect x="713" y="248" width="34" height="89" rx="6" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
-      <path d="M650 338 Q680 368 707 346" class="wire-attn" marker-end="url(#ar-attn)"/>
-      <path d="M688 340 Q698 362 706 354" class="wire-attn" marker-end="url(#ar-attn)"/>
-      <text x="650" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">BOS</text>
-      <text x="690" y="378" class="tn mid" style="font-size:11px;fill:var(--ink3)">e</text>
-      <text x="730" y="378" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
-      <text x="800" y="313" class="td mid" style="fill:var(--c-now)">只取最後一條</text>
-      <path d="M752 291 H812" class="wire-now" marker-end="url(#ar-now)"/>
-
-      <!-- 欄 5：整個詞彙表的機率 -->
-      <text x="888" y="214" class="tb mid">1 組機率</text>
-      <text x="888" y="234" class="td mid">詞彙表 27 個</text>
-      <rect x="828" y="326" width="8" height="7" class="bar-grey"/>
-      <rect x="840" y="321" width="8" height="12" class="bar-grey"/>
-      <rect x="852" y="328" width="8" height="5" class="bar-grey"/>
-      <rect x="864" y="324" width="8" height="9" class="bar-grey"/>
-      <rect x="876" y="287" width="8" height="46" class="bar-rand"/>
-      <rect x="888" y="317" width="8" height="16" class="bar-grey"/>
-      <rect x="900" y="326" width="8" height="7" class="bar-grey"/>
-      <rect x="912" y="311" width="8" height="22" class="bar-grey"/>
-      <rect x="924" y="324" width="8" height="9" class="bar-grey"/>
-      <rect x="936" y="327" width="8" height="6" class="bar-grey"/>
-      <line x1="824" y1="333" x2="950" y2="333" class="axis"/>
-      <text x="880" y="350" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
-      <text x="1002" y="278" class="td mid" style="fill:var(--c-rand)">抽一次</text>
-      <path d="M958 290 H1046" class="wire-rand" marker-end="url(#ar-rand)"/>
-
-      <!-- 欄 6：一個 token -->
-      <text x="1086" y="214" class="tb mid" style="fill:var(--c-now)">1 個 token</text>
-      <text x="1086" y="234" class="td mid">人看得懂</text>
-      <rect x="1056" y="272" width="60" height="36" class="tint-now"/>
-      <text x="1086" y="296" class="tb mid" style="fill:var(--c-now)">m</text>
-      <text x="1086" y="330" class="td mid">本輪產生</text>
-      <text x="1086" y="350" class="td mid" style="fill:var(--c-now)">emma 的第 2 個 m</text>
-
-      <!-- ── C 帶：兩個重點 ── -->
-      <rect x="25" y="400" width="545" height="152" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-      <rect x="25" y="412" width="4" height="128" class="f-attn"/>
-      <text x="52" y="432" class="tb">③ 前後形狀完全沒變</text>
-      <text x="52" y="462" class="ts">3 條進、3 條出，每條長度也一樣——變的是內容：</text>
-      <text x="52" y="486" class="ts">m 這條，把 BOS 和 e 讀進來了。</text>
-      <text x="52" y="516" class="td">而且只看得到前面：還沒寫出來的字，它看不到。</text>
-      <text x="52" y="538" class="td" style="fill:var(--c-attn)">怎麼讀進來的？下一頁。</text>
-
-      <rect x="610" y="400" width="545" height="152" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-      <rect x="610" y="412" width="4" height="128" class="f-rand"/>
-      <text x="637" y="432" class="tb">④⑤ 一整串進去，一個 token 出來</text>
-      <text x="637" y="462" class="ts">只取最後一個位置（m）的向量去打分，得到一組機率，</text>
-      <text x="637" y="486" class="ts">抽樣後成為一個 token。</text>
-      <text x="637" y="516" class="td">溫度（temperature）：低 → 分佈尖、輸出保守；高 → 分佈平、輸出多變。</text>
-      <text x="637" y="538" class="td" style="fill:var(--c-rand)">全流程唯一的隨機，就在這一步。</text>
+      <text x="590" y="470" class="ts mid">接下來五頁，依序把 ① 到 ⑤ 逐一放大。</text>
     </svg>
   </div>
 </section>
 
-<!-- ═══════════ 4 Transformer 內部三件事 ═══════════ -->
+<!-- ═══════════ 5 Tokenize ═══════════ -->
 <section class="slide std">
   <header>
-    <h1><span class="figno">概念 3</span>Transformer 內部的三件事</h1>
-    <span class="tagline">位置資訊 ・ Q／K／V ・ 殘差與校正</span>
+    <h1><span class="figno">概念 3</span>① Tokenize：文字換成編號</h1>
+    <span class="tagline">先決定一份固定的清單，模型終其一生只認得表上的項目</span>
   </header>
   <div class="fig">
     <svg viewBox="0 0 1180 560">
-      <!-- ⓐ 位置資訊 -->
+      <!-- ⓐ 為什麼需要這一步 -->
       <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-      <rect x="20" y="32" width="4" height="496" class="f-kv"/>
-      <text x="44" y="56" class="tb">ⓐ 位置資訊</text>
-      <text x="360" y="56" class="td end" style="fill:var(--c-kv)">參數名 wpe</text>
+      <rect x="20" y="32" width="4" height="496" class="f-bus"/>
+      <text x="44" y="56" class="tb">ⓐ 為什麼需要這一步</text>
 
-      <text x="44" y="106" class="ts">token 向量</text>
-      <g class="f-bus">
-        <rect x="196" y="92" width="18" height="18" rx="3" opacity=".9"/>
-        <rect x="220" y="92" width="18" height="18" rx="3" opacity=".55"/>
-        <rect x="244" y="92" width="18" height="18" rx="3" opacity=".75"/>
-        <rect x="268" y="92" width="18" height="18" rx="3" opacity=".35"/>
-        <rect x="292" y="92" width="18" height="18" rx="3" opacity=".65"/>
-      </g>
-      <text x="253" y="146" class="th mid">＋</text>
-      <text x="44" y="172" class="ts" style="fill:var(--c-kv)">位置向量</text>
-      <g class="f-kv">
-        <rect x="196" y="158" width="18" height="18" rx="3" opacity=".85"/>
-        <rect x="220" y="158" width="18" height="18" rx="3" opacity=".5"/>
-        <rect x="244" y="158" width="18" height="18" rx="3" opacity=".7"/>
-        <rect x="268" y="158" width="18" height="18" rx="3" opacity=".4"/>
-        <rect x="292" y="158" width="18" height="18" rx="3" opacity=".6"/>
-      </g>
-      <path d="M253 186 V214" class="wire" marker-end="url(#ar-grey)"/>
-      <text x="44" y="240" class="ts" style="fill:var(--c-now)">相加後的向量</text>
-      <g class="f-now">
-        <rect x="196" y="226" width="18" height="18" rx="3" opacity=".9"/>
-        <rect x="220" y="226" width="18" height="18" rx="3" opacity=".6"/>
-        <rect x="244" y="226" width="18" height="18" rx="3" opacity=".8"/>
-        <rect x="268" y="226" width="18" height="18" rx="3" opacity=".45"/>
-        <rect x="292" y="226" width="18" height="18" rx="3" opacity=".7"/>
-      </g>
+      <text x="44" y="96" class="ts">模型內部的運算全部是數字的加減</text>
+      <text x="44" y="118" class="ts">乘除，無法直接處理文字。</text>
 
-      <text x="44" y="312" class="ts">Embedding 只表達「這是哪個 token」，</text>
-      <text x="44" y="338" class="ts">不含它在句中的位置。</text>
-      <text x="44" y="374" class="ts">進入 Transformer 前，每個位置再加上</text>
-      <text x="44" y="400" class="ts">一條位置向量（逐元素相加），</text>
-      <text x="44" y="426" class="ts">模型才知道各 token 是第幾個字。</text>
+      <text x="44" y="158" class="ts">因此先訂出一份固定的清單，稱為</text>
+      <text x="44" y="180" class="ts">詞彙表，並替表上每一項編號。</text>
 
-      <!-- ⓑ Attention -->
+      <text x="44" y="220" class="ts">讀入時：文字 → 編號。</text>
+      <text x="44" y="242" class="ts">產生時：編號 → 文字。</text>
+      <text x="44" y="264" class="td">同一份表，兩個方向都用它。</text>
+
+      <rect x="44" y="300" width="318" height="122" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="330" class="tb">表訂下去就固定了</text>
+      <text x="64" y="360" class="ts">模型終其一生只認得表上的項目。</text>
+      <text x="64" y="382" class="ts">表以外的字，它讀不進來，</text>
+      <text x="64" y="404" class="ts">也永遠寫不出來。</text>
+
+      <text x="44" y="464" class="td">第 ④ 步要為表上「每一項」算一個機率，</text>
+      <text x="44" y="486" class="td">所以這份表必須是有限、而且事先固定的。</text>
+
+      <!-- ⓑ 本次採用的切法 -->
       <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
-      <rect x="406" y="32" width="4" height="496" class="f-attn"/>
-      <text x="430" y="56" class="tb">ⓑ Attention：三個角色</text>
-      <text x="746" y="56" class="td end" style="fill:var(--c-attn)">Q／K／V</text>
+      <rect x="406" y="32" width="4" height="496" class="f-now"/>
+      <text x="430" y="56" class="tb">ⓑ 本次採用的切法：字元</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-now)">27 項</text>
 
-      <rect x="430" y="88" width="44" height="30" class="tint-attn"/><text x="452" y="109" class="tb mid" style="fill:var(--c-attn)">Q</text>
-      <text x="494" y="109" class="ts">我在找什麼</text>
-      <rect x="430" y="130" width="44" height="30" class="tint-attn"/><text x="452" y="151" class="tb mid" style="fill:var(--c-attn)">K</text>
-      <text x="494" y="151" class="ts">我是什麼</text>
-      <rect x="430" y="172" width="44" height="30" class="tint-attn"/><text x="452" y="193" class="tb mid" style="fill:var(--c-attn)">V</text>
-      <text x="494" y="193" class="ts">我能提供什麼</text>
+      <text x="430" y="88" class="ts">一個字元就是一個 token。</text>
 
-      <text x="430" y="244" class="ts">每個位置以 Q 與前文各處的 K 比對，</text>
-      <text x="430" y="270" class="ts">依相似度決定從各處的 V 取回多少。</text>
+      <text x="430" y="118" class="td">詞彙表</text>
+      <rect x="430" y="130" width="46" height="26" class="box"/><text x="453" y="148" class="tn mid">a</text>
+      <rect x="482" y="130" width="46" height="26" class="box"/><text x="505" y="148" class="tn mid">b</text>
+      <rect x="534" y="130" width="46" height="26" class="box"/><text x="557" y="148" class="tn mid">c</text>
+      <text x="596" y="148" class="tn">…</text>
+      <rect x="612" y="130" width="46" height="26" class="tint-now"/><text x="635" y="148" class="tn mid" style="fill:var(--c-now)">m</text>
+      <text x="674" y="148" class="tn">…</text>
+      <rect x="690" y="130" width="46" height="26" class="box"/><text x="713" y="148" class="tn mid">z</text>
+      <text x="453" y="176" class="tn mid" style="fill:var(--ink3)">0</text>
+      <text x="505" y="176" class="tn mid" style="fill:var(--ink3)">1</text>
+      <text x="557" y="176" class="tn mid" style="fill:var(--ink3)">2</text>
+      <text x="635" y="176" class="tn mid" style="fill:var(--c-now)">12</text>
+      <text x="713" y="176" class="tn mid" style="fill:var(--ink3)">25</text>
 
-      <g class="f-attn">
-        <rect x="430" y="300" width="70" height="22" rx="4" opacity=".9"/>
-        <rect x="508" y="300" width="70" height="22" rx="4" opacity=".65"/>
-        <rect x="586" y="300" width="70" height="22" rx="4" opacity=".45"/>
-        <rect x="664" y="300" width="70" height="22" rx="4" opacity=".3"/>
+      <rect x="430" y="196" width="104" height="26" class="tint-kv"/>
+      <text x="482" y="214" class="tn mid" style="fill:var(--c-kv)">BOS</text>
+      <text x="548" y="214" class="tn" style="fill:var(--ink3)">26</text>
+
+      <text x="430" y="252" class="ts">BOS 標示一個名字的開頭與結尾。</text>
+      <text x="430" y="278" class="ts">26 個字母 ＋ BOS ＝ 27 項。</text>
+
+      <text x="430" y="316" class="td">實例</text>
+      <text x="430" y="346" class="tn" style="font-size:15px">emma</text>
+      <path d="M500 341 H540" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="552" y="326" width="46" height="24" class="tint-kv"/><text x="575" y="343" class="tn mid" style="fill:var(--c-kv)">BOS</text>
+      <rect x="602" y="326" width="30" height="24" class="box"/><text x="617" y="343" class="tn mid">e</text>
+      <rect x="636" y="326" width="30" height="24" class="tint-now"/><text x="651" y="343" class="tn mid" style="fill:var(--c-now)">m</text>
+      <rect x="670" y="326" width="30" height="24" class="box"/><text x="685" y="343" class="tn mid">m</text>
+      <rect x="704" y="326" width="30" height="24" class="box"/><text x="719" y="343" class="tn mid">a</text>
+      <text x="430" y="380" class="tn" style="font-size:15px;fill:var(--ink3)">26　4　12　12　0</text>
+
+      <text x="430" y="424" class="ts">整個模型看到的，從此只有這串編號；</text>
+      <text x="430" y="446" class="ts">「字母」這件事在這一步之後就消失了。</text>
+
+      <text x="430" y="492" class="td">後續各頁都以「emma 寫到第二個 m」</text>
+      <text x="430" y="514" class="td">這個時刻為例。</text>
+
+      <!-- ⓒ 切法的取捨 -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-kv"/>
+      <text x="816" y="56" class="tb">ⓒ 切法的取捨</text>
+
+      <text x="816" y="96" class="ts">切得細或粗，是可以選的。</text>
+
+      <rect x="816" y="122" width="318" height="130" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="152" class="tb" style="fill:var(--c-now)">字元級（本次）</text>
+      <text x="836" y="180" class="ts">表很小：27 項。</text>
+      <text x="836" y="202" class="ts">一次只寫出一個字母，</text>
+      <text x="836" y="224" class="ts">一個名字要走好幾輪。</text>
+
+      <rect x="816" y="268" width="318" height="130" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="298" class="tb" style="fill:var(--c-bus)">子詞級（大型模型）</text>
+      <text x="836" y="326" class="ts">表很大：十幾萬項。</text>
+      <text x="836" y="348" class="ts">一次可寫出一整個詞或詞根，</text>
+      <text x="836" y="370" class="ts">同樣的輪數能寫出更多內容。</text>
+
+      <text x="816" y="440" class="ts">兩者的五個步驟完全相同，</text>
+      <text x="816" y="462" class="ts">差別只在表的大小與每一輪的粒度。</text>
+
+      <text x="816" y="506" class="td" style="fill:var(--c-kv)">所謂「一個 token」到底是多少東西，</text>
+      <text x="816" y="528" class="td" style="fill:var(--c-kv)">就是在這一步決定的。</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 6 Embedding ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">概念 4</span>② Embedding：編號換成向量</h1>
+    <span class="tagline">兩張對照表，一次查表、一次相加</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ wte -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-bus"/>
+      <text x="44" y="56" class="tb">ⓐ wte：我是誰</text>
+      <text x="360" y="56" class="td end" style="fill:var(--c-bus)">27 列 × 16</text>
+
+      <text x="44" y="92" class="ts">一張 27 列的表，每個 token 一列，</text>
+      <text x="44" y="114" class="ts">每列是 16 個數字。</text>
+
+      <text x="44" y="152" class="td">編號 12</text>
+      <path d="M110 147 H150" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <text x="162" y="152" class="td">取出第 12 列</text>
+      <g class="tint-bus">
+        <rect x="44" y="170" width="30" height="20"/><rect x="78" y="170" width="30" height="20"/>
+        <rect x="112" y="170" width="30" height="20"/><rect x="146" y="170" width="30" height="20"/>
+        <rect x="180" y="170" width="30" height="20"/><rect x="214" y="170" width="30" height="20"/>
       </g>
-      <text x="430" y="352" class="ts">「頭」＝一組獨立的小型 Q／K／V；</text>
-      <text x="430" y="378" class="ts">多個頭平行運作，各自關注不同面向。</text>
+      <text x="256" y="185" class="td">…共 16 個</text>
 
-      <rect x="430" y="412" width="318" height="100" class="tint-kv"/>
-      <text x="448" y="442" class="ts" style="fill:var(--c-kv)">K／V 存入記憶（KV cache）</text>
-      <text x="448" y="470" class="td">算過的 K 與 V 留存下來，之後各輪</text>
-      <text x="448" y="492" class="td">產生新 token 時直接取用，不必重算。</text>
+      <text x="44" y="228" class="ts">查表就是這麼直接：沒有計算，</text>
+      <text x="44" y="250" class="ts">只是把第 12 列抄出來。</text>
 
-      <!-- ⓒ 疊加與校正 -->
+      <rect x="44" y="284" width="318" height="140" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="314" class="tb">這 16 個數字是什麼？</text>
+      <text x="64" y="344" class="ts">沒有人指定過它們的意義，</text>
+      <text x="64" y="366" class="ts">全部由訓練調整出來。</text>
+      <text x="64" y="396" class="ts" style="fill:var(--c-bus)">用途相近的字元，這 16 個數字</text>
+      <text x="64" y="418" class="ts" style="fill:var(--c-bus)">也會比較接近。</text>
+
+      <text x="44" y="472" class="td">「一個字元的意義」在模型裡，</text>
+      <text x="44" y="494" class="td">就等於 16 維空間中的一個座標。</text>
+
+      <!-- ⓑ wpe -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-kv"/>
+      <text x="430" y="56" class="tb">ⓑ wpe：我在第幾個</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-kv)">16 列 × 16</text>
+
+      <text x="430" y="92" class="ts">emma 有兩個 m。它們查 wte 得到的</text>
+      <text x="430" y="114" class="ts">16 個數字，完全一樣。</text>
+
+      <text x="456" y="152" class="tn mid" style="font-size:15px;fill:var(--c-kv)">BOS</text>
+      <text x="506" y="152" class="tn mid" style="font-size:15px">e</text>
+      <text x="540" y="152" class="tn mid" style="font-size:15px;fill:var(--c-now)">m</text>
+      <text x="574" y="152" class="tn mid" style="font-size:15px;fill:var(--c-now)">m</text>
+      <text x="608" y="152" class="tn mid" style="font-size:15px">a</text>
+      <text x="456" y="176" class="td mid">0</text>
+      <text x="506" y="176" class="td mid">1</text>
+      <text x="540" y="176" class="td mid" style="fill:var(--c-now)">2</text>
+      <text x="574" y="176" class="td mid" style="fill:var(--c-now)">3</text>
+      <text x="608" y="176" class="td mid">4</text>
+      <text x="646" y="176" class="td">← 位置</text>
+
+      <text x="430" y="212" class="ts">位置不同，但角色也不同：一個接在 e</text>
+      <text x="430" y="234" class="ts">後面，一個接在 m 後面。模型必須分得</text>
+      <text x="430" y="256" class="ts">出來，否則無從決定下一個字母。</text>
+
+      <text x="430" y="294" class="ts">因此另備一張表：每個位置一列，</text>
+      <text x="430" y="316" class="ts">同樣是 16 個數字。</text>
+
+      <text x="430" y="350" class="td">位置 0</text>
+      <g class="tint-kv">
+        <rect x="500" y="336" width="26" height="18"/><rect x="530" y="336" width="26" height="18"/>
+        <rect x="560" y="336" width="26" height="18"/><rect x="590" y="336" width="26" height="18"/>
+      </g>
+      <text x="630" y="350" class="td">…</text>
+      <text x="430" y="382" class="td">位置 1</text>
+      <g class="tint-kv">
+        <rect x="500" y="368" width="26" height="18"/><rect x="530" y="368" width="26" height="18"/>
+        <rect x="560" y="368" width="26" height="18"/><rect x="590" y="368" width="26" height="18"/>
+      </g>
+      <text x="630" y="382" class="td">…</text>
+
+      <rect x="430" y="414" width="318" height="112" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="442" class="tb">表的列數＝能讀多長</text>
+      <text x="450" y="470" class="ts">本次是 16 列，最多處理 16 個位置，</text>
+      <text x="450" y="492" class="ts">這就是所謂的 context length。</text>
+      <text x="450" y="516" class="td">大型模型的這張表有數萬到數十萬列。</text>
+
+      <!-- ⓒ 相加 -->
       <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
       <rect x="792" y="32" width="4" height="496" class="f-now"/>
-      <text x="816" y="56" class="tb">ⓒ 疊加與校正</text>
-      <text x="1132" y="56" class="td end" style="fill:var(--c-now)">殘差 ・ RMSNorm</text>
+      <text x="816" y="56" class="tb">ⓒ 兩者相加</text>
 
-      <rect x="836" y="76" width="120" height="34" class="tint-now"/>
-      <text x="896" y="98" class="ts mid">原資料</text>
-      <path d="M956 93 H1090 V250 H944" class="wire-now dash" marker-end="url(#ar-now)"/>
-      <text x="1024" y="84" class="td mid">留一份</text>
-      <path d="M896 110 V128" class="wire" marker-end="url(#ar-grey)"/>
-      <rect x="836" y="132" width="120" height="32" class="box"/>
-      <text x="896" y="153" class="ts mid">RMSNorm</text>
-      <path d="M896 164 V182" class="wire" marker-end="url(#ar-grey)"/>
-      <rect x="826" y="186" width="140" height="40" class="tint-attn"/>
-      <text x="896" y="211" class="ts mid">Attention／MLP</text>
-      <path d="M896 226 V236" class="wire" marker-end="url(#ar-grey)"/>
-      <circle cx="896" cy="252" r="14" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
-      <text x="896" y="258" class="tb mid" style="fill:var(--c-now)">＋</text>
-      <path d="M896 266 V288" class="wire-now" marker-end="url(#ar-now)"/>
-      <text x="896" y="312" class="ts mid" style="fill:var(--c-now)">疊加後的新資料</text>
-
-      <text x="872" y="352" class="td mid">參差</text>
-      <g class="bar-bus">
-        <rect x="836" y="360" width="12" height="34" rx="2"/>
-        <rect x="854" y="386" width="12" height="8" rx="2"/>
-        <rect x="872" y="370" width="12" height="24" rx="2"/>
-        <rect x="890" y="390" width="12" height="4" rx="2"/>
-        <rect x="908" y="378" width="12" height="16" rx="2"/>
+      <text x="816" y="94" class="td">wte 第 12 列</text>
+      <g class="tint-bus">
+        <rect x="944" y="80" width="26" height="18"/><rect x="974" y="80" width="26" height="18"/>
+        <rect x="1004" y="80" width="26" height="18"/><rect x="1034" y="80" width="26" height="18"/>
+        <rect x="1064" y="80" width="26" height="18"/><rect x="1094" y="80" width="26" height="18"/>
       </g>
-      <path d="M936 378 H976" class="wire" marker-end="url(#ar-grey)"/>
-      <text x="1036" y="352" class="td mid">相近</text>
-      <g class="bar-bus">
-        <rect x="994" y="376" width="12" height="18" rx="2"/>
-        <rect x="1012" y="379" width="12" height="15" rx="2"/>
-        <rect x="1030" y="377" width="12" height="17" rx="2"/>
-        <rect x="1048" y="380" width="12" height="14" rx="2"/>
-        <rect x="1066" y="378" width="12" height="16" rx="2"/>
+      <text x="975" y="126" class="th mid">＋</text>
+      <text x="816" y="152" class="td" style="fill:var(--c-kv)">wpe 第 2 列</text>
+      <g class="tint-kv">
+        <rect x="944" y="138" width="26" height="18"/><rect x="974" y="138" width="26" height="18"/>
+        <rect x="1004" y="138" width="26" height="18"/><rect x="1034" y="138" width="26" height="18"/>
+        <rect x="1064" y="138" width="26" height="18"/><rect x="1094" y="138" width="26" height="18"/>
       </g>
-      <text x="816" y="422" class="td">RMSNorm：把參差的數值壓回相近尺度</text>
+      <path d="M975 166 V190" class="wire-now" marker-end="url(#ar-now)"/>
+      <text x="816" y="216" class="td" style="fill:var(--c-now)">進入 ③ 的向量</text>
+      <g class="tint-now">
+        <rect x="944" y="202" width="26" height="18"/><rect x="974" y="202" width="26" height="18"/>
+        <rect x="1004" y="202" width="26" height="18"/><rect x="1034" y="202" width="26" height="18"/>
+        <rect x="1064" y="202" width="26" height="18"/><rect x="1094" y="202" width="26" height="18"/>
+      </g>
+      <text x="816" y="252" class="td">逐位相加：第 1 個數加第 1 個數，依此類推。</text>
 
-      <text x="816" y="462" class="ts">每一站的輸出「疊加」回原資料，</text>
-      <text x="816" y="486" class="ts">而非取代——這就是殘差連接。</text>
-      <text x="816" y="514" class="td">MLP：先放大空間來思考、只留下正向訊號</text>
-      <text x="816" y="534" class="td">（ReLU）、再壓縮回原寬度。</text>
+      <rect x="816" y="288" width="318" height="150" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="318" class="tb">值得停下來看一眼</text>
+      <text x="836" y="348" class="ts">整個第 ② 步，只有「查兩次表」</text>
+      <text x="836" y="370" class="ts">和「加一次」，沒有別的運算。</text>
+      <text x="836" y="400" class="ts">後面所有的計算，全部建立在</text>
+      <text x="836" y="422" class="ts">這條相加得到的向量之上。</text>
+
+      <text x="816" y="480" class="ts" style="fill:var(--c-now)">相加之後，這條向量同時帶著</text>
+      <text x="816" y="502" class="ts" style="fill:var(--c-now)">「我是誰」與「我在第幾個」。</text>
+      <text x="816" y="530" class="td">接下來，它才開始讀別人。</text>
     </svg>
   </div>
 </section>
 
-<!-- ═══════════ 5 收束 ═══════════ -->
-<section class="slide hero">
-  <div class="heroBox">
-    <div class="kicker">Summary</div>
-    <h1>一個迴圈，五個步驟</h1>
-    <div class="sub">推論＝「五步驟走一遍、產生一個 token」× 重複到寫完</div>
-    <div class="cards">
-      <div class="card"><h3 style="color:var(--c-now)">自回歸</h3><p>一次只產生一個 token，輸出接回輸入；長文是同一流程的重複。</p></div>
-      <div class="card"><h3 style="color:var(--c-bus)">五個步驟</h3><p>切字、變向量、只看前面、打分、抽樣——每一輪都完整走過。</p></div>
-      <div class="card"><h3 style="color:var(--c-rand)">唯一的隨機</h3><p>前四步是固定計算，結果不變；隨機只發生在最後的抽樣。</p></div>
-    </div>
+<!-- ═══════════ 7 Transformer 內部三件事 ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">概念 5</span>Transformer 內部的三件事</h1>
+    <span class="tagline">Attention 溝通 ・ MLP 加工 ・ 殘差疊加</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ Attention：橫向溝通 -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-attn"/>
+      <text x="44" y="56" class="tb">ⓐ Attention：互相取用</text>
+      <text x="360" y="56" class="td end" style="fill:var(--c-attn)">橫向</text>
+
+      <text x="44" y="88" class="ts">概念 4 得到的向量，還沒讀過任何前文。</text>
+
+      <g class="tint-bus">
+        <rect x="88" y="122" width="26" height="18"/><rect x="88" y="143" width="26" height="18"/>
+        <rect x="88" y="164" width="26" height="18"/><rect x="88" y="185" width="26" height="18"/>
+        <rect x="148" y="122" width="26" height="18"/><rect x="148" y="143" width="26" height="18"/>
+        <rect x="148" y="164" width="26" height="18"/><rect x="148" y="185" width="26" height="18"/>
+        <rect x="208" y="122" width="26" height="18"/><rect x="208" y="143" width="26" height="18"/>
+        <rect x="208" y="164" width="26" height="18"/><rect x="208" y="185" width="26" height="18"/>
+      </g>
+      <rect x="204" y="118" width="34" height="89" rx="6" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
+      <path d="M101 210 Q150 246 214 216" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <path d="M161 212 Q188 238 216 224" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="101" y="258" class="td mid">BOS</text>
+      <text x="161" y="258" class="td mid">e</text>
+      <text x="221" y="258" class="td mid" style="fill:var(--c-now)">m</text>
+      <text x="276" y="180" class="td" style="fill:var(--c-attn)">前方各位置</text>
+      <text x="276" y="200" class="td" style="fill:var(--c-attn)">的資訊流入</text>
+
+      <text x="44" y="306" class="ts">m 這條向量向前方各位置索取資訊，</text>
+      <text x="44" y="328" class="ts">依相關程度決定各取多少，</text>
+      <text x="44" y="350" class="ts">再加總成為自己的新向量。</text>
+      <text x="44" y="376" class="td">BOS 與 e 只提供資訊，本輪不必重算。</text>
+
+      <text x="44" y="416" class="ts" style="fill:var(--c-attn)">位置之間的橫向溝通，僅發生於此。</text>
+
+      <text x="44" y="466" class="td">這一步實際如何運算 —— 三種角色、</text>
+      <text x="44" y="488" class="td">相似度、多個頭 —— 詳見概念 6。</text>
+
+      <!-- ⓑ MLP：各自加工 -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-mlp"/>
+      <text x="430" y="56" class="tb">ⓑ MLP：各自加工</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-mlp)">16 → 64 → 16</text>
+
+      <text x="430" y="86" class="ts">Attention 之後，每個位置各自通過</text>
+      <text x="430" y="108" class="ts">同一個小型網路，位置之間不互通。</text>
+
+      <rect x="519" y="126" width="140" height="30" class="tint-bus"/>
+      <text x="589" y="146" class="ts mid" style="fill:var(--c-bus)">16 個數值</text>
+      <path d="M589 156 V178" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+      <rect x="459" y="182" width="260" height="30" class="tint-mlp"/>
+      <text x="589" y="202" class="ts mid" style="fill:var(--c-mlp)">展開為 64 項檢查</text>
+      <path d="M589 212 V234" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+      <text x="604" y="228" class="td" style="fill:var(--c-mlp)">ReLU</text>
+      <rect x="519" y="238" width="140" height="30" class="tint-bus"/>
+      <text x="589" y="258" class="ts mid" style="fill:var(--c-bus)">壓回 16 個數值</text>
+
+      <text x="430" y="296" class="ts">展開＝同時進行 64 項檢查，例如</text>
+      <text x="430" y="318" class="ts">「前一字是否為母音」「是否接近結尾」。</text>
+      <text x="430" y="342" class="ts">ReLU：檢查結果為正者保留，為負者歸零。</text>
+      <text x="430" y="364" class="ts">再壓回 16 個數值，將結論寫回這條向量。</text>
+
+      <rect x="430" y="392" width="318" height="120" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="420" class="tb">一橫一縱，交替進行</text>
+      <text x="450" y="448" class="ts" style="fill:var(--c-attn)">Attention：位置之間橫向溝通。</text>
+      <text x="450" y="470" class="ts" style="fill:var(--c-mlp)">MLP：每個位置縱向加工。</text>
+      <text x="450" y="496" class="td">一個 Transformer block 即為這兩站。</text>
+
+      <!-- ⓒ 殘差主幹 -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-now"/>
+      <text x="816" y="56" class="tb">ⓒ 疊回原本的資料</text>
+      <text x="1132" y="56" class="td end" style="fill:var(--c-now)">殘差 ・ ×N</text>
+
+      <rect x="836" y="74" width="120" height="30" class="tint-now"/>
+      <text x="896" y="94" class="ts mid">原資料</text>
+      <path d="M956 89 H1080 V236 H942" class="wire-now dash" marker-end="url(#ar-now)"/>
+      <text x="1018" y="80" class="td mid">留一份</text>
+      <path d="M896 104 V118" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="836" y="122" width="120" height="30" class="box"/>
+      <text x="896" y="142" class="ts mid">RMSNorm</text>
+      <path d="M896 152 V166" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="826" y="170" width="140" height="42" class="box"/>
+      <text x="896" y="189" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+      <text x="896" y="207" class="ts mid" style="fill:var(--c-mlp)">或 MLP</text>
+      <path d="M896 212 V220" class="wire" marker-end="url(#ar-grey)"/>
+      <circle cx="896" cy="236" r="13" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
+      <text x="896" y="242" class="tb mid" style="fill:var(--c-now)">＋</text>
+      <path d="M896 249 V268" class="wire-now" marker-end="url(#ar-now)"/>
+      <text x="896" y="290" class="ts mid" style="fill:var(--c-now)">疊加後的新資料</text>
+
+      <text x="816" y="318" class="td">此流程於單一 block 內執行兩次：</text>
+      <text x="816" y="338" class="td">一次供 Attention，一次供 MLP。</text>
+
+      <text x="816" y="374" class="tb" style="fill:var(--c-now)">疊加，而非取代</text>
+      <text x="816" y="402" class="ts">子層的輸出加回原資料，原有資訊不被</text>
+      <text x="816" y="424" class="ts">覆蓋；進出形狀一致，故可重複 N 次。</text>
+
+      <text x="816" y="462" class="tb">RMSNorm</text>
+      <text x="816" y="490" class="ts">進入子層前，先將數值壓回相近尺度。</text>
+      <text x="816" y="512" class="ts">它不含任何訓練參數，詳見概念 8。</text>
+    </svg>
   </div>
 </section>
 
-<!-- ═══════════ 6 橋接：MicroGPT ═══════════ -->
-<section class="slide hero">
-  <div class="heroBox">
-    <div class="kicker" style="color:var(--c-kv)">Next · MicroGPT</div>
-    <h1>用一個迷你模型走完整條流程</h1>
-    <div class="sub">MicroGPT：4192 個參數的字元級模型——結構與大型模型相同，只是縮小</div>
-    <svg viewBox="0 0 900 252" style="width:900px;height:252px;margin-top:26px">
-      <text x="250" y="30" class="th mid">大型語言模型</text>
-      <text x="660" y="30" class="th mid" style="fill:var(--c-kv)">MicroGPT</text>
-      <line x1="60" y1="44" x2="850" y2="44" class="axis"/>
-      <text x="250" y="76" class="ts mid">詞彙表：十幾萬個 token</text>
-      <text x="660" y="76" class="ts mid">27 個字元（a–z ＋ 開始符 BOS）</text>
-      <text x="250" y="108" class="ts mid">向量：數千維</text>
-      <text x="660" y="108" class="ts mid">16 維</text>
-      <text x="250" y="140" class="ts mid">數十層 ・ 數十個 Attention 頭</text>
-      <text x="660" y="140" class="ts mid">1 層 ・ 4 個頭</text>
-      <text x="250" y="172" class="ts mid">任務：接續任何文字</text>
-      <text x="660" y="172" class="ts mid">任務：學人名（如 emma）產生下一個字母</text>
-      <line x1="455" y1="44" x2="455" y2="182" class="axis"/>
-      <text x="450" y="216" class="td mid">前面示範用的就是 MicroGPT 的字元級 tokenizer；大型模型多以詞塊為 token，單位更大，原理相同。</text>
-      <text x="450" y="240" class="td mid">BOS（begin of sequence）標記序列開頭，讓模型知道「從頭開始產生」。</text>
+<!-- ═══════════ 8 放大看 Attention ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">概念 6</span>放大看 Attention</h1>
+    <span class="tagline">三種角色 ・ 取用比重 ・ 多個頭</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ① 三種角色如何產生 -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-attn"/>
+      <text x="44" y="56" class="tb">① 三種角色如何產生</text>
+      <text x="360" y="56" class="td end" style="fill:var(--c-attn)">Wq ・ Wk ・ Wv</text>
+
+      <rect x="133" y="88" width="140" height="30" class="tint-bus"/>
+      <text x="203" y="108" class="ts mid" style="fill:var(--c-bus)">m 的向量</text>
+      <path d="M203 118 V142" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="44" y="166" class="td">分別乘上三張權重表：</text>
+
+      <rect x="44" y="182" width="40" height="28" class="tint-attn"/>
+      <text x="64" y="202" class="tb mid" style="fill:var(--c-attn)">Q</text>
+      <text x="96" y="202" class="ts">我在找什麼</text>
+      <text x="360" y="202" class="td end" style="fill:var(--c-attn)">Wq</text>
+      <rect x="44" y="224" width="40" height="28" class="tint-attn"/>
+      <text x="64" y="244" class="tb mid" style="fill:var(--c-attn)">K</text>
+      <text x="96" y="244" class="ts">我是什麼</text>
+      <text x="360" y="244" class="td end" style="fill:var(--c-attn)">Wk</text>
+      <rect x="44" y="266" width="40" height="28" class="tint-attn"/>
+      <text x="64" y="286" class="tb mid" style="fill:var(--c-attn)">V</text>
+      <text x="96" y="286" class="ts">我能提供什麼</text>
+      <text x="360" y="286" class="td end" style="fill:var(--c-attn)">Wv</text>
+
+      <text x="44" y="336" class="ts">Wq、Wk、Wv 是三張權重表，</text>
+      <text x="44" y="358" class="ts">其內容由訓練決定，並非人工指定。</text>
+
+      <text x="44" y="400" class="ts">前文的每個位置，同樣各自產生</text>
+      <text x="44" y="422" class="ts">自己的 Q、K、V。</text>
+
+      <text x="44" y="466" class="td" style="fill:var(--c-kv)">已算出的 K、V 會留存重複取用</text>
+      <text x="44" y="488" class="td" style="fill:var(--c-kv)">（KV cache，見概念 1）。</text>
+
+      <!-- ② 如何決定取用比重 -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-attn"/>
+      <text x="430" y="56" class="tb">② 如何決定取用比重</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-attn)">相似度</text>
+
+      <text x="430" y="88" class="ts">m 的 Q 與前方各位置的 K 逐一比對，</text>
+      <text x="430" y="110" class="ts">兩者方向愈接近，分數愈高。</text>
+
+      <circle cx="470" cy="204" r="3" class="f-attn"/>
+      <path d="M470 204 L548 158" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <path d="M470 204 L546 170" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="508" y="234" class="td mid">方向接近 → 分數高</text>
+
+      <circle cx="632" cy="204" r="3" class="wire" style="fill:#8a8981"/>
+      <path d="M632 204 L710 158" class="wire" marker-end="url(#ar-grey)"/>
+      <path d="M632 204 L664 140" class="wire" marker-end="url(#ar-grey)"/>
+      <text x="670" y="234" class="td mid">方向偏離 → 分數低</text>
+
+      <text x="430" y="278" class="ts">每個位置各得到一個分數，再一併換算</text>
+      <text x="430" y="300" class="ts">成加總為 1 的比重。</text>
+      <text x="430" y="334" class="ts">分數高的位置，取用其 V 的比重就大；</text>
+      <text x="430" y="356" class="ts">各處的 V 依比重加總，成為新的向量。</text>
+
+      <rect x="430" y="392" width="318" height="120" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="420" class="tb">只比對前方</text>
+      <text x="450" y="450" class="ts">後方尚未產生的位置不參與比對，</text>
+      <text x="450" y="472" class="ts">因此模型讀不到還沒寫出來的字。</text>
+      <text x="450" y="498" class="td">這正是概念 1 自回歸的前提。</text>
+
+      <!-- ③ 多個頭平行進行 -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-attn"/>
+      <text x="816" y="56" class="tb">③ 多個頭平行進行</text>
+      <text x="1132" y="56" class="td end" style="fill:var(--c-attn)">4 個頭 ・ wo</text>
+
+      <rect x="856" y="88" width="240" height="28" class="tint-bus"/>
+      <text x="976" y="107" class="ts mid" style="fill:var(--c-bus)">一條向量</text>
+      <path d="M976 116 V136" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <rect x="856" y="140" width="54" height="28" class="tint-attn"/><text x="883" y="159" class="td mid" style="fill:var(--c-attn)">頭 1</text>
+      <rect x="918" y="140" width="54" height="28" class="tint-attn"/><text x="945" y="159" class="td mid" style="fill:var(--c-attn)">頭 2</text>
+      <rect x="980" y="140" width="54" height="28" class="tint-attn"/><text x="1007" y="159" class="td mid" style="fill:var(--c-attn)">頭 3</text>
+      <rect x="1042" y="140" width="54" height="28" class="tint-attn"/><text x="1069" y="159" class="td mid" style="fill:var(--c-attn)">頭 4</text>
+      <text x="976" y="192" class="td mid">每個頭各自進行一次 ① ②</text>
+      <path d="M976 202 V222" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <rect x="856" y="226" width="240" height="28" class="tint-bus"/>
+      <text x="976" y="245" class="ts mid" style="fill:var(--c-bus)">四份結果接回一條向量</text>
+      <path d="M976 254 V274" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <rect x="886" y="278" width="180" height="28" class="tint-attn"/>
+      <text x="976" y="297" class="ts mid" style="fill:var(--c-attn)">再通過權重表 wo</text>
+
+      <text x="816" y="348" class="ts">各頭關注的面向不同：有的偏向鄰近</text>
+      <text x="816" y="370" class="ts">字元，有的偏向較遠的位置。</text>
+
+      <text x="816" y="410" class="ts">這樣的分工由訓練自然形成，並非</text>
+      <text x="816" y="432" class="ts">事先指定哪個頭負責什麼。</text>
+
+      <text x="816" y="476" class="td">wo 同樣是一張由訓練得到的權重表。</text>
     </svg>
-    <div class="hint">接下來的 3D 流程換 emma 的第一個字母「e」當主角，沿同一條管線逐關展示每個步驟。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 9 打分與抽樣 ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">概念 7</span>④ 打分與 ⑤ 抽樣</h1>
+    <span class="tagline">從一條向量，到真的寫出一個字母</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ 只取最後一條 -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-bus"/>
+      <text x="44" y="56" class="tb">ⓐ 出來的是一條向量</text>
+
+      <text x="44" y="90" class="ts">走完 Transformer 的，自始至終只有</text>
+      <text x="44" y="112" class="ts">m 這一條向量。</text>
+
+      <rect x="133" y="140" width="120" height="30" class="tint-now"/>
+      <text x="193" y="160" class="ts mid" style="fill:var(--c-now)">m 的向量</text>
+      <path d="M193 170 V194" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="113" y="198" width="160" height="40" class="box"/>
+      <text x="193" y="223" class="ts mid">Transformer ×N</text>
+      <rect x="288" y="198" width="74" height="40" class="tint-kv"/>
+      <text x="325" y="216" class="td mid" style="fill:var(--c-kv)">BOS、e</text>
+      <text x="325" y="232" class="td mid" style="fill:var(--c-kv)">的 K、V</text>
+      <path d="M288 218 H279" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+      <path d="M193 238 V262" class="wire-now" marker-end="url(#ar-now)"/>
+      <g class="tint-now">
+        <rect x="117" y="272" width="22" height="18"/><rect x="143" y="272" width="22" height="18"/>
+        <rect x="169" y="272" width="22" height="18"/><rect x="195" y="272" width="22" height="18"/>
+        <rect x="221" y="272" width="22" height="18"/><rect x="247" y="272" width="22" height="18"/>
+      </g>
+      <text x="282" y="286" class="td">…共 16 個</text>
+
+      <text x="44" y="330" class="ts">出來的仍是一條 16 個數字的向量，</text>
+      <text x="44" y="352" class="ts">但它已經讀過 BOS 與 e。</text>
+
+      <text x="44" y="392" class="td">BOS 與 e 在先前各輪就算過了，其 K、V</text>
+      <text x="44" y="414" class="td">留在記憶裡（KV cache），本輪直接取用，</text>
+      <text x="44" y="436" class="td">不必再跑一次 Transformer。</text>
+
+      <rect x="44" y="462" width="318" height="60" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="490" class="ts">每一輪只產生一個 token，</text>
+      <text x="64" y="512" class="ts">而它接在目前最後一個字之後。</text>
+
+      <!-- ⓑ 打分 -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-bus"/>
+      <text x="430" y="56" class="tb">ⓑ 打分：向量變成機率</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-bus)">lm_head ・ softmax</text>
+
+      <g class="tint-bus">
+        <rect x="513" y="88" width="22" height="18"/><rect x="539" y="88" width="22" height="18"/>
+        <rect x="565" y="88" width="22" height="18"/><rect x="591" y="88" width="22" height="18"/>
+        <rect x="617" y="88" width="22" height="18"/><rect x="643" y="88" width="22" height="18"/>
+      </g>
+      <text x="676" y="102" class="td">…共 16 個</text>
+      <path d="M589 112 V132" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="499" y="136" width="180" height="28" class="tint-bus"/>
+      <text x="589" y="155" class="ts mid" style="fill:var(--c-bus)">lm_head（27 × 16）</text>
+      <path d="M589 168 V188" class="wire-bus" marker-end="url(#ar-bus)"/>
+
+      <g class="bar-grey">
+        <rect x="440" y="248" width="8" height="14"/><rect x="452" y="240" width="8" height="22"/>
+        <rect x="464" y="252" width="8" height="10"/><rect x="476" y="234" width="8" height="28"/>
+        <rect x="488" y="250" width="8" height="12"/><rect x="500" y="244" width="8" height="18"/>
+        <rect x="512" y="254" width="8" height="8"/><rect x="524" y="246" width="8" height="16"/><rect x="536" y="250" width="8" height="12"/>
+        <rect x="548" y="252" width="8" height="10"/><rect x="560" y="242" width="8" height="20"/>
+        <rect x="572" y="255" width="8" height="7"/><rect x="596" y="238" width="8" height="24"/><rect x="608" y="253" width="8" height="9"/>
+        <rect x="620" y="247" width="8" height="15"/><rect x="632" y="251" width="8" height="11"/>
+        <rect x="644" y="243" width="8" height="19"/><rect x="656" y="254" width="8" height="8"/>
+        <rect x="668" y="249" width="8" height="13"/><rect x="680" y="245" width="8" height="17"/>
+        <rect x="692" y="252" width="8" height="10"/><rect x="704" y="240" width="8" height="22"/>
+        <rect x="716" y="253" width="8" height="9"/><rect x="728" y="248" width="8" height="14"/>
+      </g>
+      <rect x="584" y="196" width="8" height="66" class="bar-rand"/>
+      <line x1="434" y1="262" x2="742" y2="262" class="axis"/>
+      <text x="588" y="280" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
+      <text x="430" y="308" class="td">27 個字元，各得到一個機率，加總為 1</text>
+
+      <text x="430" y="350" class="ts">這條向量通過 lm_head，得到 27 個分數，</text>
+      <text x="430" y="372" class="ts">每個字元一個；softmax 再將這些分數</text>
+      <text x="430" y="394" class="ts">換算成加總為 1 的機率。</text>
+
+      <rect x="430" y="428" width="318" height="94" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="458" class="tb">與第 ② 步方向相反</text>
+      <text x="450" y="488" class="ts">wte 由字元查出向量；</text>
+      <text x="450" y="510" class="ts">lm_head 由向量算回每個字元的分數。</text>
+
+      <!-- ⓒ 抽樣 -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-rand"/>
+      <text x="816" y="56" class="tb">ⓒ 抽樣</text>
+      <text x="1132" y="56" class="td end" style="fill:var(--c-rand)">全流程唯一的隨機</text>
+
+      <text x="816" y="90" class="ts">依這組機率抽取一次，取出一個 token。</text>
+
+      <rect x="816" y="118" width="318" height="22" rx="4" class="bar-grey"/>
+      <rect x="816" y="118" width="126" height="22" rx="4" class="bar-rand" opacity=".85"/>
+      <path d="M898 110 V102" class="wire-rand"/>
+      <path d="M898 102 L893 110 L903 110 z" class="f-rand"/>
+      <text x="816" y="166" class="td">落在哪一段，就取出哪一個字元</text>
+      <rect x="816" y="184" width="70" height="32" class="tint-now"/>
+      <text x="851" y="206" class="tb mid" style="fill:var(--c-now)">m</text>
+      <text x="906" y="206" class="td">本輪產生：emma 的第 2 個 m</text>
+
+      <text x="816" y="264" class="ts">前面每一步都是固定計算：同樣的輸入</text>
+      <text x="816" y="286" class="ts">必定得到同樣的分數。隨機僅發生於此。</text>
+
+      <rect x="816" y="316" width="318" height="130" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="344" class="tb">溫度（temperature）</text>
+      <text x="836" y="372" class="ts">抽樣前可調的一個數字：27 個分數</text>
+      <text x="836" y="394" class="ts">先同除以它，再交給 softmax。</text>
+      <text x="836" y="424" class="td">低 → 分佈變尖，輸出保守；高 → 分佈變平。</text>
+
+      <text x="816" y="470" class="ts" style="fill:var(--c-now)">抽到 BOS，即代表這個名字結束。</text>
+      <text x="816" y="500" class="td">否則將新 token 接回 context，</text>
+      <text x="816" y="522" class="td">回到第 ① 步，再走一輪（概念 1）。</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 10 4192 個參數在哪裡 ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">概念 8</span>4192 個參數在哪裡</h1>
+    <span class="tagline">模型裡只有兩種東西：查表得到的數字，與固定的算法</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- 左：有參數 -->
+      <rect x="20" y="20" width="566" height="368" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="344" class="f-bus"/>
+      <text x="44" y="58" class="tb" style="fill:var(--c-bus)">參數：模型裡實際存放的數字</text>
+      <text x="44" y="82" class="td">名稱沿用程式中的變數名，稍後閱讀 MicroGPT 原始碼時會直接對應到。</text>
+      <text x="562" y="82" class="td end">格數</text>
+
+      <text x="44" y="118" class="tn" style="fill:var(--c-bus)">wte</text>
+      <text x="180" y="118" class="ts">字元對照表：27 個字元 × 16</text>
+      <text x="562" y="118" class="tn end">432</text>
+      <text x="44" y="156" class="tn" style="fill:var(--c-bus)">wpe</text>
+      <text x="180" y="156" class="ts">位置對照表：16 個位置 × 16</text>
+      <text x="562" y="156" class="tn end">256</text>
+      <text x="44" y="194" class="tn" style="fill:var(--c-bus)">Wq Wk Wv</text>
+      <text x="180" y="194" class="ts">產生 Q、K、V 的三張表</text>
+      <text x="562" y="194" class="tn end">768</text>
+      <text x="44" y="232" class="tn" style="fill:var(--c-bus)">wo</text>
+      <text x="180" y="232" class="ts">多個頭合併後的表</text>
+      <text x="562" y="232" class="tn end">256</text>
+      <text x="44" y="270" class="tn" style="fill:var(--c-bus)">MLP</text>
+      <text x="180" y="270" class="ts">展開 16→64、再壓回 64→16</text>
+      <text x="562" y="270" class="tn end">2048</text>
+      <text x="44" y="308" class="tn" style="fill:var(--c-bus)">lm_head</text>
+      <text x="180" y="308" class="ts">由向量算出 27 個字元的分數</text>
+      <text x="562" y="308" class="tn end">432</text>
+
+      <line x1="44" y1="330" x2="562" y2="330" class="axis"/>
+      <text x="44" y="360" class="tb">合計</text>
+      <text x="562" y="360" class="tb end" style="fill:var(--c-bus)">4192</text>
+
+      <!-- 右：無參數 -->
+      <rect x="606" y="20" width="554" height="368" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="606" y="32" width="4" height="344" class="f-mlp"/>
+      <text x="630" y="58" class="tb" style="fill:var(--c-mlp)">無參數：固定算法</text>
+
+      <text x="630" y="106" class="tn" style="fill:var(--c-mlp)">RMSNorm</text>
+      <text x="790" y="106" class="ts">將一條向量的數值壓回相近尺度</text>
+      <text x="630" y="152" class="tn" style="fill:var(--c-mlp)">ReLU</text>
+      <text x="790" y="152" class="ts">正值保留，負值歸零</text>
+      <text x="630" y="198" class="tn" style="fill:var(--c-mlp)">softmax</text>
+      <text x="790" y="198" class="ts">把一組分數換算成加總為 1 的機率</text>
+      <text x="630" y="244" class="tn" style="fill:var(--c-mlp)">＋</text>
+      <text x="790" y="244" class="ts">殘差：兩條向量逐元素相加</text>
+      <text x="630" y="290" class="tn" style="fill:var(--c-mlp)">抽樣</text>
+      <text x="790" y="290" class="ts">依機率取出一個 token</text>
+
+      <text x="630" y="344" class="td">這些步驟不存放任何數字，每次都以</text>
+      <text x="630" y="366" class="td">相同規則計算，對任何模型都一樣。</text>
+
+      <rect x="20" y="430" width="1140" height="96" rx="12" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <rect x="20" y="442" width="4" height="72" class="f-kv"/>
+      <text x="590" y="470" class="tb mid">接下來：同一條管線，以 3D 重新走過一次</text>
+      <text x="590" y="500" class="ts mid">3D 流程以 emma 的第一個 m 當主角——正是前面各頁追蹤的那條向量——逐關展示這五個步驟。</text>
+    </svg>
   </div>
 </section>
 
