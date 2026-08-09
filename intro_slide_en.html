@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MicroGPT — A Language Model Small Enough to Read</title>
+<style>
+/* ============ Colour system (same validated dataviz dark palette as slides.html) ============ */
+:root{
+  --bg:#0d0d0d; --panel:#1a1a19; --panel2:#222221;
+  --border:rgba(255,255,255,.10); --grid:#2c2c2a; --baseline:#383835;
+  --ink:#ffffff; --ink2:#c3c2b7; --ink3:#898781;
+  --c-bus:#3987e5;   /* main pipeline / vectors */
+  --c-attn:#d95926;  /* attention */
+  --c-mlp:#199e70;   /* MLP */
+  --c-now:#c98500;   /* current token / new this round */
+  --c-kv:#9085e9;    /* state across rounds */
+  --c-rand:#e66767;  /* randomness (used once in the deck) */
+  --sans:system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg)}
+body{font-family:var(--sans);visibility:hidden}
+
+/* ============ Stage ============ */
+#stage{position:fixed;left:50%;top:50%;width:1280px;height:720px;
+       transform-origin:50% 50%;background:var(--bg)}
+.slide{display:none;position:absolute;inset:0;padding:26px 44px 20px;color:var(--ink)}
+.slide.active{display:grid}
+.std{grid-template-rows:66px minmax(0,1fr)}
+.hero{grid-template-rows:minmax(0,1fr);place-items:center}
+
+/* ============ Title bar ============ */
+.slide header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.slide h1{margin:0;min-width:0;flex:1 1 auto;font-size:26px;font-weight:650;letter-spacing:.3px;display:flex;align-items:center;gap:14px;white-space:nowrap}
+.figno{font:600 13px/1 var(--mono);color:var(--ink2);border:1px solid var(--border);
+       background:var(--panel);padding:6px 10px;border-radius:8px;letter-spacing:1px;white-space:nowrap;flex:0 0 auto}
+.tagline{font-size:12.5px;color:var(--ink3);letter-spacing:.3px;white-space:nowrap;flex:0 0 auto}
+
+/* ============ Single full-width figure ============ */
+.fig{min-height:0;min-width:0;display:flex;align-items:center;justify-content:center;padding-top:8px}
+.fig svg{width:100%;height:100%}
+
+/* ============ SVG type system ============ */
+svg text{font-family:var(--sans)}
+.t {fill:var(--ink);font-size:15px}
+.th{fill:var(--ink);font-size:18px;font-weight:600}
+.ts{fill:var(--ink2);font-size:13px}
+.td{fill:var(--ink3);font-size:12.5px}
+.tn{fill:var(--ink2);font-size:13px;font-family:var(--mono)}
+.tb{fill:var(--ink);font-size:15px;font-weight:600}
+.mid{text-anchor:middle}.end{text-anchor:end}
+.box{fill:var(--panel2);stroke:#4a4947;stroke-width:1.4;rx:8}
+.tint-bus {fill:rgba(57,135,229,.13);stroke:var(--c-bus);stroke-width:1.6;rx:8}
+.tint-attn{fill:rgba(217,89,38,.13);stroke:var(--c-attn);stroke-width:1.6;rx:8}
+.tint-mlp {fill:rgba(25,158,112,.13);stroke:var(--c-mlp);stroke-width:1.6;rx:8}
+.tint-kv  {fill:rgba(144,133,233,.12);stroke:var(--c-kv);stroke-width:1.6;rx:8}
+.tint-rand{fill:rgba(230,103,103,.13);stroke:var(--c-rand);stroke-width:1.6;rx:8}
+.tint-now {fill:rgba(201,133,0,.15);stroke:var(--c-now);stroke-width:1.6;rx:8}
+.f-bus{fill:var(--c-bus)}.f-attn{fill:var(--c-attn)}.f-mlp{fill:var(--c-mlp)}
+.f-kv{fill:var(--c-kv)}.f-rand{fill:var(--c-rand)}.f-now{fill:var(--c-now)}
+.wire{stroke:#8a8981;stroke-width:1.8;fill:none}
+.wire-bus{stroke:var(--c-bus);stroke-width:2.2;fill:none}
+.wire-attn{stroke:var(--c-attn);stroke-width:1.8;fill:none}
+.wire-mlp{stroke:var(--c-mlp);stroke-width:1.8;fill:none}
+.wire-kv{stroke:var(--c-kv);stroke-width:1.8;fill:none}
+.wire-rand{stroke:var(--c-rand);stroke-width:1.8;fill:none}
+.wire-now{stroke:var(--c-now);stroke-width:1.8;fill:none}
+.dash{stroke-dasharray:5 4}
+.bar-bus{fill:var(--c-bus)}.bar-rand{fill:var(--c-rand)}.bar-grey{fill:#4a4947}
+.axis{stroke:var(--baseline);stroke-width:1}
+
+/* ============ Page number ============ */
+#pageno{position:absolute;right:44px;bottom:13px;font:12.5px var(--mono);color:var(--ink3);z-index:2}
+
+/* ============ Cover / summary pages ============ */
+.heroBox{text-align:center;max-width:1050px}
+.kicker{font:600 14px var(--mono);color:var(--c-bus);letter-spacing:6px;text-transform:uppercase}
+.heroBox h1{display:block;font-size:46px;margin:18px 0 10px;letter-spacing:.5px}
+.heroBox .sub{font-size:19px;color:var(--ink2)}
+.hint{margin-top:34px;font-size:13px;color:var(--ink3)}
+.hint b{color:var(--ink2);font-weight:500;font-family:var(--mono)}
+.cards{display:flex;gap:20px;justify-content:center;margin-top:34px}
+.card{flex:1;max-width:330px;text-align:left;background:var(--panel);border:1px solid var(--border);
+      border-radius:14px;padding:20px 22px}
+.card h3{margin:0 0 8px;font-size:18px}
+.card p{margin:0;font-size:14.5px;line-height:1.6;color:var(--ink2)}
+
+/* ============ Print ============ */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  body{visibility:visible!important}
+  #stage{position:static;transform:none!important;width:1280px;height:auto}
+  .slide{display:grid!important;position:relative;inset:auto;width:1280px;height:720px;
+         break-after:page;page-break-after:always}
+  #pageno{display:none!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<!-- Shared defs: six arrow colours -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<marker id="ar-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8981"/></marker>
+<marker id="ar-bus" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3987e5"/></marker>
+<marker id="ar-attn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d95926"/></marker>
+<marker id="ar-mlp" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#199e70"/></marker>
+<marker id="ar-kv" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9085e9"/></marker>
+<marker id="ar-rand" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e66767"/></marker>
+<marker id="ar-now" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c98500"/></marker>
+</defs>
+</svg>
+
+<div id="stage">
+
+<!-- ═══════════ 1 Cover: MicroGPT ═══════════ -->
+<section class="slide hero">
+  <div class="heroBox">
+    <div class="kicker" style="color:var(--c-kv)">MicroGPT</div>
+    <h1>A Language Model Small Enough to Read</h1>
+    <div class="sub">4,192 parameters, 199 lines of pure Python — the same structure as a large model, only smaller</div>
+    <svg viewBox="0 0 900 210" style="width:900px;height:210px;margin-top:26px">
+      <text x="250" y="30" class="th mid">Large language model</text>
+      <text x="660" y="30" class="th mid" style="fill:var(--c-kv)">MicroGPT</text>
+      <line x1="60" y1="44" x2="850" y2="44" class="axis"/>
+      <text x="250" y="76" class="ts mid">Vocabulary: over 100,000 tokens</text>
+      <text x="660" y="76" class="ts mid">27 characters (a–z plus BOS)</text>
+      <text x="250" y="108" class="ts mid">Vectors: thousands of dimensions</text>
+      <text x="660" y="108" class="ts mid">16 dimensions</text>
+      <text x="250" y="140" class="ts mid">Dozens of layers · dozens of heads</text>
+      <text x="660" y="140" class="ts mid">1 layer · 4 heads</text>
+      <text x="250" y="172" class="ts mid">Task: continue any text</text>
+      <text x="660" y="172" class="ts mid">Task: learn names, write the next letter</text>
+      <line x1="455" y1="44" x2="455" y2="182" class="axis"/>
+    </svg>
+    <div class="hint"><b>←</b> <b>→</b> to turn pages · <b>f</b> for fullscreen</div>
+  </div>
+</section>
+
+<!-- ═══════════ 2 What the program prints ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">THE RESULT FIRST</span>What running this program produces</h1>
+    <span class="tagline">Reads 32,033 real names, writes 20 that do not exist</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <rect x="20" y="20" width="680" height="470" rx="12" fill="#141413" stroke="rgba(255,255,255,.10)"/>
+      <text x="44" y="56" class="td" style="font-family:var(--mono)">$ python microgpt.py</text>
+
+      <text x="44" y="88" class="tn">num docs: 32033</text>
+      <text x="44" y="112" class="tn">vocab size: 27</text>
+      <text x="44" y="136" class="tn" style="fill:var(--c-bus)">num params: 4192</text>
+      <text x="44" y="160" class="tn">step 1000 / 1000 | loss 2.6497</text>
+      <text x="44" y="192" class="tn" style="fill:var(--ink3)">--- inference (new, hallucinated names) ---</text>
+
+      <g style="fill:var(--c-now)">
+        <text x="48" y="228" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  1: kamon</text>
+        <text x="48" y="252" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  2: ann</text>
+        <text x="48" y="276" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  3: karai</text>
+        <text x="48" y="300" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  4: jaire</text>
+        <text x="48" y="324" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  5: vialan</text>
+        <text x="48" y="348" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  6: karia</text>
+        <text x="48" y="372" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  7: yeran</text>
+        <text x="48" y="396" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  8: anna</text>
+        <text x="48" y="420" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample  9: areli</text>
+        <text x="48" y="444" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 10: kaina</text>
+        <text x="376" y="228" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 11: konna</text>
+        <text x="376" y="252" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 12: keylen</text>
+        <text x="376" y="276" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 13: liole</text>
+        <text x="376" y="300" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 14: alerin</text>
+        <text x="376" y="324" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 15: earan</text>
+        <text x="376" y="348" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 16: lenne</text>
+        <text x="376" y="372" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 17: kana</text>
+        <text x="376" y="396" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 18: lara</text>
+        <text x="376" y="420" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 19: alela</text>
+        <text x="376" y="444" class="tn" xml:space="preserve" style="fill:var(--c-now)">sample 20: anton</text>
+      </g>
+
+      <path d="M706 83 H726" class="wire"/>
+      <text x="736" y="88" class="ts">32,033 real English names are read in</text>
+      <path d="M706 107 H726" class="wire"/>
+      <text x="736" y="112" class="ts">A vocabulary of 27: 26 letters plus BOS</text>
+      <path d="M706 131 H726" class="wire-bus"/>
+      <text x="736" y="136" class="ts" style="fill:var(--c-bus)">The whole model holds only 4,192 numbers</text>
+      <path d="M706 155 H726" class="wire"/>
+      <text x="736" y="160" class="ts">Loss: lower means better predictions</text>
+
+      <text x="736" y="234" class="tb" style="fill:var(--c-now)">None of these 20 names exists</text>
+      <text x="736" y="266" class="ts">Not one of the 32,033 names read in</text>
+      <text x="736" y="288" class="ts">looks like these. Every one was written</text>
+      <text x="736" y="310" class="ts">by the model, one letter at a time.</text>
+
+      <rect x="736" y="340" width="410" height="150" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="760" y="372" class="tb">What this talk is about</text>
+      <text x="760" y="404" class="ts">What happens inside this program,</text>
+      <text x="760" y="426" class="ts">from reading the names in to writing</text>
+      <text x="760" y="448" class="ts">the 20 names above.</text>
+      <text x="760" y="474" class="td">This talk covers only the next-letter step.</text>
+      <text x="736" y="518" class="td">Later pages use emma from the dataset as the running example.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 3 Autoregression ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 1</span>Autoregression: one token at a time</h1>
+    <span class="tagline">The output becomes the input of the next round</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- Top: the loop -->
+      <text x="120" y="34" class="td">This example uses a character-level tokenizer: one letter per token, with BOS marking the start of a sequence.</text>
+      <rect x="120" y="60" width="260" height="70" class="tint-now"/>
+      <text x="250" y="90" class="ts mid">Text so far (context)</text>
+      <text x="250" y="115" class="tn mid">BOS e m</text>
+      <path d="M380 95 H470" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="474" y="48" width="220" height="94" class="tint-bus"/>
+      <text x="584" y="90" class="th mid">One pass</text>
+      <text x="584" y="118" class="td mid">The whole context is read</text>
+      <path d="M694 95 H784" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="788" y="60" width="180" height="70" class="tint-now"/>
+      <text x="878" y="90" class="ts mid">Next token</text>
+      <text x="878" y="116" class="tb mid" style="fill:var(--c-now)">m</text>
+      <text x="1112" y="116" class="td end">the second m in emma</text>
+      <path d="M878 130 V180 H250 V134" class="wire-now dash" marker-end="url(#ar-now)"/>
+      <text x="564" y="172" class="td mid">Appended to the context; the model runs again</text>
+
+      <!-- Bottom: round by round -->
+      <text x="120" y="258" class="th">Round by round</text>
+      <text x="340" y="258" class="td">One token per round (gold = new in that round)</text>
+
+      <g font-family="var(--mono)">
+        <text x="150" y="308" class="td end">Round 1</text>
+        <text x="180" y="308" class="tn" style="font-size:17px">BOS e m</text>
+        <path d="M420 302 H480" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="496" y="308" class="tn" style="font-size:17px;fill:var(--c-now)">m</text>
+
+        <text x="150" y="358" class="td end">Round 2</text>
+        <text x="180" y="358" class="tn" style="font-size:17px">BOS e m m</text>
+        <path d="M420 352 H480" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="496" y="358" class="tn" style="font-size:17px;fill:var(--c-now)">a</text>
+
+        <text x="150" y="408" class="td end">Round 3</text>
+        <text x="180" y="408" class="tn" style="font-size:17px">BOS e m m a</text>
+        <path d="M420 402 H480" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="496" y="408" class="tn" style="font-size:17px;fill:var(--c-now)">BOS</text>
+
+        <text x="180" y="452" class="td">BOS appearing again means the name is finished; the loop stops there.</text>
+      </g>
+      <text x="120" y="506" class="td" style="fill:var(--c-kv)">Why text is split into tokens at all, and why it is split this way: see Concept 3.</text>
+
+      <!-- Bottom right: plain terms -->
+      <rect x="660" y="252" width="440" height="240" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="660" y="264" width="4" height="216" class="f-now"/>
+      <text x="688" y="294" class="tb">In plain terms</text>
+      <text x="688" y="326" class="ts">Before each new letter, the text so far is read</text>
+      <text x="688" y="350" class="ts">again, and only then is the next letter chosen.</text>
+      <text x="688" y="384" class="td">A whole reply is not formed in one go. It is one</text>
+      <text x="688" y="406" class="td">process repeated hundreds or thousands of times.</text>
+      <text x="688" y="442" class="td" style="fill:var(--c-kv)">In practice the intermediate results (K and V) of</text>
+      <text x="688" y="464" class="td" style="fill:var(--c-kv)">each round are kept in a KV cache and reused.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 4 The five steps ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 2</span>The five steps of inference</h1>
+    <span class="tagline">Text goes in, one token comes out</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <text x="590" y="106" class="th mid">Every token produced runs through all five steps</text>
+      <text x="590" y="140" class="ts mid">This page covers a single round; for how the new token feeds back, see Concept 1.</text>
+
+      <rect x="25" y="204" width="186" height="160" class="box"/>
+      <text x="118" y="244" class="tb mid">① Tokenize</text>
+      <text x="118" y="284" class="ts mid">Split the text into</text>
+      <text x="118" y="308" class="ts mid">numbered tokens</text>
+      <path d="M215 284 H255" class="wire" marker-end="url(#ar-grey)"/>
+
+      <rect x="261" y="204" width="186" height="160" class="tint-bus"/>
+      <text x="354" y="244" class="tb mid" style="fill:var(--c-bus)">② Embedding</text>
+      <text x="354" y="284" class="ts mid">Look each number</text>
+      <text x="354" y="308" class="ts mid">up and get a vector</text>
+      <path d="M451 284 H491" class="wire-bus" marker-end="url(#ar-bus)"/>
+
+      <rect x="497" y="204" width="186" height="160" class="box"/>
+      <text x="590" y="244" class="tb mid">③ Transformer ×N</text>
+      <text x="590" y="284" class="ts mid" style="fill:var(--c-attn)">Attention looks back</text>
+      <text x="590" y="308" class="ts mid" style="fill:var(--c-mlp)">MLP refines</text>
+      <text x="590" y="336" class="td mid">Vectors now carry context</text>
+      <path d="M687 284 H727" class="wire-bus" marker-end="url(#ar-bus)"/>
+
+      <rect x="733" y="204" width="186" height="160" class="tint-bus"/>
+      <text x="826" y="244" class="tb mid" style="fill:var(--c-bus)">④ Score</text>
+      <text x="826" y="284" class="ts mid">Give every token</text>
+      <text x="826" y="308" class="ts mid">a probability</text>
+      <path d="M923 284 H963" class="wire" marker-end="url(#ar-grey)"/>
+
+      <rect x="969" y="204" width="186" height="160" class="tint-rand"/>
+      <text x="1062" y="244" class="tb mid" style="fill:var(--c-rand)">⑤ Sample</text>
+      <text x="1062" y="284" class="ts mid">Draw one token</text>
+      <text x="1062" y="308" class="ts mid">by probability</text>
+
+      <text x="118" y="404" class="td mid" style="fill:var(--c-attn)">see Concept 3</text>
+      <text x="354" y="404" class="td mid" style="fill:var(--c-attn)">see Concept 4</text>
+      <text x="590" y="404" class="td mid" style="fill:var(--c-attn)">see Concepts 5 and 6</text>
+      <text x="944" y="404" class="td mid" style="fill:var(--c-attn)">see Concept 7</text>
+
+      <text x="590" y="470" class="ts mid">The next five pages zoom in on ① through ⑤ in turn.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 5 Tokenize ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 3</span>① Tokenize: text becomes numbers</h1>
+    <span class="tagline">One fixed list is chosen up front, and nothing outside that list can ever be produced</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ why this step exists -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-bus"/>
+      <text x="44" y="56" class="tb">ⓐ Why this step exists</text>
+
+      <text x="44" y="96" class="ts">The model works on numbers, not on text.</text>
+
+      <!-- text ⇄ number, one table -->
+      <rect x="44" y="132" width="96" height="34" class="box"/>
+      <text x="92" y="154" class="tn mid">text</text>
+      <rect x="266" y="132" width="96" height="34" class="tint-bus"/>
+      <text x="314" y="154" class="tn mid" style="fill:var(--c-bus)">numbers</text>
+      <path d="M148 143 H256" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <path d="M258 178 H150" class="wire" marker-end="url(#ar-grey)"/>
+      <text x="202" y="130" class="td mid">reading in</text>
+      <text x="202" y="200" class="td mid">writing out</text>
+
+      <text x="44" y="248" class="ts">Both directions use one fixed list: the vocabulary.</text>
+
+      <rect x="44" y="292" width="318" height="96" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="322" class="tb">Once set, the list is fixed</text>
+      <text x="64" y="352" class="ts">Anything outside it cannot be read</text>
+      <text x="64" y="374" class="ts">in, and can never be written out.</text>
+
+      <!-- ⓑ the split used here -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-now"/>
+      <text x="430" y="56" class="tb">ⓑ The split used here: characters</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-now)">27 entries</text>
+
+      <text x="430" y="88" class="ts">One character is one token.</text>
+
+      <text x="430" y="118" class="td">Vocabulary: 26 letters plus BOS</text>
+      <rect x="430" y="130" width="46" height="26" class="box"/><text x="453" y="148" class="tn mid">a</text>
+      <rect x="482" y="130" width="46" height="26" class="box"/><text x="505" y="148" class="tn mid">b</text>
+      <rect x="534" y="130" width="46" height="26" class="box"/><text x="557" y="148" class="tn mid">c</text>
+      <text x="596" y="148" class="tn">…</text>
+      <rect x="612" y="130" width="46" height="26" class="tint-now"/><text x="635" y="148" class="tn mid" style="fill:var(--c-now)">m</text>
+      <text x="674" y="148" class="tn">…</text>
+      <rect x="690" y="130" width="46" height="26" class="box"/><text x="713" y="148" class="tn mid">z</text>
+      <text x="453" y="176" class="tn mid" style="fill:var(--ink3)">0</text>
+      <text x="505" y="176" class="tn mid" style="fill:var(--ink3)">1</text>
+      <text x="557" y="176" class="tn mid" style="fill:var(--ink3)">2</text>
+      <text x="635" y="176" class="tn mid" style="fill:var(--c-now)">12</text>
+      <text x="713" y="176" class="tn mid" style="fill:var(--ink3)">25</text>
+
+      <rect x="430" y="196" width="104" height="26" class="tint-kv"/>
+      <text x="482" y="214" class="tn mid" style="fill:var(--c-kv)">BOS</text>
+      <text x="548" y="214" class="tn" style="fill:var(--ink3)">26</text>
+
+      <text x="430" y="252" class="ts">BOS marks where a name starts and ends.</text>
+
+      <text x="430" y="316" class="td">Example</text>
+      <text x="430" y="346" class="tn" style="font-size:15px">emma</text>
+      <path d="M500 341 H540" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="552" y="326" width="46" height="24" class="tint-kv"/><text x="575" y="343" class="tn mid" style="fill:var(--c-kv)">BOS</text>
+      <rect x="602" y="326" width="30" height="24" class="box"/><text x="617" y="343" class="tn mid">e</text>
+      <rect x="636" y="326" width="30" height="24" class="tint-now"/><text x="651" y="343" class="tn mid" style="fill:var(--c-now)">m</text>
+      <rect x="670" y="326" width="30" height="24" class="box"/><text x="685" y="343" class="tn mid">m</text>
+      <rect x="704" y="326" width="30" height="24" class="box"/><text x="719" y="343" class="tn mid">a</text>
+      <text x="430" y="380" class="tn" xml:space="preserve" style="font-size:15px;fill:var(--ink3)">26   4   12   12   0</text>
+
+      <text x="430" y="424" class="ts">From here on the model sees only these numbers.</text>
+
+      <text x="430" y="470" class="td">Every later page uses the same moment:</text>
+      <text x="430" y="492" class="td">emma, about to write the second m.</text>
+
+      <!-- ⓒ trade-offs -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-kv"/>
+      <text x="816" y="56" class="tb">ⓒ The trade-off in the split</text>
+
+      <text x="816" y="96" class="ts">Fine or coarse: the granularity is a choice.</text>
+
+      <rect x="816" y="122" width="318" height="126" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="152" class="tb" style="fill:var(--c-now)">Character level (here)</text>
+      <text x="1114" y="152" class="td end" style="fill:var(--c-now)">27 entries</text>
+      <rect x="836" y="172" width="34" height="26" class="tint-now"/><text x="853" y="190" class="tn mid" style="fill:var(--c-now)">e</text>
+      <rect x="874" y="172" width="34" height="26" class="tint-now"/><text x="891" y="190" class="tn mid" style="fill:var(--c-now)">m</text>
+      <rect x="912" y="172" width="34" height="26" class="tint-now"/><text x="929" y="190" class="tn mid" style="fill:var(--c-now)">m</text>
+      <rect x="950" y="172" width="34" height="26" class="tint-now"/><text x="967" y="190" class="tn mid" style="fill:var(--c-now)">a</text>
+      <text x="836" y="228" class="ts">One letter per round, over several rounds.</text>
+
+      <rect x="816" y="272" width="318" height="126" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="302" class="tb" style="fill:var(--c-bus)">Subword level (large models)</text>
+      <text x="1114" y="302" class="td end" style="fill:var(--c-bus)">100,000+</text>
+      <rect x="836" y="322" width="72" height="26" class="tint-bus"/><text x="872" y="340" class="tn mid" style="fill:var(--c-bus)">emm</text>
+      <rect x="912" y="322" width="34" height="26" class="tint-bus"/><text x="929" y="340" class="tn mid" style="fill:var(--c-bus)">a</text>
+      <text x="836" y="378" class="ts">A whole word stem in a single round.</text>
+
+      <text x="816" y="450" class="ts">The five steps stay identical. Only</text>
+      <text x="816" y="472" class="ts">the size and grain of the list change.</text>
+
+      <text x="816" y="518" class="td" style="fill:var(--c-kv)">This choice fixes how much text one token holds.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 6 Embedding ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 4</span>② Embedding: numbers become vectors</h1>
+    <span class="tagline">Two lookup tables, one lookup each, then a single addition</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ wte -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-bus"/>
+      <text x="44" y="56" class="tb">ⓐ wte: which token this is</text>
+      <text x="360" y="56" class="td end" style="fill:var(--c-bus)">27 rows × 16</text>
+
+      <text x="44" y="92" class="ts">A table of 27 rows, one row per token,</text>
+      <text x="44" y="114" class="ts">each row holding 16 numbers.</text>
+
+      <text x="44" y="152" class="td">number 12</text>
+      <path d="M120 147 H160" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <text x="172" y="152" class="td">take row 12</text>
+      <g class="tint-bus">
+        <rect x="44" y="170" width="30" height="20"/><rect x="78" y="170" width="30" height="20"/>
+        <rect x="112" y="170" width="30" height="20"/><rect x="146" y="170" width="30" height="20"/>
+        <rect x="180" y="170" width="30" height="20"/><rect x="214" y="170" width="30" height="20"/>
+      </g>
+      <text x="256" y="185" class="td">…16 in all</text>
+
+      <text x="44" y="228" class="ts">A lookup really is that literal: no</text>
+      <text x="44" y="250" class="ts">arithmetic, just row 12 copied out.</text>
+
+      <rect x="44" y="284" width="318" height="140" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="314" class="tb">What are those 16 numbers?</text>
+      <text x="64" y="344" class="ts">Nobody ever assigned them a</text>
+      <text x="64" y="366" class="ts">meaning; every one came from training.</text>
+      <text x="64" y="396" class="ts" style="fill:var(--c-bus)">Characters used in similar ways</text>
+      <text x="64" y="418" class="ts" style="fill:var(--c-bus)">end up with similar numbers.</text>
+
+      <text x="44" y="472" class="td">Inside the model, the meaning of a character</text>
+      <text x="44" y="494" class="td">is a point in a 16-dimensional space.</text>
+
+      <!-- ⓑ wpe -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-kv"/>
+      <text x="430" y="56" class="tb">ⓑ wpe: which position this is</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-kv)">16 rows × 16</text>
+
+      <text x="430" y="92" class="ts">emma has two m's, and the 16 numbers</text>
+      <text x="430" y="114" class="ts">wte returns for them are identical.</text>
+
+      <text x="456" y="152" class="tn mid" style="font-size:15px;fill:var(--c-kv)">BOS</text>
+      <text x="506" y="152" class="tn mid" style="font-size:15px">e</text>
+      <text x="540" y="152" class="tn mid" style="font-size:15px;fill:var(--c-now)">m</text>
+      <text x="574" y="152" class="tn mid" style="font-size:15px;fill:var(--c-now)">m</text>
+      <text x="608" y="152" class="tn mid" style="font-size:15px">a</text>
+      <text x="456" y="176" class="td mid">0</text>
+      <text x="506" y="176" class="td mid">1</text>
+      <text x="540" y="176" class="td mid" style="fill:var(--c-now)">2</text>
+      <text x="574" y="176" class="td mid" style="fill:var(--c-now)">3</text>
+      <text x="608" y="176" class="td mid">4</text>
+      <text x="646" y="176" class="td">← position</text>
+
+      <text x="430" y="212" class="ts">The positions differ, and so do the roles:</text>
+      <text x="430" y="234" class="ts">one follows e, the other follows m. The model</text>
+      <text x="430" y="256" class="ts">must tell them apart to choose the next letter.</text>
+
+      <text x="430" y="294" class="ts">So a second table is kept: one row per</text>
+      <text x="430" y="316" class="ts">position, again 16 numbers each.</text>
+
+      <text x="430" y="350" class="td">position 0</text>
+      <g class="tint-kv">
+        <rect x="510" y="336" width="26" height="18"/><rect x="540" y="336" width="26" height="18"/>
+        <rect x="570" y="336" width="26" height="18"/><rect x="600" y="336" width="26" height="18"/>
+      </g>
+      <text x="640" y="350" class="td">…</text>
+      <text x="430" y="382" class="td">position 1</text>
+      <g class="tint-kv">
+        <rect x="510" y="368" width="26" height="18"/><rect x="540" y="368" width="26" height="18"/>
+        <rect x="570" y="368" width="26" height="18"/><rect x="600" y="368" width="26" height="18"/>
+      </g>
+      <text x="640" y="382" class="td">…</text>
+
+      <rect x="430" y="414" width="318" height="112" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="442" class="tb">Rows in the table = the context limit</text>
+      <text x="450" y="470" class="ts">16 rows here, so at most 16 positions.</text>
+      <text x="450" y="492" class="ts">That number is the context length.</text>
+      <text x="450" y="516" class="td">Large models have vastly more rows.</text>
+
+      <!-- ⓒ adding the two -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-now"/>
+      <text x="816" y="56" class="tb">ⓒ Adding the two together</text>
+
+      <text x="816" y="94" class="td">wte row 12</text>
+      <g class="tint-bus">
+        <rect x="944" y="80" width="26" height="18"/><rect x="974" y="80" width="26" height="18"/>
+        <rect x="1004" y="80" width="26" height="18"/><rect x="1034" y="80" width="26" height="18"/>
+        <rect x="1064" y="80" width="26" height="18"/><rect x="1094" y="80" width="26" height="18"/>
+      </g>
+      <text x="975" y="126" class="th mid">＋</text>
+      <text x="816" y="152" class="td" style="fill:var(--c-kv)">wpe row 2</text>
+      <g class="tint-kv">
+        <rect x="944" y="138" width="26" height="18"/><rect x="974" y="138" width="26" height="18"/>
+        <rect x="1004" y="138" width="26" height="18"/><rect x="1034" y="138" width="26" height="18"/>
+        <rect x="1064" y="138" width="26" height="18"/><rect x="1094" y="138" width="26" height="18"/>
+      </g>
+      <path d="M975 166 V190" class="wire-now" marker-end="url(#ar-now)"/>
+      <text x="816" y="216" class="td" style="fill:var(--c-now)">vector entering ③</text>
+      <g class="tint-now">
+        <rect x="944" y="202" width="26" height="18"/><rect x="974" y="202" width="26" height="18"/>
+        <rect x="1004" y="202" width="26" height="18"/><rect x="1034" y="202" width="26" height="18"/>
+        <rect x="1064" y="202" width="26" height="18"/><rect x="1094" y="202" width="26" height="18"/>
+      </g>
+      <text x="816" y="252" class="td">Element by element: first plus first, and so on.</text>
+
+      <rect x="816" y="288" width="318" height="150" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="318" class="tb">Worth pausing on</text>
+      <text x="836" y="348" class="ts">The whole of step ② is two table</text>
+      <text x="836" y="370" class="ts">lookups and one addition.</text>
+      <text x="836" y="400" class="ts">Every calculation that follows rests</text>
+      <text x="836" y="422" class="ts">on the vector that addition produces.</text>
+
+      <text x="816" y="480" class="ts" style="fill:var(--c-now)">After the addition, one vector carries both</text>
+      <text x="816" y="502" class="ts" style="fill:var(--c-now)">which character it is and where it sits.</text>
+      <text x="816" y="530" class="td">Only then does it start reading the others.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 7 Inside the Transformer ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 5</span>Three things inside a Transformer</h1>
+    <span class="tagline">Attention shares · MLP refines · the input is added back</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ Attention -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-attn"/>
+      <text x="44" y="56" class="tb">ⓐ Attention: drawing on others</text>
+      <text x="360" y="56" class="td end" style="fill:var(--c-attn)">sideways</text>
+
+      <text x="44" y="88" class="ts">The vector from Concept 4 has read no context.</text>
+
+      <g class="tint-bus">
+        <rect x="88" y="122" width="26" height="18"/><rect x="88" y="143" width="26" height="18"/>
+        <rect x="88" y="164" width="26" height="18"/><rect x="88" y="185" width="26" height="18"/>
+        <rect x="148" y="122" width="26" height="18"/><rect x="148" y="143" width="26" height="18"/>
+        <rect x="148" y="164" width="26" height="18"/><rect x="148" y="185" width="26" height="18"/>
+        <rect x="208" y="122" width="26" height="18"/><rect x="208" y="143" width="26" height="18"/>
+        <rect x="208" y="164" width="26" height="18"/><rect x="208" y="185" width="26" height="18"/>
+      </g>
+      <rect x="204" y="118" width="34" height="89" rx="6" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
+      <path d="M101 210 Q150 246 214 216" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <path d="M161 212 Q188 238 216 224" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="101" y="258" class="td mid">BOS</text>
+      <text x="161" y="258" class="td mid">e</text>
+      <text x="221" y="258" class="td mid" style="fill:var(--c-now)">m</text>
+      <text x="266" y="180" class="td" style="fill:var(--c-attn)">information from</text>
+      <text x="266" y="200" class="td" style="fill:var(--c-attn)">earlier positions</text>
+
+      <text x="44" y="306" class="ts">The vector for m asks every earlier position</text>
+      <text x="44" y="328" class="ts">for information, takes more from the more</text>
+      <text x="44" y="350" class="ts">relevant ones, and combines them into one vector.</text>
+      <text x="44" y="376" class="td">BOS and e only supply; they are not recomputed.</text>
+
+      <text x="44" y="416" class="ts" style="fill:var(--c-attn)">This is the only place positions exchange anything.</text>
+
+      <text x="44" y="466" class="td">How that is actually computed — three roles,</text>
+      <text x="44" y="488" class="td">similarity, several heads — see Concept 6.</text>
+
+      <!-- ⓑ MLP -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-mlp"/>
+      <text x="430" y="56" class="tb">ⓑ MLP: each position alone</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-mlp)">16 → 64 → 16</text>
+
+      <text x="430" y="86" class="ts">After attention, every position passes through</text>
+      <text x="430" y="108" class="ts">the same small network, with no exchange.</text>
+
+      <rect x="519" y="126" width="140" height="30" class="tint-bus"/>
+      <text x="589" y="146" class="ts mid" style="fill:var(--c-bus)">16 numbers</text>
+      <path d="M589 156 V178" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+      <rect x="459" y="182" width="260" height="30" class="tint-mlp"/>
+      <text x="589" y="202" class="ts mid" style="fill:var(--c-mlp)">expanded into 64 checks</text>
+      <path d="M589 212 V234" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+      <text x="604" y="228" class="td" style="fill:var(--c-mlp)">ReLU</text>
+      <rect x="519" y="238" width="140" height="30" class="tint-bus"/>
+      <text x="589" y="258" class="ts mid" style="fill:var(--c-bus)">back down to 16</text>
+
+      <text x="430" y="296" class="ts">Expanding runs 64 checks at once — say,</text>
+      <text x="430" y="318" class="ts">whether the previous letter is a vowel, or</text>
+      <text x="430" y="342" class="ts">whether the end is near. ReLU keeps the</text>
+      <text x="430" y="364" class="ts">positive results and zeroes the negative ones.</text>
+
+      <rect x="430" y="392" width="318" height="120" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="420" class="tb">One across, one down</text>
+      <text x="450" y="448" class="ts" style="fill:var(--c-attn)">Attention: positions share sideways.</text>
+      <text x="450" y="470" class="ts" style="fill:var(--c-mlp)">MLP: each position works downward.</text>
+      <text x="450" y="496" class="td">A Transformer block is these two stages.</text>
+
+      <!-- ⓒ residual -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-now"/>
+      <text x="816" y="56" class="tb">ⓒ Adding back to the original</text>
+      <text x="1132" y="56" class="td end" style="fill:var(--c-now)">residual · ×N</text>
+
+      <rect x="836" y="74" width="120" height="30" class="tint-now"/>
+      <text x="896" y="94" class="ts mid">original</text>
+      <path d="M956 89 H1080 V236 H942" class="wire-now dash" marker-end="url(#ar-now)"/>
+      <text x="1018" y="80" class="td mid">keep a copy</text>
+      <path d="M896 104 V118" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="836" y="122" width="120" height="30" class="box"/>
+      <text x="896" y="142" class="ts mid">RMSNorm</text>
+      <path d="M896 152 V166" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="826" y="170" width="140" height="42" class="box"/>
+      <text x="896" y="189" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+      <text x="896" y="207" class="ts mid" style="fill:var(--c-mlp)">or MLP</text>
+      <path d="M896 212 V220" class="wire" marker-end="url(#ar-grey)"/>
+      <circle cx="896" cy="236" r="13" fill="none" stroke="var(--c-now)" stroke-width="1.6"/>
+      <text x="896" y="242" class="tb mid" style="fill:var(--c-now)">＋</text>
+      <path d="M896 249 V268" class="wire-now" marker-end="url(#ar-now)"/>
+      <text x="896" y="290" class="ts mid" style="fill:var(--c-now)">the new, combined vector</text>
+
+      <text x="816" y="318" class="td">This runs twice inside a single block:</text>
+      <text x="816" y="338" class="td">once for attention, once for the MLP.</text>
+
+      <text x="816" y="374" class="tb" style="fill:var(--c-now)">Added, not replaced</text>
+      <text x="816" y="402" class="ts">The result is added back on top, so</text>
+      <text x="816" y="424" class="ts">nothing is lost; shapes in and out match,</text>
+      <text x="816" y="446" class="ts">which is why the block can repeat N times.</text>
+
+      <text x="816" y="486" class="tb">RMSNorm</text>
+      <text x="816" y="514" class="ts">Pulls values back to a comparable scale.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 8 Attention up close ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 6</span>Attention up close</h1>
+    <span class="tagline">Three roles · how much to take · several heads</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ① three roles -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-attn"/>
+      <text x="44" y="56" class="tb">① How the three roles arise</text>
+      <text x="360" y="56" class="td end" style="fill:var(--c-attn)">Wq · Wk · Wv</text>
+
+      <rect x="133" y="88" width="140" height="30" class="tint-bus"/>
+      <text x="203" y="108" class="ts mid" style="fill:var(--c-bus)">the vector for m</text>
+      <path d="M203 118 V142" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="44" y="166" class="td">each multiplied by its own table:</text>
+
+      <rect x="44" y="182" width="40" height="28" class="tint-attn"/>
+      <text x="64" y="202" class="tb mid" style="fill:var(--c-attn)">Q</text>
+      <text x="96" y="202" class="ts">what is being looked for</text>
+      <text x="360" y="202" class="td end" style="fill:var(--c-attn)">Wq</text>
+      <rect x="44" y="224" width="40" height="28" class="tint-attn"/>
+      <text x="64" y="244" class="tb mid" style="fill:var(--c-attn)">K</text>
+      <text x="96" y="244" class="ts">what this position is</text>
+      <text x="360" y="244" class="td end" style="fill:var(--c-attn)">Wk</text>
+      <rect x="44" y="266" width="40" height="28" class="tint-attn"/>
+      <text x="64" y="286" class="tb mid" style="fill:var(--c-attn)">V</text>
+      <text x="96" y="286" class="ts">what it can supply</text>
+      <text x="360" y="286" class="td end" style="fill:var(--c-attn)">Wv</text>
+
+      <text x="44" y="336" class="ts">Wq, Wk and Wv are three weight tables.</text>
+      <text x="44" y="358" class="ts">Training fills them in; nobody writes them by hand.</text>
+
+      <text x="44" y="400" class="ts">Every earlier position likewise forms</text>
+      <text x="44" y="422" class="ts">its own Q, K and V.</text>
+
+      <text x="44" y="466" class="td" style="fill:var(--c-kv)">K and V computed in earlier rounds are</text>
+      <text x="44" y="488" class="td" style="fill:var(--c-kv)">kept and reused (the KV cache, Concept 1).</text>
+
+      <!-- ② weighting -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-attn"/>
+      <text x="430" y="56" class="tb">② How much to take from each</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-attn)">similarity</text>
+
+      <text x="430" y="88" class="ts">The Q of m is compared with the K of every</text>
+      <text x="430" y="110" class="ts">earlier position. Closer directions score higher.</text>
+
+      <circle cx="470" cy="204" r="3" class="f-attn"/>
+      <path d="M470 204 L548 158" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <path d="M470 204 L546 170" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <text x="516" y="234" class="td mid">close direction → high score</text>
+
+      <circle cx="632" cy="204" r="3" class="wire" style="fill:#8a8981"/>
+      <path d="M632 204 L710 158" class="wire" marker-end="url(#ar-grey)"/>
+      <path d="M632 204 L664 140" class="wire" marker-end="url(#ar-grey)"/>
+      <text x="690" y="234" class="td mid">diverging → low score</text>
+
+      <text x="430" y="278" class="ts">Each position gets a score, and the scores are</text>
+      <text x="430" y="300" class="ts">then turned into weights that add up to 1.</text>
+      <text x="430" y="334" class="ts">A high score means more of that position's V.</text>
+      <text x="430" y="356" class="ts">The weighted Vs are added into the new vector.</text>
+
+      <!-- ③ heads -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-attn"/>
+      <text x="816" y="56" class="tb">③ Several heads in parallel</text>
+      <text x="1132" y="56" class="td end" style="fill:var(--c-attn)">4 heads · wo</text>
+
+      <rect x="856" y="88" width="240" height="28" class="tint-bus"/>
+      <text x="976" y="107" class="ts mid" style="fill:var(--c-bus)">one vector</text>
+      <path d="M976 116 V136" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <rect x="856" y="140" width="54" height="28" class="tint-attn"/><text x="883" y="159" class="td mid" style="fill:var(--c-attn)">head 1</text>
+      <rect x="918" y="140" width="54" height="28" class="tint-attn"/><text x="945" y="159" class="td mid" style="fill:var(--c-attn)">head 2</text>
+      <rect x="980" y="140" width="54" height="28" class="tint-attn"/><text x="1007" y="159" class="td mid" style="fill:var(--c-attn)">head 3</text>
+      <rect x="1042" y="140" width="54" height="28" class="tint-attn"/><text x="1069" y="159" class="td mid" style="fill:var(--c-attn)">head 4</text>
+      <text x="976" y="192" class="td mid">each head runs ① and ② on its own</text>
+      <path d="M976 202 V222" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <rect x="856" y="226" width="240" height="28" class="tint-bus"/>
+      <text x="976" y="245" class="ts mid" style="fill:var(--c-bus)">four results joined into one</text>
+      <path d="M976 254 V274" class="wire-attn" marker-end="url(#ar-attn)"/>
+      <rect x="886" y="278" width="180" height="28" class="tint-attn"/>
+      <text x="976" y="297" class="ts mid" style="fill:var(--c-attn)">then through the wo table</text>
+
+      <text x="816" y="348" class="ts">Heads attend to different things: some to</text>
+      <text x="816" y="370" class="ts">neighbouring letters, some further back.</text>
+
+      <text x="816" y="410" class="ts">That division of labour emerges from</text>
+      <text x="816" y="432" class="ts">training; no head is assigned a job.</text>
+
+      <text x="816" y="476" class="td">wo is likewise a weight table learned in training.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 9 Scoring and sampling ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 7</span>④ Scoring and ⑤ Sampling</h1>
+    <span class="tagline">From one vector to a letter on the page</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- ⓐ one vector out -->
+      <rect x="20" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="496" class="f-bus"/>
+      <text x="44" y="56" class="tb">ⓐ What comes out is one vector</text>
+
+      <text x="44" y="90" class="ts">Only one vector goes through the</text>
+      <text x="44" y="112" class="ts">Transformer this round: the one for m.</text>
+
+      <rect x="133" y="140" width="120" height="30" class="tint-now"/>
+      <text x="193" y="160" class="ts mid" style="fill:var(--c-now)">vector for m</text>
+      <path d="M193 170 V194" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="113" y="198" width="160" height="40" class="box"/>
+      <text x="193" y="223" class="ts mid">Transformer ×N</text>
+      <rect x="288" y="198" width="74" height="40" class="tint-kv"/>
+      <text x="325" y="216" class="td mid" style="fill:var(--c-kv)">K, V of</text>
+      <text x="325" y="232" class="td mid" style="fill:var(--c-kv)">BOS and e</text>
+      <path d="M288 218 H279" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+      <path d="M193 238 V262" class="wire-now" marker-end="url(#ar-now)"/>
+      <g class="tint-now">
+        <rect x="117" y="272" width="22" height="18"/><rect x="143" y="272" width="22" height="18"/>
+        <rect x="169" y="272" width="22" height="18"/><rect x="195" y="272" width="22" height="18"/>
+        <rect x="221" y="272" width="22" height="18"/><rect x="247" y="272" width="22" height="18"/>
+      </g>
+      <text x="282" y="286" class="td">…16 in all</text>
+
+      <text x="44" y="330" class="ts">Out come 16 numbers again, but this</text>
+      <text x="44" y="352" class="ts">time they have read BOS and e.</text>
+
+      <text x="44" y="392" class="td">BOS and e were computed in earlier rounds. Their</text>
+      <text x="44" y="414" class="td">K and V sit in the KV cache and are used directly,</text>
+      <text x="44" y="436" class="td">with no second pass through the Transformer.</text>
+
+      <rect x="44" y="462" width="318" height="60" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="64" y="490" class="ts">Each round yields exactly one token,</text>
+      <text x="64" y="512" class="ts">appended after the last letter so far.</text>
+
+      <!-- ⓑ scoring -->
+      <rect x="406" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="406" y="32" width="4" height="496" class="f-bus"/>
+      <text x="430" y="56" class="tb">ⓑ Vector to probability</text>
+      <text x="748" y="56" class="td end" style="fill:var(--c-bus)">lm_head · softmax</text>
+
+      <g class="tint-bus">
+        <rect x="513" y="88" width="22" height="18"/><rect x="539" y="88" width="22" height="18"/>
+        <rect x="565" y="88" width="22" height="18"/><rect x="591" y="88" width="22" height="18"/>
+        <rect x="617" y="88" width="22" height="18"/><rect x="643" y="88" width="22" height="18"/>
+      </g>
+      <text x="676" y="102" class="td">…16 in all</text>
+      <path d="M589 112 V132" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="499" y="136" width="180" height="28" class="tint-bus"/>
+      <text x="589" y="155" class="ts mid" style="fill:var(--c-bus)">lm_head (27 × 16)</text>
+      <path d="M589 168 V188" class="wire-bus" marker-end="url(#ar-bus)"/>
+
+      <g class="bar-grey">
+        <rect x="440" y="248" width="8" height="14"/><rect x="452" y="240" width="8" height="22"/>
+        <rect x="464" y="252" width="8" height="10"/><rect x="476" y="234" width="8" height="28"/>
+        <rect x="488" y="250" width="8" height="12"/><rect x="500" y="244" width="8" height="18"/>
+        <rect x="512" y="254" width="8" height="8"/><rect x="524" y="246" width="8" height="16"/><rect x="536" y="250" width="8" height="12"/>
+        <rect x="548" y="252" width="8" height="10"/><rect x="560" y="242" width="8" height="20"/>
+        <rect x="572" y="255" width="8" height="7"/><rect x="596" y="238" width="8" height="24"/><rect x="608" y="253" width="8" height="9"/>
+        <rect x="620" y="247" width="8" height="15"/><rect x="632" y="251" width="8" height="11"/>
+        <rect x="644" y="243" width="8" height="19"/><rect x="656" y="254" width="8" height="8"/>
+        <rect x="668" y="249" width="8" height="13"/><rect x="680" y="245" width="8" height="17"/>
+        <rect x="692" y="252" width="8" height="10"/><rect x="704" y="240" width="8" height="22"/>
+        <rect x="716" y="253" width="8" height="9"/><rect x="728" y="248" width="8" height="14"/>
+      </g>
+      <rect x="584" y="196" width="8" height="66" class="bar-rand"/>
+      <line x1="434" y1="262" x2="742" y2="262" class="axis"/>
+      <text x="588" y="280" class="tn mid" style="font-size:11px;fill:var(--c-now)">m</text>
+      <text x="430" y="308" class="td">27 characters, one probability each, adding up to 1</text>
+
+      <text x="430" y="350" class="ts">The vector passes through lm_head and comes</text>
+      <text x="430" y="372" class="ts">out as 27 scores, one per character, which</text>
+      <text x="430" y="394" class="ts">softmax turns into probabilities.</text>
+
+      <rect x="430" y="428" width="318" height="94" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="450" y="458" class="tb">Step ② in reverse</text>
+      <text x="450" y="488" class="ts">wte turns a character into a vector;</text>
+      <text x="450" y="510" class="ts">lm_head turns a vector back into scores.</text>
+
+      <!-- ⓒ sampling -->
+      <rect x="792" y="20" width="366" height="520" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="792" y="32" width="4" height="496" class="f-rand"/>
+      <text x="816" y="56" class="tb">ⓒ Sampling</text>
+      <text x="1132" y="56" class="td end" style="fill:var(--c-rand)">the only randomness</text>
+
+      <text x="816" y="90" class="ts">One draw from these probabilities picks a token.</text>
+
+      <rect x="816" y="118" width="318" height="22" rx="4" class="bar-grey"/>
+      <rect x="816" y="118" width="126" height="22" rx="4" class="bar-rand" opacity=".85"/>
+      <path d="M898 110 V102" class="wire-rand"/>
+      <path d="M898 102 L893 110 L903 110 z" class="f-rand"/>
+      <text x="816" y="166" class="td">whichever band the draw lands in is the character</text>
+      <rect x="816" y="184" width="70" height="32" class="tint-now"/>
+      <text x="851" y="206" class="tb mid" style="fill:var(--c-now)">m</text>
+      <text x="906" y="206" class="td">this round: the second m in emma</text>
+
+      <text x="816" y="264" class="ts">Every step before this is fixed arithmetic: the</text>
+      <text x="816" y="286" class="ts">same input always gives the same scores.</text>
+
+      <rect x="816" y="316" width="318" height="130" rx="10" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <text x="836" y="344" class="tb">Temperature</text>
+      <text x="836" y="372" class="ts">One number set before sampling: the</text>
+      <text x="836" y="394" class="ts">27 scores are divided by it first.</text>
+      <text x="836" y="424" class="td">Low → sharper and safer; high → flatter.</text>
+
+      <text x="816" y="470" class="ts" style="fill:var(--c-now)">Drawing BOS means this name is finished.</text>
+      <text x="816" y="500" class="td">Otherwise the new token joins the context</text>
+      <text x="816" y="522" class="td">and step ① starts another round (Concept 1).</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ 10 Where the 4,192 parameters are ═══════════ -->
+<section class="slide std">
+  <header>
+    <h1><span class="figno">CONCEPT 8</span>Where the 4,192 parameters are</h1>
+    <span class="tagline">A model holds two kinds of thing: stored numbers, and fixed operations</span>
+  </header>
+  <div class="fig">
+    <svg viewBox="0 0 1180 560">
+      <!-- left: with parameters -->
+      <rect x="20" y="20" width="566" height="368" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="20" y="32" width="4" height="344" class="f-bus"/>
+      <text x="44" y="58" class="tb" style="fill:var(--c-bus)">Parameters: the numbers actually stored</text>
+      <text x="44" y="82" class="td">Names match the variables in the MicroGPT source.</text>
+      <text x="562" y="82" class="td end">numbers</text>
+
+      <text x="44" y="118" class="tn" style="fill:var(--c-bus)">wte</text>
+      <text x="180" y="118" class="ts">character table: 27 characters × 16</text>
+      <text x="562" y="118" class="tn end">432</text>
+      <text x="44" y="156" class="tn" style="fill:var(--c-bus)">wpe</text>
+      <text x="180" y="156" class="ts">position table: 16 positions × 16</text>
+      <text x="562" y="156" class="tn end">256</text>
+      <text x="44" y="194" class="tn" style="fill:var(--c-bus)">Wq Wk Wv</text>
+      <text x="180" y="194" class="ts">the three tables that produce Q, K and V</text>
+      <text x="562" y="194" class="tn end">768</text>
+      <text x="44" y="232" class="tn" style="fill:var(--c-bus)">wo</text>
+      <text x="180" y="232" class="ts">the table applied once the heads are joined</text>
+      <text x="562" y="232" class="tn end">256</text>
+      <text x="44" y="270" class="tn" style="fill:var(--c-bus)">MLP</text>
+      <text x="180" y="270" class="ts">expand 16→64, then squeeze 64→16</text>
+      <text x="562" y="270" class="tn end">2048</text>
+      <text x="44" y="308" class="tn" style="fill:var(--c-bus)">lm_head</text>
+      <text x="180" y="308" class="ts">27 character scores computed from a vector</text>
+      <text x="562" y="308" class="tn end">432</text>
+
+      <line x1="44" y1="330" x2="562" y2="330" class="axis"/>
+      <text x="44" y="360" class="tb">Total</text>
+      <text x="562" y="360" class="tb end" style="fill:var(--c-bus)">4192</text>
+
+      <!-- right: no parameters -->
+      <rect x="606" y="20" width="554" height="368" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+      <rect x="606" y="32" width="4" height="344" class="f-mlp"/>
+      <text x="630" y="58" class="tb" style="fill:var(--c-mlp)">No parameters: fixed operations</text>
+
+      <text x="630" y="106" class="tn" style="fill:var(--c-mlp)">RMSNorm</text>
+      <text x="790" y="106" class="ts">pulls a vector's values to a comparable scale</text>
+      <text x="630" y="152" class="tn" style="fill:var(--c-mlp)">ReLU</text>
+      <text x="790" y="152" class="ts">keeps positives, zeroes negatives</text>
+      <text x="630" y="198" class="tn" style="fill:var(--c-mlp)">softmax</text>
+      <text x="790" y="198" class="ts">turns a set of scores into probabilities</text>
+      <text x="630" y="244" class="tn" style="fill:var(--c-mlp)">＋</text>
+      <text x="790" y="244" class="ts">adds two vectors element by element, merging them</text>
+      <text x="630" y="290" class="tn" style="fill:var(--c-mlp)">sampling</text>
+      <text x="790" y="290" class="ts">draws one token by probability</text>
+
+      <text x="630" y="344" class="td">These steps store no numbers. They follow the</text>
+      <text x="630" y="366" class="td">same rules every time, in any model.</text>
+
+      <rect x="20" y="430" width="1140" height="96" rx="12" fill="#232322" stroke="rgba(255,255,255,.08)"/>
+      <rect x="20" y="442" width="4" height="72" class="f-kv"/>
+      <text x="590" y="470" class="tb mid">Next: the same pipeline, walked through once more in 3D</text>
+      <text x="590" y="500" class="ts mid">The 3D walkthrough follows the first m in emma — the same vector traced on these pages — stage by stage through the five steps.</text>
+    </svg>
+  </div>
+</section>
+
+<div id="pageno"></div>
+</div>
+
+<script>
+const stage=document.getElementById('stage');
+const slides=[...document.querySelectorAll('.slide')];
+let cur=0;
+function go(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,j)=>s.classList.toggle('active',j===cur));
+  document.getElementById('pageno').textContent=(cur+1)+' / '+slides.length;
+  history.replaceState(null,'','#'+(cur+1));
+}
+function fit(){
+  const s=Math.min(innerWidth/1280,innerHeight/720);
+  stage.style.transform=`translate(-50%,-50%) scale(${s})`;
+}
+addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)){e.preventDefault();go(cur+1);}
+  else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();go(cur-1);}
+  else if(e.key==='Home'){e.preventDefault();go(0);}
+  else if(e.key==='End'){e.preventDefault();go(slides.length-1);}
+  else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();}
+});
+stage.addEventListener('click',e=>{go(e.clientX>innerWidth/2?cur+1:cur-1);});
+addEventListener('hashchange',()=>go((parseInt(location.hash.slice(1))||1)-1));
+addEventListener('resize',fit);
+go((parseInt(location.hash.slice(1))||1)-1);
+fit();
+document.body.style.visibility='visible';
+</script>
+</body>
+</html>
