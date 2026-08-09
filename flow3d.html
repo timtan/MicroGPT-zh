@@ -41,11 +41,13 @@
              opacity: 0; transition: opacity .2s; }
   #fastfwd.on { opacity: 1; }
 
-  #legend { position: fixed; right: 22px; top: 18px; z-index: 10; display: none;
-            background: rgba(8, 12, 26, .7); border: 1px solid rgba(120, 150, 220, .2);
-            border-radius: 10px; padding: 7px 14px; color: #8fa2c9; font-size: 12.5px; line-height: 1.5; }
-  #legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
-                vertical-align: -1px; margin: 0 4px 0 10px; }
+  /* 盲測:多批聽眾都說「字太小,我根本沒去讀」,還因此把藍=正值/黃=負值理解反了 → 放大 */
+  /* 放左上:右上會壓到 KV Cache 記憶櫃(第 9–12 關記憶櫃就在右上角) */
+  #legend { position: fixed; left: 22px; top: 18px; z-index: 10; display: none;
+            background: rgba(8, 12, 26, .82); border: 1px solid rgba(120, 150, 220, .3);
+            border-radius: 10px; padding: 9px 16px; color: #b3c4e6; font-size: 15px; line-height: 1.6; }
+  #legend .sw { display: inline-block; width: 13px; height: 13px; border-radius: 3px;
+                vertical-align: -2px; margin: 0 5px 0 12px; }
 
   @media (max-width: 640px) {
     #intro h1 { font-size: 26px; letter-spacing: 1px; }
@@ -61,7 +63,11 @@
 
     #progress { right: 10px; bottom: auto; top: 10px; font-size: 11px; padding: 5px 12px; }
     #fastfwd { right: 10px; bottom: auto; top: 42px; font-size: 11px; }
-    #legend { display: none !important; }
+    /* 手機也要有圖例(顏色語言是看懂方塊的前提);兩行各自不折行,否則「只是/搬運」會斷成兩截 */
+    #legend { left: 10px; right: 10px; top: 10px;
+              font-size: 10px; line-height: 1.6; padding: 6px 8px; }
+    #legend > div { white-space: nowrap; }
+    #legend .sw { width: 9px; height: 9px; margin: 0 3px 0 6px; }
   }
 </style>
 <script type="importmap">
@@ -103,14 +109,34 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(BG);
 scene.fog = new THREE.Fog(BG, 160, 560);
 
-const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 1200);
+// 直式螢幕(手機)是另一種取景:場景本來是橫向鋪開的,照桌機參數會被左右切掉
+const PORTRAIT = innerWidth / innerHeight < 1.05;
+// 直式的版面不是「把橫式縮小」,而是改成上下疊:記憶櫃移到正上方、頭 2–4 移到下方,
+// 才用得到直式螢幕的高度,也避免兩個大標籤在螢幕上擠在一起
+const KV_OFF = PORTRAIT ? new THREE.Vector3(30, 52, 0) : new THREE.Vector3(58, 24, 0);
+const P_SPREAD = PORTRAIT ? 0.5 : 1;    // 殘差分身等橫向偏移收窄
+const P_CAM = PORTRAIT ? 1.2 : 1;       // 相機再退遠一點
+const P_TXT = PORTRAIT ? 0.132 : 0.11;  // 退遠了字要放大才讀得到
+
+const BASE_FOV = 46, DESIGN_ASPECT = 16 / 9, MAX_FOV = 70;
+const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.1, 1200);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.getElementById('app').appendChild(renderer.domElement);
-addEventListener('resize', () => {
+// 窄螢幕時把垂直 fov 撐開,盡量保住水平視野(有上限,免得透視變形太誇張)
+function applyCamProjection() {
   camera.aspect = innerWidth / innerHeight;
+  if (camera.aspect < DESIGN_ASPECT) {
+    const hHalf = Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * DESIGN_ASPECT);
+    const v = 2 * Math.atan(Math.tan(hHalf) / camera.aspect) * 180 / Math.PI;
+    camera.fov = Math.min(MAX_FOV, v);
+  } else camera.fov = BASE_FOV;
   camera.updateProjectionMatrix();
+}
+applyCamProjection();
+addEventListener('resize', () => {
+  applyCamProjection();
   renderer.setSize(innerWidth, innerHeight);
 });
 
@@ -183,7 +209,7 @@ function stepTweens(dt) {
 }
 
 /* ---- 文字 sprite(支援中文)---- */
-function textSprite(text, { fs = 56, color = '#dbe6ff', bg = true, scale = 0.11, onTop = false } = {}) {
+function textSprite(text, { fs = 56, color = '#dbe6ff', bg = true, scale = P_TXT, onTop = false } = {}) {
   const pad = 26;
   const c = document.createElement('canvas');
   let ctx = c.getContext('2d');
@@ -338,6 +364,19 @@ const OP_MOVE    = 0x94a3b8; // 灰藍:只是搬運/查表/儲存,沒在算
 // 關卡標籤兩條規則:1) 離鏡頭太近淡出(透視放大會擋畫面)
 // 2) 只顯示「已通過或即將抵達」的關卡 —— 後面步驟的標籤不提早出現
 const fadeLabels = []; // { sprite, s }
+// 走過的關卡「整個」暗下去(球體/光環本體,不只標籤):前一動已經不重要了,
+// 盲測顯示它們留在原地全亮會一直搶注意力,還會跟當前步驟的東西疊在一起讓人讀不出來
+const fadeGates = []; // { s, mats:[{ m, o }] }
+const GATE_PAST_MIN = 0.1;
+function registerGate(grp, s) {
+  const mats = [];
+  grp.traverse(o => {
+    if (o.isSprite || !o.material) return; // 標籤有自己的淡出規則
+    o.material.transparent = true;
+    mats.push({ m: o.material, o: o.material.opacity });
+  });
+  fadeGates.push({ s, mats });
+}
 let showAllLabels = false; // 終章全景時打開
 function gateSphere(label, color, r = 7, s = 0) {
   const grp = new THREE.Group();
@@ -354,9 +393,11 @@ function gateSphere(label, color, r = 7, s = 0) {
   lb.position.y = r + 5;
   grp.add(lb);
   fadeLabels.push({ sprite: lb, s });
+  grp.userData_label = lb;
   pathPos(s, grp.position);
   grp.userData = { wire, kind: 'sphere', baseR: r };
   staticG.add(grp);
+  registerGate(grp, s);
   return grp;
 }
 function gateRing(label, color, r = 40, s = 0, labelFs = 46) {
@@ -371,9 +412,11 @@ function gateRing(label, color, r = 40, s = 0, labelFs = 46) {
   lb.position.y = r + 10;
   grp.add(lb);
   fadeLabels.push({ sprite: lb, s });
+  grp.userData_label = lb;
   pathPos(s, grp.position);
   grp.userData = { wire: ring, kind: 'ring', baseR: r };
   staticG.add(grp);
+  registerGate(grp, s);
   return grp;
 }
 function gatePlane(label, color, w, h, s) {
@@ -393,9 +436,11 @@ function gatePlane(label, color, w, h, s) {
   lb.quaternion.copy(grp.quaternion).invert();
   grp.add(lb);
   fadeLabels.push({ sprite: lb, s });
+  grp.userData_label = lb;
   pathPos(s, grp.position);
   grp.userData = { wire: plane, kind: 'plane' };
   staticG.add(grp);
+  registerGate(grp, s);
   return grp;
 }
 function colToCss(c) { return '#' + new THREE.Color(c).getHexString(); }
@@ -561,14 +606,21 @@ const gates = {
   relu:    gatePlane('ReLU', OP_PURE, 134, 15, S.RELU),                // 逐元素純函數
   squeeze: gateRing('降維 64→16', OP_LEARNED, 42, S.SQUEEZE)            // 16×64 = 1024
 };
+// 直式:記憶櫃搬到主軌道正上方,Attention 的關卡標籤要讓開,否則兩塊大字疊在一起
+if (PORTRAIT) gates.attn.userData_label.position.x = -48;
+// 終章全景時 pre1 的 rmsnorm 標籤會跟 KV Cache 的標題疊在一起,往左讓開
+gates.pre1.userData_label.position.x = -26;
 
-// lm_head 高牆(27 個柱槽)
+// lm_head 高牆(27 個柱槽)—— 直式螢幕塞不下 27 根的原寬,整面牆與柱距一起收窄
+const WALL_W = PORTRAIT ? 96 : 128;
+const BAR_PITCH = WALL_W / 27 * 0.917;
+const BAR_W = 3.1 * WALL_W / 128;
 const wallCenter = pathPos(S.WALL);
 const wallG = new THREE.Group();
 let wallLabel = null;
 {
   const wall = new THREE.Mesh(
-    new THREE.BoxGeometry(128, 34, 4),
+    new THREE.BoxGeometry(WALL_W, 34, 4),
     new THREE.MeshStandardMaterial({ color: 0x16203c, roughness: 0.6, metalness: 0.4, emissive: 0x0c1430, emissiveIntensity: 0.6 })
   );
   const frame = new THREE.LineSegments(
@@ -578,7 +630,7 @@ let wallLabel = null;
   wallG.add(wall, frame);
   // 27 條槽線
   for (let i = 0; i <= 27; i++) {
-    const x = -128 / 2 + i * (128 / 27);
+    const x = -WALL_W / 2 + i * (WALL_W / 27);
     const g = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(x, -17, 2.2), new THREE.Vector3(x, 17, 2.2)
     ]);
@@ -587,7 +639,8 @@ let wallLabel = null;
   wallG.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR.clone().negate());
   wallG.position.copy(wallCenter);
   const lb = textSprite('lm_head:16 維 → 27 個 logits', { color: colToCss(OP_LEARNED), fs: 46 });
-  lb.position.copy(wallCenter).addScaledVector(DIR, -6).add(new THREE.Vector3(0, 38, 0));
+  // 抬高到機率柱頂之上:m 的機率柱會長到 +44,38 會被柱子插穿
+  lb.position.copy(wallCenter).addScaledVector(DIR, -6).add(new THREE.Vector3(0, 50, 0));
   staticG.add(wallG, lb);
   fadeLabels.push({ sprite: lb, s: S.WALL });
   wallLabel = lb;
@@ -616,7 +669,7 @@ function glowSprite(color, scale = 26) {
 }
 
 /* ---- KV Cache 記憶櫃:第 1、2 格已經放著 BOS 與 e,第 3 格等這一格的 K/V 存進來 ---- */
-const KV_ORIGIN = pathPos(S.ATTN + 8).add(new THREE.Vector3(58, 24, 0));
+const KV_ORIGIN = pathPos(S.ATTN + 8).add(KV_OFF);
 const KV_SLOT_DY = 15;   // 三格要塞得進畫面,格距比兩格時緊一點
 const KV_ROW_DY = 2.8;   // 一格之內 K 在上、V 在下
 const KV_CUBE = { cube: 1.5, pitch: 1.9, opacity: 0.85 };
@@ -635,7 +688,32 @@ function makeKVRows(kVals, vVals) {
   const vT = textSprite('V', { fs: 26, color: '#93c5fd', bg: false, onTop: true });
   vT.position.set(-19, -KV_ROW_DY, 0);
   grp.add(kT, vT);
+  // 第九關要單獨強調 K 排或 V 排(先比對 K → 再依權重放大 V),留鉤子好取用
+  grp.userData.k = k; grp.userData.v = v;
+  grp.userData.kT = kT; grp.userData.vT = vT;
   return grp;
+}
+// 記憶櫃一排的強調程度:emiss=發光,op=透明度(行標 K/V 跟著同步)
+// scale =「這排看起來變多大」:只有 35% 給整排(方塊間距)、65% 給方塊本身,
+// 排寬才不會撐出槽框、也不會壓到左邊的 K/V 行標
+const ROW_BASE = { scale: 1, emiss: 0.4, op: KV_CUBE.opacity };
+function setRowEmphasis(row, scale, emiss, op, label = null) {
+  row.userData.emph = scale;
+  row.scale.setScalar(1 + (scale - 1) * 0.35);
+  row.userData.cubes.forEach(m => {
+    if (!m.userData.base) m.userData.base = m.scale.clone();
+    m.scale.copy(m.userData.base).multiplyScalar(1 + (scale - 1) * 0.65);
+    m.material.emissiveIntensity = emiss;
+    m.material.opacity = op;
+  });
+  if (label) label.material.opacity = clamp(op / ROW_BASE.op, 0.2, 1);
+}
+// 三格(BOS / e / m 自己)回到中性亮度 —— bosPod、ePod 掛在 staticG,不還原會殘留到下一輪
+function resetPodRows() {
+  [bosPod, ePod, selfPod].filter(Boolean).forEach(p => {
+    setRowEmphasis(p.userData.k, ROW_BASE.scale, ROW_BASE.emiss, ROW_BASE.op, p.userData.kT);
+    setRowEmphasis(p.userData.v, ROW_BASE.scale, ROW_BASE.emiss, ROW_BASE.op, p.userData.vT);
+  });
 }
 // 櫃體往左多留一段放行標(BOS / e / m),右緣維持不變才不會被畫面切掉
 const KV_PAD_L = -7;
@@ -692,7 +770,7 @@ const ePod = makePastPod('e', 1);
 
 /* ================= 相機 ================= */
 const camFocus = pathPos(S.START).clone();
-const camOff = new THREE.Vector3(58, 34, 86);
+const camOff = new THREE.Vector3(58, 34, 86).multiplyScalar(P_CAM);
 const camOffTarget = camOff.clone();
 let focusMode = 'hero';
 const focusFixed = new THREE.Vector3();
@@ -701,16 +779,19 @@ function setCam(offset, fixedFocus = null) {
   if (fixedFocus) { focusMode = 'fixed'; focusFixed.copy(fixedFocus); }
   else focusMode = 'hero';
 }
-const CLOSE_CAM = new THREE.Vector3(30, 18, 46);
-const DEFAULT_CAM = new THREE.Vector3(58, 34, 86);
-const WIDE_CAM = new THREE.Vector3(92, 48, 120);
-const WALL_CAM = DIR.clone().multiplyScalar(-100).add(new THREE.Vector3(0, 16, 0));
-const FINALE_CAM = new THREE.Vector3(190, 110, 230);
+const CLOSE_CAM = new THREE.Vector3(30, 18, 46).multiplyScalar(P_CAM);
+const DEFAULT_CAM = new THREE.Vector3(58, 34, 86).multiplyScalar(P_CAM);
+const WIDE_CAM = new THREE.Vector3(92, 48, 120).multiplyScalar(P_CAM);
+// 高牆是全片唯一的橫向大特寫,直式要退得比其他關卡更遠才看得到 27 根柱子的全貌
+const WALL_CAM = DIR.clone().multiplyScalar(PORTRAIT ? -180 : -100).add(new THREE.Vector3(0, 16, 0));
+// 終章全景:直式的 fov 本來就寬得多,再乘 P_CAM 會把整條管線縮到讀不到字
+const FINALE_CAM = new THREE.Vector3(216, 125, 262).multiplyScalar(PORTRAIT ? 0.9 : 1);
 
 /* ================= 主角狀態 ================= */
 let hero = null, heroS = S.START, heroLift = 0;
 let ghost = null, ghostLift = 0, ghostSide = 0, ghostLabel = null;
-const GHOST_LIFT = 42, GHOST_SIDE = -44; // 殘差分身平時停泊在左上遠處(需入鏡),回撞前才拉回
+// 殘差分身平時停泊在左上遠處(需入鏡),回撞前才拉回;直式要更靠左,才不會被正上方的記憶櫃壓住
+const GHOST_LIFT = 42, GHOST_SIDE = PORTRAIT ? -46 : -44;
 let bars = null, barLabels = null;
 let attn = null; // Attention 拆關期間的 Q/K/V 三條分身與光束
 let playing = false, idx = 0;
@@ -732,11 +813,15 @@ function setHero(obj, s = heroS, lift = 0) {
   hero = obj; heroS = s; heroLift = lift;
   if (hero) { dynamicG.add(hero); syncHero(); }
 }
+// 冪等:rebuildTo 會連續跑多個 final(),不先清掉舊的會疊出好幾個「殘差 x_residual」分身
+function clearGhost() { if (ghost) disposeObj(ghost); ghost = null; ghostLabel = null; }
 function makeGhost(fromStrip) {
-  const g = makeStrip(fromStrip.userData.vals, { opacity: 0.22, hue: fromStrip.userData.hue || 0 });
-  g.children.forEach(m => { m.material.emissiveIntensity = 0.5; });
+  clearGhost();
+  // 盲測:分身太暗「跟背景融在一起,看不出形狀」→ 提高到看得出是一排方塊,但仍明顯弱於本體
+  const g = makeStrip(fromStrip.userData.vals, { opacity: 0.34, hue: fromStrip.userData.hue || 0 });
+  g.children.forEach(m => { m.material.emissiveIntensity = 0.75; });
   ghostLabel = textSprite('殘差 x_residual', { color: '#94a3b8', fs: 32 });
-  ghostLabel.position.y = 8;
+  ghostLabel.position.y = -14; // 掛在分身下方:掛上面會被 Attention(4 頭) 的關卡標籤壓掉字尾
   g.add(ghostLabel);
   dynamicG.add(g);
   return g;
@@ -1032,11 +1117,16 @@ const steps = [
         });
       }, k => k);
       attn.heads.forEach((g, h) => { g.position.copy(headHomePos(h)); g.scale.setScalar(h === 0 ? 1 : 0.85); });
+      // 左側三頭壓暗:接下來的重點是頭 1 的 q 跟 KV Cache 怎麼互動
+      await tween(400, k => {
+        attn.heads.slice(1).forEach(g => setHeadDim(g, 1 - (1 - SIDE_HEAD_DIM) * k));
+      }, easeOut);
     },
     final() {
       [attn.qs, attn.ks, attn.vs].filter(Boolean).forEach(disposeObj);
       attn.qs = attn.ks = attn.vs = null;
       attn.heads = [0, 1, 2, 3].map(h => makeHeadGroup(h, false));
+      attn.heads.slice(1).forEach(g => setHeadDim(g, SIDE_HEAD_DIM));
     }
   },
   /* 10 ─────────────────────────────── */
@@ -1050,42 +1140,64 @@ const steps = [
       const r = makeAttnBeams(qPos);
       attn.beams = r.beams; attn.wlabels = r.wlabels;
       attn.beams.forEach(b => { b.material.opacity = 0; });
-      // 側邊三頭的微型光束
-      const minis = [];
-      for (let h = 1; h <= 3; h++) {
-        const p = attn.heads[h].position.clone();
-        [bosPod, ePod, selfPod].forEach(pod => {
-          const b = makeBeam(p.clone(), pod.position.clone(), 0.22, HEAD_COLORS[h]);
-          b.material.opacity = 0;
-          minis.push(b);
-        });
-      }
-      await tween(500, k => {
-        attn.beams.forEach(b => { b.material.opacity = 0.55 * k; });
-        minis.forEach(b => { b.material.opacity = 0.15 * k; });
-      }, easeOut);
-      // 側邊三頭同步脈衝:它們也在算
-      const pulseSide = tween(1600, k => {
-        attn.heads.slice(1).forEach(g => {
-          const p = 0.35 + Math.abs(Math.sin(k * Math.PI * 2)) * 0.9;
-          const s = g.userData.q;
-          if (s) s.userData.cubes.forEach(m => { m.material.emissiveIntensity = p; });
+      attn.wlabels.forEach(w => { w.material.opacity = 0; }); // 數字等 Q·K 比對完才出現
+      // 側邊三頭全程只呼吸、不連線:它們也在算,但拉線到 cache 會讓畫面太亂
+      // 盲測回饋:壓暗之後它們「從頭到尾沒動也沒亮過」,變成純裝飾 → 呼吸幅度加大,看得出在運轉
+      const sideBreath = tween(4200, k => {
+        attn.heads.slice(1).forEach((g, i) => {
+          const p = Math.sin((k * 2.5 - i * 0.22) * Math.PI * 2);
+          g.scale.setScalar(0.85 * (1 + 0.13 * p));
+          setHeadDim(g, SIDE_HEAD_DIM * (1 + 0.85 * Math.max(0, p)));
         });
       }, k => k);
-      // 每個頭只從 cache 抽走自己那 4 維的 v:三格各一份,沿光束吸入頭 1
+
+      /* 拍 1:q 打到三格的 K 排,K 亮起來 —— 先跟 K 比對 */
+      await tween(700, k => {
+        attn.beams.forEach(b => { b.material.opacity = 0.55 * k; });
+        emphasizeK(k);
+      }, easeOut);
+
+      /* 拍 2:比對出數值 */
+      attn.wlabels.forEach((w, i) => burst(w.position, new THREE.Color(V.attnW[i] > 0.4 ? 0xf0abfc : 0xc084fc).getHex(), 18, 10));
+      await tween(600, k => {
+        attn.wlabels.forEach(w => { w.material.opacity = k; });
+      }, easeOut);
+      await wait(320);
+
+      /* 拍 3:K 縮暗退場,數值滑到 V 旁邊,把 V 依權重放大不同程度 */
+      const settle = tween(700, k => {
+        settleK(k);
+        attn.beams.forEach(b => { b.material.opacity = 0.55 - 0.3 * k; });
+      }, easeOut);
+      for (let i = 0; i < 3; i++) {
+        const w = attn.wlabels[i];
+        const from = w.userData.onBeam.clone(), to = w.userData.atV;
+        tween(560, k => {
+          w.position.lerpVectors(from, to, k);
+          w.scale.copy(w.userData.scale0).multiplyScalar(1 - (1 - WLABEL_SHRINK) * k);
+          growV(i, k);
+        }, easeIO);
+        await wait(200);
+      }
+      await settle;
+      await wait(260);
+
+      /* 拍 4:放大後的 v 依權重加權吸回頭 1 */
       const target = head0.position.clone().add(new THREE.Vector3(0, -2, 0));
-      const sucks = [bosPod, ePod, selfPod].map(pod => {
+      const sucks = attnPodSpecs().map((p, i) => {
         const s = makeStrip(Array.from({ length: 4 }, () => gauss() * 0.5), { cube: 1.7, pitch: 2.2 });
         tintSolid(s, HEAD_COLORS[0]);
-        s.position.copy(pod.position);
-        s.userData.from = pod.position.clone();
+        s.userData.from = podRowPos(p.pod, 'v'); // 從 V 排出發,不是整格
+        s.userData.s0 = 0.7 + V.attnW[i] * 1.2;  // 權重越大,搬走的份量越大
+        s.position.copy(s.userData.from);
+        s.scale.setScalar(s.userData.s0);
         dynamicG.add(s);
         return s;
       });
       await tween(900, k => {
         sucks.forEach(s => {
           s.position.lerpVectors(s.userData.from, target, easeIn(k));
-          s.scale.setScalar(1 - 0.6 * k);
+          s.scale.setScalar(s.userData.s0 * (1 - 0.6 * k));
         });
       });
       impact(target, OP_PURE, { count: 60, shake: 0.4 });
@@ -1094,26 +1206,34 @@ const steps = [
       const out0 = swapHeadToOut(head0, 0);
       out0.scale.setScalar(0.1);
       await tween(450, k => out0.scale.setScalar(0.1 + 0.9 * easeOut(k)));
-      await pulseSide;
-      // 側邊三頭也各自完成,依序換成輸出條
+      await sideBreath;
+      attn.heads.slice(1).forEach(g => g.scale.setScalar(0.85));
+      // 側邊三頭也各自完成,依序換成輸出條(換條後要重新壓暗:swapHeadToOut 會建全新的亮條)
       for (let h = 1; h <= 3; h++) {
-        const out = swapHeadToOut(attn.heads[h], h);
+        const g = attn.heads[h];
+        const out = swapHeadToOut(g, h);
         out.scale.setScalar(0.1);
-        burst(attn.heads[h].position, new THREE.Color(HEAD_COLORS[h]).getHex(), 30, 14);
-        tween(350, k => out.scale.setScalar(0.1 + 0.9 * easeOut(k)));
-        await wait(160);
+        burst(g.position, new THREE.Color(HEAD_COLORS[h]).getHex(), 30, 14);
+        // 算完的那一下先亮起來(讓人知道這三個頭也各自跑完了),再沉回陪襯亮度
+        tween(700, k => {
+          out.scale.setScalar(0.1 + 0.9 * easeOut(clamp(k * 2, 0, 1)));
+          setHeadDim(g, 0.95 - (0.95 - SIDE_HEAD_DIM) * easeOut(clamp(k * 1.6 - 0.4, 0, 1)));
+        }, k => k);
+        await wait(230);
       }
-      // 微型光束退場,主光束轉暗保留
+      await wait(420);
+      // 主光束轉暗保留
       await tween(450, k => {
-        minis.forEach(b => { b.material.opacity = 0.15 * (1 - k); });
-        attn.beams.forEach(b => { b.material.opacity = 0.55 - 0.33 * k; });
+        attn.beams.forEach(b => { b.material.opacity = 0.25 - 0.03 * k; });
       });
-      minis.forEach(disposeObj);
+      applyScoredCacheState();
     },
     final() {
       attn.heads.forEach((g, h) => swapHeadToOut(g, h));
+      attn.heads.slice(1).forEach(g => setHeadDim(g, SIDE_HEAD_DIM));
       const r = makeAttnBeams(attn.heads[0].position.clone(), true);
       attn.beams = r.beams; attn.wlabels = r.wlabels;
+      applyScoredCacheState();
     }
   },
   /* 11 ─────────────────────────────── */
@@ -1122,11 +1242,21 @@ const steps = [
     async play() {
       hud('第十關:四頭合併', 'concat', '4 個頭的 4 維結果依序拼接為 16 維的 x_attn,各段仍保留原本頭的顏色,尚未混合。',
         'x_attn.extend(head_out)  # 4 頭 × 4 維 → 16 維');
-      // 光束與權重標籤退場
+      // 光束與權重標籤退場;記憶櫃的 K/V 同時回到中性亮度(這一輪的比對已經結束)
+      const k0 = attnPodSpecs().map(p => p.pod.userData.k.userData.emph || 1);
+      const v0 = attnPodSpecs().map(p => p.pod.userData.v.userData.emph || 1);
       await tween(400, k => {
         attn.beams.forEach(b => { b.material.opacity = 0.22 * (1 - k); });
         attn.wlabels.forEach(w => { w.material.opacity = 1 - k; });
+        attnPodSpecs().forEach((p, i) => {
+          setRowEmphasis(p.pod.userData.k, k0[i] + (1 - k0[i]) * k, 0.15 + 0.25 * k,
+            ROW_BASE.op - 0.5 * (1 - k), p.pod.userData.kT);
+          setRowEmphasis(p.pod.userData.v, v0[i] + (1 - v0[i]) * k,
+            vGrowEmiss(i) + (ROW_BASE.emiss - vGrowEmiss(i)) * k, ROW_BASE.op, p.pod.userData.vT);
+        });
+        attn.heads.slice(1).forEach(g => setHeadDim(g, SIDE_HEAD_DIM + (1 - SIDE_HEAD_DIM) * k));
       });
+      resetPodRows();
       attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj);
       attn.beams = []; attn.wlabels = [];
       // 四份輸出飛回各自的段位
@@ -1149,7 +1279,7 @@ const steps = [
       const strip16 = makeStrip(V.attnCat, { opacity: 0.95 });
       tintByHeads(strip16);
       const xl = textSprite('x_attn(4 頭拼接)', { color: '#c084fc', fs: 36, bg: false });
-      xl.position.set(0, 11, 0);
+      xl.position.set(0, 17, 0); // 抬高:11 會壓在它要解釋的那排方塊上
       strip16.add(xl);
       strip16.userData.label = xl;
       strip16.position.copy(center);
@@ -1160,10 +1290,11 @@ const steps = [
     final() {
       if (attn.beams) { attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj); attn.beams = []; attn.wlabels = []; }
       if (attn.heads) { attn.heads.forEach(disposeObj); attn.heads = null; }
+      resetPodRows();
       const strip16 = makeStrip(V.attnCat, { opacity: 0.95 });
       tintByHeads(strip16);
       const xl = textSprite('x_attn(4 頭拼接)', { color: '#c084fc', fs: 36, bg: false });
-      xl.position.set(0, 11, 0);
+      xl.position.set(0, 17, 0); // 抬高:11 會壓在它要解釋的那排方塊上
       strip16.add(xl);
       strip16.userData.label = xl;
       strip16.position.copy(pathPos(S.ATTN + 6));
@@ -1238,7 +1369,7 @@ const steps = [
       });
       await tween(700, k => { ghostLift = GHOST_LIFT * (1 - easeIn(k)); syncHero(); });
       impact(pathPos(S.JOIN1), OP_PURE, { count: 120, shake: 1.2 });
-      if (ghost) { disposeObj(ghost); ghost = null; }
+      clearGhost();
       await Promise.all([
         tween(600, k => setStripValues(hero, V.afterRes1, k, 0.12), easeOut),
         stripPulse(hero, 700)
@@ -1246,7 +1377,7 @@ const steps = [
       setStripValues(hero, V.afterRes1, 1, 0.12);
       await travel(S.FORK2 - 2, 700);
     },
-    final() { setHero(makeStrip(V.afterRes1, { hue: 0.12 }), S.FORK2 - 2); ghost = null; buildSelfPod(); setCam(DEFAULT_CAM); }
+    final() { setHero(makeStrip(V.afterRes1, { hue: 0.12 }), S.FORK2 - 2); clearGhost(); buildSelfPod(); setCam(DEFAULT_CAM); }
   },
   /* 9 ─────────────────────────────── */
   {
@@ -1392,7 +1523,7 @@ const steps = [
       });
       await tween(600, k => { ghostLift = GHOST_LIFT * (1 - easeIn(k)); syncHero(); });
       impact(pathPos(S.JOIN2), OP_PURE, { count: 110, shake: 1.1 });
-      if (ghost) { disposeObj(ghost); ghost = null; }
+      clearGhost();
       await Promise.all([
         tween(600, k => setStripValues(hero, V.afterRes2, k, 0.18), easeOut),
         stripPulse(hero, 700)
@@ -1400,7 +1531,7 @@ const steps = [
       setStripValues(hero, V.afterRes2, 1, 0.18);
       await travel(S.JOIN2 + 10, 600);
     },
-    final() { setHero(makeStrip(V.afterRes2, { hue: 0.18 }), S.JOIN2 + 10); ghost = null; buildSelfPod(); setCam(DEFAULT_CAM); }
+    final() { setHero(makeStrip(V.afterRes2, { hue: 0.18 }), S.JOIN2 + 10); clearGhost(); buildSelfPod(); setCam(DEFAULT_CAM); }
   },
   /* 10 ─────────────────────────────── */
   {
@@ -1417,7 +1548,7 @@ const steps = [
       impact(pathPos(S.WALL - 2), OP_LEARNED, { count: 200, shake: 1.6, flash: 500 });
       setHero(null);
       setMidGatesVisible(false); // 中途關卡會擋在高牆視角前,先收起來
-      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 2, 0)));
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 10, 0)));
       buildBars(V.logits, 3.6, false);
       await tween(1200, k => {
         bars.children.forEach((b, i) => {
@@ -1428,10 +1559,10 @@ const steps = [
       bars.children.forEach((b, i) => { b.scale.y = Math.max(0.15, barH(V.logits[i], 3.6)); });
     },
     final() {
-      setHero(null); ghost = null; buildSelfPod();
+      setHero(null); clearGhost(); buildSelfPod();
       buildBars(V.logits, 3.6, true);
       setMidGatesVisible(false);
-      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 2, 0)));
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 10, 0)));
     }
   },
   /* 11 ─────────────────────────────── */
@@ -1461,7 +1592,7 @@ const steps = [
       await wait(300); // 標籤留在場上,抽樣時仍能看到「這些是機率」
     },
     final() {
-      setHero(null); ghost = null; buildSelfPod();
+      setHero(null); clearGhost(); buildSelfPod();
       buildBars(V.probs.map(p => p * 52), 1, true, true);
       setMidGatesVisible(false);
       wallLabel.visible = false;
@@ -1469,7 +1600,7 @@ const steps = [
       tl.position.copy(wallLabel.position);
       dynamicG.add(tl);
       softmaxLabel = tl;
-      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 2, 0)));
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 10, 0)));
     }
   },
   /* 12 ─────────────────────────────── */
@@ -1543,14 +1674,14 @@ const steps = [
       disposeObj(ball);
       // 拉遠鏡頭,m 飛回起點
       const loopLb = textSprite('新的 m 成為下一個輸入 → 自迴歸循環', { color: '#f0abfc', fs: 52 });
-      loopLb.position.copy(pathPos(150)).add(new THREE.Vector3(115, 25, 0));
+      loopLb.position.copy(pathPos(150)).add(PORTRAIT ? new THREE.Vector3(-6, 74, 0) : new THREE.Vector3(115, 25, 0));
       dynamicG.add(loopLb);
       if (softmaxLabel) { disposeObj(softmaxLabel); softmaxLabel = null; }
       wallLabel.visible = true;
       setMidGatesVisible(true); // 拉遠看整條管線,恢復所有關卡
       showAllLabels = true;     // 全景地圖模式:所有標籤一起亮
       makeReturnArc();          // 自迴歸回程:從高牆繞回起點的虛線弧
-      setCam(FINALE_CAM, pathPos(150));
+      setCam(FINALE_CAM, pathPos(196));
       const p0 = mCube.position.clone();
       const p1 = pathPos(S.START);
       const mid = pathPos(150).add(new THREE.Vector3(165, 70, 0)); // 沿回程弧飛
@@ -1565,7 +1696,7 @@ const steps = [
       hud('一圈跑完', '', '按 R 重播整段旅程;按 ← 可回到任何一關的定格慢慢講。', '');
     },
     final() {
-      ghost = null; buildSelfPod();
+      clearGhost(); buildSelfPod();
       buildBars(V.probs.map(p => p * 52), 1, true, true);
       setMidGatesVisible(true);
       showAllLabels = true;
@@ -1575,9 +1706,9 @@ const steps = [
       m.add(glowSprite(0xf472b6, 30));
       setHero(m, S.START);
       const loopLb = textSprite('新的 m 成為下一個輸入 → 自迴歸循環', { color: '#f0abfc', fs: 52 });
-      loopLb.position.copy(pathPos(150)).add(new THREE.Vector3(115, 25, 0));
+      loopLb.position.copy(pathPos(150)).add(PORTRAIT ? new THREE.Vector3(-6, 74, 0) : new THREE.Vector3(115, 25, 0));
       dynamicG.add(loopLb);
-      setCam(FINALE_CAM, pathPos(150));
+      setCam(FINALE_CAM, pathPos(196));
     }
   }
 ];
@@ -1617,7 +1748,10 @@ function tintSolid(strip, colorHex, emiss = 0.4) {
 function headHomePos(h) {
   const base = pathPos(S.ATTN + 6);
   if (h === 0) return base;
-  return base.add(new THREE.Vector3(-78, 38 - (h - 1) * 30, 0));
+  // 直式:三個陪襯的頭改排在主軌道下方(記憶櫃佔了上方),橫式維持左側工作台
+  return base.add(PORTRAIT
+    ? new THREE.Vector3(-34, -32 - (h - 1) * 26, 0)
+    : new THREE.Vector3(-78, 38 - (h - 1) * 30, 0));
 }
 // 一個頭的工作組:q/k/v 三小條(各 4 塊),或算完後的單條輸出
 function makeHeadGroup(h, withOut = false) {
@@ -1663,27 +1797,87 @@ function swapHeadToOut(head, h) {
   head.userData.out = out;
   return out;
 }
-function makeAttnBeams(fromPos, dim = false) {
-  const op = dim ? 0.22 : 0.55;
-  // 三格:BOS、e(過去,紫)與 m 自己(當前,粉)
-  const pods = [
+// 陪襯用的頭 2–4:壓暗到 a(1 = 主角亮度),讓視線只跟著頭 1 走
+const SIDE_HEAD_DIM = 0.32;
+function setHeadDim(g, a) {
+  const s = g.userData.q || g.userData.out;
+  if (s) s.userData.cubes.forEach(m => {
+    m.material.transparent = true;
+    m.material.opacity = 0.95 * a;
+    m.material.emissiveIntensity = 0.65 * a;
+  });
+  if (g.userData.label) g.userData.label.material.opacity = clamp(a + 0.12, 0, 1);
+}
+// 三格:BOS、e(過去,紫)與 m 自己(當前,粉)
+function attnPodSpecs() {
+  return [
     { pod: bosPod, col: '#c084fc', dy: 7 },
     { pod: ePod, col: '#c084fc', dy: 0 },
     { pod: selfPod, col: '#f0abfc', dy: -7 }
   ];
+}
+// 一格之內某一排的世界座標(pod 是頂層物件,position 即世界座標)
+function podRowPos(pod, which) {
+  return pod.position.clone().add(new THREE.Vector3(0, which === 'k' ? KV_ROW_DY : -KV_ROW_DY, 0));
+}
+// 權重數字算完後的落點:離開光束,貼到自己正在放大的那排 V 左側
+const WLABEL_HOME = new THREE.Vector3(PORTRAIT ? -34 : -42, -KV_ROW_DY, 0);
+const WLABEL_SHRINK = 0.72;
+function wlabelHome(pod) { return pod.position.clone().add(WLABEL_HOME); }
+// 光束一律打在 K 排:第九關第一拍是 q 跟 k 比對,線接在 K 才讀得出因果
+function makeAttnBeams(fromPos, scored = false) {
+  const op = scored ? 0.22 : 0.55;
   const beams = [], wlabels = [];
-  pods.forEach((p, i) => {
-    const b = makeBeam(fromPos.clone(), p.pod.position.clone(), V.attnW[i] * 3.4, new THREE.Color(p.col).getHex());
+  attnPodSpecs().forEach((p, i) => {
+    const to = podRowPos(p.pod, 'k');
+    const b = makeBeam(fromPos.clone(), to, V.attnW[i] * 3.4, new THREE.Color(p.col).getHex());
     b.material.opacity = op;
     beams.push(b);
-    // 三格上下各差 18,標籤要沿光束拉開;onTop 才不會被記憶櫃的半透明面板擋住
+    // 三格上下各差 15,標籤要沿光束拉開;onTop 才不會被記憶櫃的半透明面板擋住
     const w = textSprite(V.attnW[i].toFixed(2), { color: p.col, fs: 40, onTop: true });
-    // 標籤停在光束中段偏頭側,才不會蓋到記憶櫃裡的 K/V 方塊與行標
-    w.position.lerpVectors(fromPos, p.pod.position, 0.42).add(new THREE.Vector3(-12, p.dy, 0));
+    // 拍 2 停在光束中段偏頭側,才不會蓋到記憶櫃裡的 K/V 方塊與行標
+    w.userData.onBeam = new THREE.Vector3().lerpVectors(fromPos, to, 0.42).add(new THREE.Vector3(-12, p.dy, 0));
+    w.userData.atV = wlabelHome(p.pod);
+    w.userData.scale0 = w.scale.clone();
+    // scored = 已經算完的定格:數字已經滑到 V 排旁
+    w.position.copy(scored ? w.userData.atV : w.userData.onBeam);
+    if (scored) w.scale.copy(w.userData.scale0).multiplyScalar(WLABEL_SHRINK);
     dynamicG.add(w);
     wlabels.push(w);
   });
   return { beams, wlabels };
+}
+// 比對階段 K 放大的幅度、比對完縮回的幅度
+const K_HI = 1.5, K_LO = 0.55;
+// V 依權重放大不同程度(0.22 / 0.31 / 0.47 → 1.08 / 1.28 / 1.63);刻意誇張,才看得出「數值決定份量」
+function vGrowScale(i) { return 0.6 + V.attnW[i] * 2.2; }
+function vGrowEmiss(i) { return 0.4 + V.attnW[i] * 1.5; }
+// 拍 1:強調 K —— K 排放大發亮,V 排先讓位
+function emphasizeK(k) {
+  attnPodSpecs().forEach(p => {
+    setRowEmphasis(p.pod.userData.k, 1 + (K_HI - 1) * k, 0.4 + 1.0 * k, ROW_BASE.op, p.pod.userData.kT);
+    setRowEmphasis(p.pod.userData.v, 1, 0.4 - 0.25 * k, ROW_BASE.op - 0.55 * k, p.pod.userData.vT);
+  });
+}
+// 拍 3a:K 比對完就縮暗退到後面
+function settleK(k) {
+  attnPodSpecs().forEach(p => {
+    setRowEmphasis(p.pod.userData.k, K_HI + (K_LO - K_HI) * k, 1.4 - 1.25 * k,
+      ROW_BASE.op - 0.5 * k, p.pod.userData.kT);
+  });
+}
+// 拍 3b:數值把自己那格的 V 撐大,由呼叫端逐格點名
+function growV(i, k) {
+  const p = attnPodSpecs()[i];
+  setRowEmphasis(p.pod.userData.v, 1 + (vGrowScale(i) - 1) * k,
+    0.15 + (vGrowEmiss(i) - 0.15) * k, ROW_BASE.op - 0.55 * (1 - k), p.pod.userData.vT);
+}
+// 算完之後的記憶櫃定格狀態(play 尾段與 final 共用,避免兩邊漂移)
+function applyScoredCacheState() {
+  attnPodSpecs().forEach((p, i) => {
+    setRowEmphasis(p.pod.userData.k, K_LO, 0.15, ROW_BASE.op - 0.5, p.pod.userData.kT);
+    setRowEmphasis(p.pod.userData.v, vGrowScale(i), vGrowEmiss(i), ROW_BASE.op, p.pod.userData.vT);
+  });
 }
 
 let selfPod = null;
@@ -1738,7 +1932,7 @@ function buildBars(vals, hScale, applyHeights, probMode = false) {
   barLabels = new THREE.Group();
   const origin = wallCenter.clone().addScaledVector(DIR, -14);
   for (let i = 0; i < 27; i++) {
-    const geo = new THREE.BoxGeometry(3.1, 1, 3.1);
+    const geo = new THREE.BoxGeometry(BAR_W, 1, BAR_W);
     geo.translate(0, 0.5, 0);
     const isM = i === 12;
     const bar = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
@@ -1747,11 +1941,14 @@ function buildBars(vals, hScale, applyHeights, probMode = false) {
       emissiveIntensity: isM ? 0.55 : 0.3,
       roughness: 0.35, metalness: 0.3
     }));
-    bar.position.set((13 - i) * 4.35, origin.y - 10, origin.z); // 螢幕上 a→z 由左至右
+    bar.position.set((13 - i) * BAR_PITCH, origin.y - 10, origin.z); // 螢幕上 a→z 由左至右
     bar.scale.y = applyHeights ? Math.max(0.15, probMode ? vals[i] : barH(vals[i], hScale)) : 0.01;
     bars.add(bar);
-    const lb = textSprite(letters[i] || '∅', { color: isM ? '#f0abfc' : '#7d90b8', fs: 34, bg: false });
+    // onTop:被選中的那根柱子會蓋住自己的字母,盲測聽眾因此分不清是 l 還是 m
+    const lb = textSprite(letters[i] || '∅', { color: isM ? '#f0abfc' : '#7d90b8', fs: 34, bg: false, onTop: true });
+    // 往鏡頭方向拉出來:字母留在柱子後面時,最高的那根會蓋住自己的字母(l 還是 m 分不出來)
     lb.position.set(bar.position.x, bar.position.y - 3.4, bar.position.z);
+    lb.position.addScaledVector(DIR, -9);
     barLabels.add(lb);
   }
   dynamicG.add(bars, barLabels);
@@ -1769,6 +1966,7 @@ function resetWorld() {
   showAllLabels = false;
   softmaxLabel = null;
   kvSlotFrames[2].material.opacity = 0.25; // 記憶櫃第 3 格回到空槽
+  resetPodRows(); // bosPod/ePod 掛在 staticG,第九關的 K 縮暗 / V 放大不清會殘留
   if (wallLabel) wallLabel.visible = true;
   setMidGatesVisible(true);
   Object.values(gates).forEach(g => g.userData.wire.scale.setScalar(1));
@@ -1871,8 +2069,15 @@ renderer.setAnimationLoop(() => {
     const ahead = e.s - heroS;
     const win = showAllLabels ? 1 : clamp(1 - (ahead - 7) / 7, 0, 1);
     // 走遠之後的舊關卡標籤也淡出,避免和當前步驟混淆
-    const winB = showAllLabels ? 1 : clamp(1 - (-ahead - 22) / 18, 0, 1);
+    // 收得比以前快:盲測顯示「rmsnorm」淡淡地卡在 KV Cache 面板後面,觀眾會一直想讀它
+    const winB = showAllLabels ? 1 : clamp(1 - (-ahead - 14) / 10, 0, 1);
     e.sprite.material.opacity = near * win * winB;
+  }
+  // 走過的關卡本體也一起暗下去(終章全景例外)
+  for (const g of fadeGates) {
+    // 終章全景:標籤要全亮,但關卡本體維持半暗,否則大光環會橫切過各關的標籤
+    const past = showAllLabels ? 0.28 : clamp(1 - (heroS - g.s - 10) / 16, GATE_PAST_MIN, 1);
+    for (const e of g.mats) e.m.opacity = e.o * past;
   }
 
   renderer.render(scene, camera);
