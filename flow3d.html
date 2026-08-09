@@ -749,6 +749,9 @@ function makeKVSlotFrame(i, opacity) {
   return f;
 }
 const kvSlotFrames = [];
+// 記憶櫃整體的淡化根節點:第四、五關(rmsnorm / 殘差分岔)還沒要講記憶,
+// 但這塊板子很大又在畫面上方,盲測時會一直搶讀者的注意力,所以那兩關先壓到極淡。
+const kvDimRoots = [];
 {
   const shellGeo = new THREE.PlaneGeometry(62, 50);
   shellGeo.translate(KV_PAD_L, 0, 0);
@@ -769,6 +772,7 @@ const kvSlotFrames = [];
   staticG.add(lb);
   fadeLabels.push({ sprite: lb, s: S.ATTN + 8 });
   kvSlotFrames.push(makeKVSlotFrame(0, 0.7), makeKVSlotFrame(1, 0.7), makeKVSlotFrame(2, 0.25));
+  kvDimRoots.push(rack, lb, ...kvSlotFrames);
 }
 // 已經算過的 BOS 與 e 的 K/V(attention 的「過去」)
 // —— 保持頂層物件,position 即世界座標(光束端點會用到)
@@ -786,6 +790,7 @@ function makePastPod(tag, slot) {
 }
 const bosPod = makePastPod('BOS', 0);
 const ePod = makePastPod('e', 1);
+kvDimRoots.push(bosPod, ePod);
 
 /* ================= 相機 ================= */
 const camFocus = pathPos(S.START).clone();
@@ -866,7 +871,39 @@ function hud(title, sub, desc, code) {
   $('info-code').textContent = code || '';
   $('info-code').style.display = code ? '' : 'none';
 }
+/* ---- 記憶櫃淡化:第四、五關壓到極淡,講到 Attention(第六關)才恢復 ---- */
+// steps[0] 是「開場」不算一關,所以第 N 關剛好就是 steps[N]
+const KV_DIM_STEPS = new Set([4, 5]);  // 第四關 RMSNorm、第五關 殘差分岔
+const KV_DIM_LEVEL = 0.12;
+let kvDim = 1, kvDimTarget = 1;
+// 每格畫面在 render 前把記憶櫃的 opacity 乘上 kvDim、render 完再還原。
+// 不直接改寫材質的「原始」opacity,因為 setRowEmphasis / 第七關存入等處會自己寫 opacity,
+// 記住基準值遲早會漂掉;乘完就還原則永遠跟著當下的狀態走。
+const kvDimMats = [];
+function collectKVDimMats() {
+  kvDimMats.length = 0;
+  for (const root of kvDimRoots) {
+    root.traverse(o => {
+      if (!o.material || !o.material.transparent) return;
+      // 文字標籤(BOS / e / K / V)是 onTop 的 sprite,不受深度遮擋,在黑底上同樣的
+      // opacity 比方塊搶眼得多;要再壓一級才真的退到背景去
+      kvDimMats.push({ m: o.material, f: o.material.isSpriteMaterial ? 0.15 : 1 });
+    });
+  }
+}
+function renderWithKVDim() {
+  if (kvDim > 0.999) { renderer.render(scene, camera); return; }
+  collectKVDimMats();
+  const saved = kvDimMats.map(e => e.m.opacity);
+  kvDimMats.forEach(e => { e.m.opacity *= kvDim * e.f; });
+  renderer.render(scene, camera);
+  kvDimMats.forEach((e, i) => { e.m.opacity = saved[i]; });
+}
+
 function hudProgress() {
+  // 「畫面上正在講的那一關」:播放中就是 idx,播完定格則是剛播完的 idx-1
+  const shown = playing ? idx : idx - 1;
+  kvDimTarget = KV_DIM_STEPS.has(shown) ? KV_DIM_LEVEL : 1;
   // 運算色碼從第一關就要建立;數值圖例等 Embedding 查表(第 3 步)有方塊了才出現
   $('legend').style.display = idx >= 1 ? 'block' : 'none';
   $('legend-val').style.display = idx >= 3 ? '' : 'none';
@@ -2122,7 +2159,8 @@ renderer.setAnimationLoop(() => {
     for (const e of g.mats) e.m.opacity = e.o * past;
   }
 
-  renderer.render(scene, camera);
+  kvDim += (kvDimTarget - kvDim) * (1 - Math.exp(-3.5 * dt));
+  renderWithKVDim();
 });
 camFocus.copy(pathPos(S.START));
 if (hashStep >= 1 && hashStep <= steps.length) snapCam(); // 直達定格:相機不從起點慢慢滑過去
