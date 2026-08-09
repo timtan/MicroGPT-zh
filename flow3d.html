@@ -6,7 +6,8 @@
 <title>MicroGPT 3D 流程 — 從字母到抽樣</title>
 <link rel="icon" href="data:,">
 <style>
-  html, body { margin: 0; height: 100%; background: #05070f; overflow: hidden;
+  /* touch-action: none 讓 iOS Safari 不要把垂直滑動吃成橡皮筋捲動,手勢才收得到 */
+  html, body { margin: 0; height: 100%; background: #05070f; overflow: hidden; touch-action: none;
                font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; }
   #app { position: fixed; inset: 0; }
   canvas { display: block; }
@@ -49,6 +50,14 @@
   #legend .sw { display: inline-block; width: 13px; height: 13px; border-radius: 3px;
                 vertical-align: -2px; margin: 0 5px 0 12px; }
 
+  /* 觸控裝置(手機 / iPad)看手勢說明,滑鼠鍵盤裝置看快捷鍵;用 pointer 而非寬度判斷,
+     因為 iPad 橫向寬度遠大於 640px,但一樣沒有鍵盤 */
+  .k-touch { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .k-desktop { display: none; }
+    .k-touch { display: block; }
+  }
+
   @media (max-width: 640px) {
     #intro h1 { font-size: 26px; letter-spacing: 1px; }
     #intro p  { font-size: 14px; padding: 0 20px; }
@@ -82,9 +91,16 @@
   <p>MicroGPT 前向傳播 3D 視覺化 — 16 維、4 頭、1 層、4192 個參數<br>
   整條路上只有 7 個地方用到訓練出來的參數(金色光環),其餘全是固定的算術或搬運。</p>
   <div class="keys">
-    <b>空白鍵 / 點擊</b> 推進下一關(播放中再按 = 快轉)<br>
-    <b>←</b> 回上一關定格 &nbsp; <b>R</b> 重來 &nbsp; <b>F</b> 全螢幕<br><br>
-    點擊任意處開始
+    <div class="k-desktop">
+      <b>空白鍵 / 點擊</b> 推進下一關(播放中再按 = 快轉)<br>
+      <b>←</b> 回上一關定格 &nbsp; <b>R</b> 重來 &nbsp; <b>F</b> 全螢幕<br><br>
+      點擊任意處開始
+    </div>
+    <div class="k-touch">
+      <b>往上撥</b> 推進下一關 &nbsp; <b>往下拉</b> 回上一關定格<br>
+      輕點畫面也可推進(播放中再點 = 快轉)<br><br>
+      點一下任意處開始
+    </div>
   </div>
 </div>
 
@@ -102,6 +118,9 @@
 
 <script type="module">
 import * as THREE from 'three';
+
+// 觸控裝置沒有鍵盤,HUD 提示要改講手勢(和 CSS 的 .k-touch 用同一條判斷)
+const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
 
 /* ================= 基礎場景 ================= */
 const BG = 0x05070f;
@@ -852,7 +871,7 @@ function hudProgress() {
   $('legend').style.display = idx >= 1 ? 'block' : 'none';
   $('legend-val').style.display = idx >= 3 ? '' : 'none';
   if (playing) {
-    $('progress').innerHTML = `播放中:<b>${steps[idx].name}</b>(再按空白鍵快轉)`;
+    $('progress').innerHTML = `播放中:<b>${steps[idx].name}</b>(${TOUCH ? '再點一下' : '再按空白鍵'}快轉)`;
     return;
   }
   $('progress').innerHTML = idx >= steps.length
@@ -1981,7 +2000,8 @@ function rebuildTo(n) {
     camFocus.copy(pathPos(S.START));
   } else {
     const st = steps[n - 1];
-    hud(`定格:${st.name}`, `${n} / ${steps.length}`, '按空白鍵繼續,← 再往回。', '');
+    hud(`定格:${st.name}`, `${n} / ${steps.length}`,
+        TOUCH ? '往上撥繼續,往下拉再往回。' : '按空白鍵繼續,← 再往回。', '');
   }
   hudProgress();
 }
@@ -2011,7 +2031,27 @@ addEventListener('keydown', e => {
     document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
   }
 });
-addEventListener('pointerdown', () => next());
+// 手勢:往上撥 = 下一關、往下拉 = 上一關(方向和瀏覽網頁的捲動一致);
+// 左滑 / 右滑同理。位移不到門檻就當成單純輕點,維持「點任意處推進」的舊行為。
+// 注意不能直接用 pointerdown 推進,否則手指一碰下去就前進,滑動永遠來不及被判讀。
+const SWIPE_MIN = 40;      // px,超過才算滑動
+const SWIPE_MAX_MS = 800;  // 太慢的拖曳不算手勢
+let gesture = null;
+addEventListener('pointerdown', e => {
+  gesture = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+addEventListener('pointercancel', () => { gesture = null; });
+addEventListener('pointerup', e => {
+  if (!gesture) return;
+  const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
+  const dt = performance.now() - gesture.t;
+  gesture = null;
+  const far = Math.max(Math.abs(dx), Math.abs(dy));
+  if (far < SWIPE_MIN) { next(); return; }          // 輕點
+  if (dt > SWIPE_MAX_MS) return;                     // 慢速拖曳,不當手勢
+  const forward = Math.abs(dy) > Math.abs(dx) ? dy < 0 : dx < 0;  // 往上撥 / 往左滑 = 前進
+  forward ? next() : prev();
+});
 
 // #n 直達某關定格(相機直接就位,不從起點慢慢滑過去)
 function snapCam() {
@@ -2019,6 +2059,8 @@ function snapCam() {
   if (focusMode === 'fixed') camFocus.copy(focusFixed);
   else if (hero) hero.getWorldPosition(camFocus);
 }
+if (TOUCH) $('progress').innerHTML = `往上撥開始 · 0 / ${steps.length}`;
+
 const hashStep = parseInt(location.hash.slice(1), 10);
 if (hashStep >= 1 && hashStep <= steps.length) { $('intro').classList.add('hidden'); rebuildTo(hashStep); }
 
