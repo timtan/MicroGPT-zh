@@ -1,0 +1,2929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MicroGPT — How 4,192 Numbers Learn to Name People</title>
+<style>
+/* ============ Colour system (validated dataviz dark palette) ============ */
+:root{
+  --bg:#0d0d0d; --panel:#1a1a19; --panel2:#222221;
+  --border:rgba(255,255,255,.10); --grid:#2c2c2a; --baseline:#383835;
+  --ink:#ffffff; --ink2:#c3c2b7; --ink3:#898781;
+  --c-bus:#3987e5;   /* main line / 16-dim vector / residual */
+  --c-attn:#d95926;  /* attention (moving information) */
+  --c-mlp:#199e70;   /* MLP (refining) */
+  --c-now:#c98500;   /* current token / new this round */
+  --c-kv:#9085e9;    /* KV cache (state across rounds) */
+  --c-rand:#e66767;  /* randomness (used once in the deck) */
+  --sans:system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg)}
+body{font-family:var(--sans);visibility:hidden}
+
+/* ============ Stage ============ */
+#stage{position:fixed;left:50%;top:50%;width:1280px;height:720px;
+       transform-origin:50% 50%;background:var(--bg)}
+.slide{display:none;position:absolute;inset:0;padding:26px 44px 20px;color:var(--ink)}
+.slide.active{display:grid}
+.std{grid-template-rows:66px minmax(0,1fr)}
+.hero{grid-template-rows:minmax(0,1fr);place-items:center}
+
+/* ============ Title bar + mini route map ============ */
+.slide header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.slide h1{margin:0;min-width:0;flex:1 1 auto;font-size:26px;font-weight:650;letter-spacing:.3px;display:flex;align-items:center;gap:14px;white-space:nowrap}
+.figno{font:600 13px/1 var(--mono);color:var(--ink2);border:1px solid var(--border);
+       background:var(--panel);padding:6px 10px;border-radius:8px;letter-spacing:1px;white-space:nowrap;flex:0 0 auto}
+.map{display:flex;align-items:center;gap:0;flex:0 0 auto}
+.chip{font-size:11.5px;color:var(--ink3);border:1px solid var(--border);padding:4px 7px;
+      border-radius:999px;display:flex;align-items:center;gap:5px;white-space:nowrap;background:rgba(255,255,255,.02)}
+.chip b{font-weight:500;font-family:var(--mono)}
+.chip.on{color:var(--ink);border-color:var(--c-bus);background:rgba(57,135,229,.14)}
+.chip.on b{color:var(--c-bus)}
+.tick{width:6px;height:1px;background:var(--grid)}
+.maplabel{font-size:10.5px;color:var(--ink3);margin-right:6px;white-space:nowrap;letter-spacing:.3px}
+
+/* ============ Two columns ============ */
+.cols{display:grid;grid-template-columns:var(--split,52fr 48fr);gap:26px;min-height:0;padding-top:10px}
+.cols.solo{grid-template-columns:1fr}
+.pane{min-height:0;min-width:0}
+.pane.left{display:flex;align-items:center;justify-content:center}
+.pane.left svg{width:100%;height:100%;}
+
+/* ============ Code card ============ */
+.codecard{height:100%;display:flex;flex-direction:column;background:var(--panel);
+          border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.codehead{padding:10px 16px;font:12.5px var(--mono);color:var(--ink3);
+          border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex:0 0 auto}
+.codebody{flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 6px;min-height:0;overflow:hidden}
+/* The audience does not have to read the code — saying so keeps them from wondering whether they should */
+.codecard::after{content:"Not for line-by-line reading  ·  just the code behind the figure";
+          flex:0 0 auto;padding:7px 16px;font:11px var(--sans);color:var(--ink3);letter-spacing:.2px;
+          border-top:1px solid var(--border);background:rgba(255,255,255,.025);text-align:center}
+.codesep{font:12px var(--sans);color:var(--ink3);padding:10px 16px 4px;letter-spacing:.5px}
+.codesep b{color:var(--ink2);font-weight:600}
+pre.py{margin:0;padding:2px 8px;font-family:var(--mono);font-size:var(--code-fs,14px);line-height:1.62}
+.row{display:flex;white-space:pre;border-radius:4px}
+.no{flex:0 0 4ch;text-align:right;padding-right:13px;padding-left:5px;color:#56554f;user-select:none}
+.cd{white-space:pre;color:#e8e6df}
+.row.elide .no,.row.elide .cd{color:#4c4b45}
+.fold{color:#56554f}
+.kw{color:#86b6ef}.st{color:#d2a86a}.cm{color:#898781;font-style:italic}.nu{color:#d55181}.fn{color:#54b89c}
+.anno{color:var(--c-now)}
+.row.hl-bus {background:rgba(57,135,229,.10);box-shadow:inset 3px 0 0 var(--c-bus)}
+.row.hl-attn{background:rgba(217,89,38,.10); box-shadow:inset 3px 0 0 var(--c-attn)}
+.row.hl-mlp {background:rgba(25,158,112,.10);box-shadow:inset 3px 0 0 var(--c-mlp)}
+.row.hl-kv  {background:rgba(144,133,233,.10);box-shadow:inset 3px 0 0 var(--c-kv)}
+.row.hl-rand{background:rgba(230,103,103,.10);box-shadow:inset 3px 0 0 var(--c-rand)}
+.row.hl-now {background:rgba(201,133,0,.12); box-shadow:inset 3px 0 0 var(--c-now)}
+.row.hl-bus .no{color:var(--c-bus)} .row.hl-attn .no{color:var(--c-attn)}
+.row.hl-mlp .no{color:var(--c-mlp)} .row.hl-kv .no{color:var(--c-kv)}
+.row.hl-rand .no{color:var(--c-rand)} .row.hl-now .no{color:var(--c-now)}
+
+/* ============ SVG type system ============ */
+svg text{font-family:var(--sans)}
+.t {fill:var(--ink);font-size:15px}
+.th{fill:var(--ink);font-size:18px;font-weight:600}
+.ts{fill:var(--ink2);font-size:13px}
+.td{fill:var(--ink3);font-size:12.5px}
+.tn{fill:var(--ink2);font-size:13px;font-family:var(--mono)}
+.tb{fill:var(--ink);font-size:15px;font-weight:600}
+.mid{text-anchor:middle}.end{text-anchor:end}
+.box{fill:var(--panel2);stroke:#4a4947;stroke-width:1.4;rx:8}
+.tint-bus {fill:rgba(57,135,229,.13);stroke:var(--c-bus);stroke-width:1.6;rx:8}
+.tint-attn{fill:rgba(217,89,38,.13);stroke:var(--c-attn);stroke-width:1.6;rx:8}
+.tint-mlp {fill:rgba(25,158,112,.13);stroke:var(--c-mlp);stroke-width:1.6;rx:8}
+.tint-kv  {fill:rgba(144,133,233,.12);stroke:var(--c-kv);stroke-width:1.6;rx:8}
+.tint-rand{fill:rgba(230,103,103,.13);stroke:var(--c-rand);stroke-width:1.6;rx:8}
+.tint-now {fill:rgba(201,133,0,.15);stroke:var(--c-now);stroke-width:1.6;rx:8}
+.f-bus{fill:var(--c-bus)}.f-attn{fill:var(--c-attn)}.f-mlp{fill:var(--c-mlp)}
+.f-kv{fill:var(--c-kv)}.f-rand{fill:var(--c-rand)}.f-now{fill:var(--c-now)}
+.wire{stroke:#8a8981;stroke-width:1.8;fill:none}
+.wire-bus{stroke:var(--c-bus);stroke-width:2.2;fill:none}
+.wire-attn{stroke:var(--c-attn);stroke-width:1.8;fill:none}
+.wire-mlp{stroke:var(--c-mlp);stroke-width:1.8;fill:none}
+.wire-kv{stroke:var(--c-kv);stroke-width:1.8;fill:none}
+.wire-rand{stroke:var(--c-rand);stroke-width:1.8;fill:none}
+.wire-now{stroke:var(--c-now);stroke-width:1.8;fill:none}
+.dash{stroke-dasharray:5 4}
+.bar{fill:var(--c-attn)}.bar-bus{fill:var(--c-bus)}.bar-rand{fill:var(--c-rand)}
+.bar-mlp{fill:var(--c-mlp)}.bar-kv{fill:var(--c-kv)}.bar-now{fill:var(--c-now)}.bar-grey{fill:#4a4947}
+.axis{stroke:var(--baseline);stroke-width:1}
+
+/* ============ Speaker notes ============ */
+.notes{display:none;position:absolute;left:0;right:0;bottom:0;max-height:44%;overflow:auto;
+       background:rgba(9,9,11,.95);border-top:1px solid var(--baseline);
+       padding:16px 44px 20px;z-index:6}
+body.notes-on .slide.active .notes{display:block}
+.notes ul{margin:6px 0 0;padding-left:22px}
+.notes li{font-size:16.5px;line-height:1.65;color:var(--ink2);margin:4px 0}
+.notes b{color:var(--ink)}
+.notes .ntag{font-size:12px;color:var(--c-now);letter-spacing:2px}
+
+/* ============ Page number ============ */
+#pageno{position:absolute;right:44px;bottom:13px;font:12.5px var(--mono);color:var(--ink3);z-index:2}
+
+/* ============ Cover / summary pages ============ */
+.heroBox{text-align:center;max-width:1050px}
+.kicker{font:600 14px var(--mono);color:var(--c-bus);letter-spacing:6px;text-transform:uppercase}
+.heroBox h1{font-size:46px;margin:18px 0 10px;letter-spacing:.6px}
+.heroBox .sub{font-size:19px;color:var(--ink2)}
+.stats{display:flex;gap:14px;justify-content:center;margin-top:30px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 22px}
+.stat .v{font:600 24px var(--mono);color:var(--ink)}
+.stat .k{font-size:12.5px;color:var(--ink3);margin-top:3px}
+.hint{margin-top:34px;font-size:13px;color:var(--ink3)}
+.hint b{color:var(--ink2);font-weight:500;font-family:var(--mono)}
+.cards{display:flex;gap:20px;justify-content:center;margin-top:34px}
+.card{flex:1;max-width:330px;text-align:left;background:var(--panel);border:1px solid var(--border);
+      border-radius:14px;padding:20px 22px}
+.card h3{margin:0 0 8px;font-size:18px}
+.card p{margin:0;font-size:14.5px;line-height:1.6;color:var(--ink2)}
+.card .mono{font-family:var(--mono);font-size:13px;color:var(--ink3)}
+
+/* ============ Print ============ */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  body{visibility:visible!important}
+  #stage{position:static;transform:none!important;width:1280px;height:auto}
+  .slide{display:grid!important;position:relative;inset:auto;width:1280px;height:720px;
+         break-after:page;page-break-after:always}
+  .notes,#pageno{display:none!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<!-- shared defs: arrowheads in six colours -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<marker id="ar-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8981"/></marker>
+<marker id="ar-bus" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3987e5"/></marker>
+<marker id="ar-attn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d95926"/></marker>
+<marker id="ar-mlp" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#199e70"/></marker>
+<marker id="ar-kv" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9085e9"/></marker>
+<marker id="ar-rand" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e66767"/></marker>
+<marker id="ar-now" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c98500"/></marker>
+</defs>
+</svg>
+
+<div id="stage">
+
+<!-- ═══════════ 1 cover ═══════════ -->
+<section class="slide hero" data-station="">
+  <div class="heroBox">
+    <div class="kicker">MicroGPT</div>
+    <h1>How 4,192 Numbers Learn to Name People</h1>
+    <div class="sub">A 200-line, dependency-free GPT in pure Python — taken apart until only addition and multiplication are left</div>
+    <svg viewBox="0 0 900 136" style="width:900px;height:136px;margin-top:26px">
+      <text x="0" y="34" class="td" style="font-size:11px">BOS = Beginning of Sequence</text>
+      <text x="40" y="66" class="tn mid" style="font-size:15px">BOS</text>
+      <path d="M62 62 H92" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="96" y="42" width="118" height="40" class="box"/><text x="155" y="67" class="ts mid">Tokenizer</text>
+      <path d="M214 62 H240" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="244" y="42" width="126" height="40" class="tint-bus"/><text x="307" y="67" class="ts mid">Embedding</text>
+      <path d="M370 62 H396" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="400" y="30" width="150" height="64" class="box"/>
+      <text x="475" y="55" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+      <text x="475" y="79" class="ts mid" style="fill:var(--c-mlp)">＋ MLP</text>
+      <path d="M550 62 H576" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="580" y="42" width="110" height="40" class="tint-bus"/><text x="635" y="67" class="ts mid">lm_head</text>
+      <path d="M690 62 H716" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="61" class="ts mid">Sampling</text><text x="763" y="77" class="td mid" style="fill:var(--c-rand)">randomness</text>
+      <path d="M806 62 H836" class="wire-rand" marker-end="url(#ar-rand)"/>
+      <text x="848" y="68" class="th" style="font-family:var(--mono);fill:var(--c-now)">e</text>
+      <path d="M763 90 V106 H40 V80" class="wire dash" marker-end="url(#ar-grey)"/>
+      <text x="450" y="128" class="td mid">The letter drawn becomes the input of the next round (autoregression)</text>
+    </svg>
+    <div class="stats">
+      <div class="stat"><div class="v">4,192</div><div class="k">parameters in total</div></div>
+      <div class="stat"><div class="v">200</div><div class="k">lines of pure Python</div></div>
+      <div class="stat"><div class="v">1</div><div class="k">transformer layer</div></div>
+      <div class="stat"><div class="v">16</div><div class="k">dimensions per vector</div></div>
+      <div class="stat"><div class="v">27</div><div class="k">vocab (a–z + BOS)</div></div>
+    </div>
+    <div class="hint"><b>←</b> <b>→</b> to turn pages · <b>n</b> speaker notes · <b>f</b> fullscreen · running example throughout: writing <b>emma</b></div>
+  </div>
+  <aside class="notes"><span class="ntag">開場</span>
+    <ul>
+      <li>四千個數字、一個 200 行零依賴的 Python 檔案，學會了「英文名字長什麼樣子」。</li>
+      <li>等一下把它拆到只剩加法和乘法——每個數字都是真的、可以手算。</li>
+      <li>資料集：names.txt，32,033 個英文名字；全場以 microgpt_en.py 為準。</li>
+    </ul>
+  </aside>
+</section>
+
+<!-- ═══════════ opening · what the task is ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Opening</span>What this program actually does</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:57fr 43fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <text x="0" y="40" class="th">From start to finish the model does one thing</text>
+
+        <rect x="20" y="140" width="180" height="64" class="tint-now"/>
+        <text x="110" y="170" class="ts mid">letters seen so far</text>
+        <text x="110" y="194" class="tn mid" style="fill:var(--c-now)">e  m</text>
+        <path d="M204 172 H250" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="254" y="140" width="140" height="64" class="tint-bus"/>
+        <text x="324" y="180" class="th mid">the model</text>
+        <path d="M398 172 H444" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="452" y="104" class="td">next-letter probabilities</text>
+        <text x="452" y="122" class="td">27 of them</text>
+
+        <text x="452" y="150" class="tn">a</text><rect x="474" y="138" width="130" height="17" rx="3" class="bar-bus"/><text x="612" y="150" class="td">41%</text>
+        <text x="452" y="180" class="tn">m</text><rect x="474" y="168" width="70" height="17" rx="3" class="bar-bus"/><text x="552" y="180" class="td">22%</text>
+        <text x="452" y="210" class="tn">e</text><rect x="474" y="198" width="30" height="17" rx="3" class="bar-bus"/><text x="512" y="210" class="td">9%</text>
+        <text x="452" y="234" class="td">⋮</text>
+        <text x="452" y="260" class="tn">z</text><rect x="474" y="248" width="3" height="17" rx="1.5" class="bar-grey"/><text x="485" y="260" class="td">0.1%</text>
+
+        <rect x="0" y="330" width="640" height="200" rx="10" fill="rgba(230,103,103,.08)" stroke="var(--c-rand)" stroke-width="1.4"/>
+        <text x="22" y="368" class="tb">It does not decide an answer; it only supplies 27 proportions.</text>
+        <text x="22" y="396" class="ts">One line outside the model draws the letter:</text>
+        <text x="330" y="396" class="tn" style="fill:var(--c-rand)">random.choices</text>
+        <text x="22" y="424" class="td"><tspan style="fill:var(--ink2)">Training and inference both call the same gpt()</tspan>: most of this talk is one pass with the stored numbers;</text>
+        <text x="22" y="446" class="td">learning is a loop <tspan style="fill:var(--ink2)">outside</tspan> that function that goes back and adjusts those numbers.</text>
+        <text x="22" y="480" class="td">What the data looks like, and how it turns into numbers — <tspan style="fill:var(--ink2)">see Fig 1</tspan>.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · the only signature in the talk</span><span>in → out</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="108:now,144:bus">
+108	def gpt(token_id, pos_id, keys, values):
+	# ★ in: this letter, and its position
+⋯
+143	    logits = linear(x, state_dict['lm_head'])
+144	    return logits
+	# ★ out: 27 raw scores, not yet probabilities
+</pre>
+        </div>
+        <div class="codesep"><b>The task, whole talk</b>: text so far in → 27 probabilities for the next letter out (softmax(logits) turns scores into probabilities)</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">開場・釘死任務</span>
+    <ul>
+      <li><b>輸入是「前面已經有的字母」，輸出是「下一個字母的 27 個機率」——整場只有這一件事。</b>沒有「理解語意」、沒有「知道什麼是名字」，那些都是猜下一個字母的副產品。</li>
+      <li>輸出是<b>一個分佈，不是一個字</b>。先講清楚，後面 softmax、temperature、「同一個模型每次生出不同名字」才有共同地基。</li>
+      <li><b>訓練和推論都會呼叫同一個 gpt()</b>：等一下十幾張圖講的是拿現成的 4,192 個數字做 forward；訓練則在 gpt() 外面計算 loss、反傳並更新參數（圖 9.5、圖 10 展開）。</li>
+      <li>「沒有人教它母音子音、沒教它名字幾個字母」——這句話<b>留到圖 10 再兌現</b>。</li>
+      <li>訓練資料長什麼樣、字元表怎麼編號，<b>刻意留到圖 1</b>——開場只釘死「這個函數在做什麼」。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 2 fig 0 · how small the model is ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Fig 0</span>How small this model is</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <defs><linearGradient id="fadeG" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4a4947"/><stop offset="1" stop-color="#4a4947" stop-opacity="0"/>
+        </linearGradient></defs>
+        <text x="0" y="24" class="th">Everything the model knows = 5 groups of parameters</text>
+        <text x="0" y="46" class="td">Each matrix is a table of numbers. Rows × columns = cells; all of them add up to the 4,192 below.</text>
+
+        <text x="0" y="76" class="t" style="font-family:var(--mono)">wte</text>
+        <text x="0" y="96" class="td">27 × 16 · letter → vector (lookup)</text>
+        <rect x="255" y="66" width="70" height="26" rx="3.5" class="bar-bus"/>
+        <text x="335" y="85" class="tn">432</text>
+
+        <text x="0" y="134" class="t" style="font-family:var(--mono)">wpe</text>
+        <text x="0" y="154" class="td">16 × 16 · one vector per position, 0–15</text>
+        <rect x="255" y="124" width="41" height="26" rx="3.5" class="bar-bus"/>
+        <text x="306" y="143" class="tn">256</text>
+
+        <text x="0" y="192" class="t" style="font-family:var(--mono)">lm_head</text>
+        <text x="0" y="212" class="td">27 × 16 · vector → letter (lookup in reverse)</text>
+        <rect x="255" y="182" width="70" height="26" rx="3.5" class="bar-bus"/>
+        <text x="335" y="201" class="tn">432</text>
+
+        <text x="0" y="250" class="t" style="font-family:var(--mono)">attention</text>
+        <text x="0" y="270" class="td">Wq Wk Wv Wo · 16 × 16 each</text>
+        <rect x="255" y="240" width="165" height="26" rx="3.5" class="bar"/>
+        <text x="430" y="259" class="tn">1,024</text>
+
+        <text x="0" y="308" class="t" style="font-family:var(--mono)">MLP</text>
+        <text x="0" y="328" class="td">16 → 64 → 16</text>
+        <rect x="255" y="298" width="330" height="26" rx="3.5" class="bar-mlp"/>
+        <text x="595" y="317" class="tn">2,048</text>
+
+        <line x1="0" y1="360" x2="640" y2="360" class="axis"/>
+        <text x="0" y="398" class="t">Total</text>
+        <text x="70" y="402" style="fill:var(--ink);font:700 36px var(--mono)">4,192</text>
+        <text x="185" y="398" class="ts">numbers — every one countable by hand</text>
+        <text x="0" y="426" class="td">432＋256＋432＋1,024＋2,048</text>
+        <text x="0" y="442" class="td">And only <tspan style="fill:var(--ink2)">one layer</tspan> — that layer already contains all of attention, MLP and the residual;</text>
+        <text x="0" y="460" class="td">more layers are the same thing done again.</text>
+
+        <text x="0" y="482" class="td">For comparison</text>
+        <text x="0" y="506" class="t">GPT-2 small</text>
+        <text x="122" y="506" class="tn">124,000,000</text>
+        <rect x="255" y="488" width="385" height="26" rx="3.5" fill="url(#fadeG)"/>
+        <text x="420" y="507" class="ts" style="fill:var(--ink)">× 30,000 · not to scale</text>
+        <text x="0" y="546" class="t">LLMs today</text>
+        <text x="122" y="546" class="tn">100,000,000,000+</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · parameter init</span><span>num params: 4192</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="81:bus,83:attn,87:mlp">
+75	n_layer = 1     # depth of the transformer …
+76	n_embd = 16     # width of the network …
+77	block_size = 16 # maximum context length …
+78	n_head = 4      # number of attention heads
+79	head_dim = n_embd // n_head # derived dimension …
+	# ★ 5 hyper-parameters: 1 layer, 16 wide, 4 heads
+80	matrix = lambda nout, nin, std=0.08:
+	↪ [[Value(random.gauss(0, std)) for _ in range(nin)]
+	↪  for _ in range(nout)]
+	# ★ matrix: one table; Value = number + notepad
+81	state_dict = {'wte': matrix(vocab_size, n_embd),
+	↪ 'wpe': matrix(block_size, n_embd),
+	↪ 'lm_head': matrix(vocab_size, n_embd)}
+	# ★ state_dict: where all knowledge is kept
+82	for i in range(n_layer):
+83	    state_dict[f'layer{i}.attn_wq'] =
+	↪         matrix(n_embd, n_embd)
+⋯
+87	    state_dict[f'layer{i}.mlp_fc1'] =
+	↪         matrix(4 * n_embd, n_embd)
+⋯
+89	params = [p for mat in state_dict.values()
+	↪ for row in mat for p in row] # flatten …
+	# ★ params: all 4,192 numbers in one flat list
+90	print(f"num params: {len(params)}")
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 0・尺度感</span>
+    <ul>
+      <li>四千個數字＋一個 200 行、零依賴的 Python 檔案，學會了「英文名字長什麼樣子」。每個數字都是真的、<b>可以手算</b>。</li>
+      <li><b>只有一層。</b>完整的 Transformer 不需要「很多層」才成立——一層就包含 attention、MLP、殘差這三件事的全部；多層只是同一件事再做一次。</li>
+      <li>對照：GPT-2 small = 124,000,000（3 萬倍）；現代大模型 ≈ 100,000,000,000+。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 0 · two kinds of number ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 0</span>Only two kinds of number in the code</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <rect x="0" y="0" width="550" height="392" rx="10" class="tint-bus"/>
+        <rect x="590" y="0" width="550" height="392" rx="10" class="tint-now"/>
+
+        <text x="30" y="38" class="tb" style="fill:var(--c-bus)">① Learned (parameters)</text>
+        <text x="620" y="38" class="tb" style="fill:var(--c-now)">② Computed (intermediate values)</text>
+
+        <text x="30" y="76" class="tn">wte  wpe  lm_head</text>
+        <text x="30" y="102" class="tn">Wq  Wk  Wv  Wo</text>
+        <text x="30" y="128" class="tn">fc1  fc2</text>
+        <text x="620" y="76" class="tn">x</text>
+        <text x="620" y="102" class="tn">q  k  v</text>
+        <text x="620" y="128" class="tn">logits  probs</text>
+
+        <line x1="30" y1="152" x2="520" y2="152" class="axis"/>
+        <line x1="620" y1="152" x2="1110" y2="152" class="axis"/>
+
+        <text x="30" y="184" class="ts">4,192 of them — the table on the previous page</text>
+        <text x="30" y="212" class="ts">unchanged however many times it runs</text>
+        <text x="30" y="240" class="ts">they live in state_dict</text>
+        <text x="30" y="268" class="ts">only training ever changes them</text>
+
+        <text x="620" y="184" class="ts">computed from scratch every round</text>
+        <text x="620" y="212" class="ts">recomputed for every name</text>
+        <text x="620" y="240" class="ts">usually discarded once used; k and v are no exception</text>
+        <text x="620" y="268" class="ts" style="fill:var(--c-kv)">the cache only keeps them alive across rounds</text>
+
+        <text x="30" y="326" class="tb">what the model knows</text>
+        <text x="30" y="352" class="td">= its knowledge</text>
+        <text x="620" y="326" class="tb">what the model is working on</text>
+        <text x="620" y="352" class="td">= its train of thought</text>
+
+        <rect x="0" y="424" width="1140" height="60" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)"/>
+        <text x="30" y="461" class="t">Any new variable comes down to one question: <tspan class="tb">left side or right side?</tspan></text>
+        <text x="30" y="518" class="td">Anything starting with state_dict[...] is on the left; nearly everything else is on the right. Training tunes the left; inference uses the left to compute the right.</text>
+        <text x="30" y="540" class="td">The exception is <tspan style="fill:var(--c-kv)">keys / values</tspan>: they belong on the right, yet are kept across rounds (the KV cache, Fig 9).</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 0・新手最常糊掉的一組</span>
+    <ul>
+      <li>一句話：<b>左邊是模型會的東西，右邊是它現在正在想的東西。</b>訓練＝把左邊那 4,192 個調好；推論＝拿左邊去算出右邊。</li>
+      <li>之後每看到新變數就問：<b>左邊還是右邊？</b>state_dict 開頭的是左邊，其餘幾乎都是右邊。</li>
+      <li>先埋伏筆：keys／values 仍是算出來的中間值，只因 cache 延長生命週期而活過一輪（圖 9 收）。</li>
+      <li>尾鉤：每次呼叫的主線狀態，都沿著同一個 16 維 x 前進——下一頁就是它。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 1 · the protagonist ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 1</span>Every call moves along one 16-dimensional x</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <text x="0" y="36" class="ts">In form it is a Python list holding 16 decimals:</text>
+        <rect x="0" y="58" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="235" y="92" class="mid" style="font:16.5px var(--mono);fill:var(--ink)">x = [ 0.13, -0.82, 0.55, … , -0.07 ]</text>
+        <path d="M70 126 H400" stroke="var(--baseline)" stroke-width="1.5" fill="none"/>
+        <path d="M235 126 V138" stroke="var(--baseline)" stroke-width="1.5" fill="none"/>
+        <text x="235" y="162" class="ts mid">These 16 numbers condense what is understood</text>
+        <text x="235" y="184" class="ts mid">about this letter and every letter before it</text>
+
+        <rect x="0" y="330" width="470" height="130" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="330" width="4" height="130" class="f-bus"/>
+        <text x="24" y="364" class="t" style="font-weight:600">After three additions, before the exit (lm_head):</text>
+        <text x="24" y="394" class="ts">the meaning at this moment and the prediction of</text>
+        <text x="24" y="418" class="ts">the next letter sit in the same 16 numbers</text>
+        <text x="24" y="446" class="td">— Fig 7 shows the two are one and the same</text>
+        <text x="0" y="524" class="ts" style="fill:var(--c-now)">The verb at every step is ＋ — three additions in all</text>
+
+        <text x="530" y="36" class="ts">The whole program keeps adding to one x (writing emma, now at step 3):</text>
+        <rect x="530" y="58" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="91" class="td">born · wte lookup</text>
+        <text x="780" y="91" class="t mid" style="font-weight:600">“stands for the letter m”</text>
+        <text x="988" y="91" class="td end">lookup</text>
+        <path d="M765 112 V146" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="781" y="135" class="ts" style="fill:var(--c-now)">＋ wpe</text>
+        <rect x="530" y="150" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="183" class="td">position known</text>
+        <text x="780" y="183" class="t mid" style="font-weight:600">“the m at position 3”</text>
+        <text x="988" y="183" class="td end">lookup</text>
+        <path d="M765 204 V238" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="781" y="227" class="ts" style="fill:var(--c-now)">＋ what the earlier text adds</text>
+        <rect x="530" y="242" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="275" class="td">earlier text mixed in</text>
+        <text x="780" y="275" class="t mid" style="font-weight:600">“preceded by e, m”</text>
+        <text x="988" y="275" class="td end">attention</text>
+        <path d="M765 296 V330" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="781" y="319" class="ts" style="fill:var(--c-now)">＋ what refining adds</text>
+        <rect x="530" y="334" width="470" height="54" class="tint-bus" rx="10"/>
+        <text x="548" y="367" class="td">pass complete</text>
+        <text x="780" y="367" class="t mid" style="font-weight:600">“a is likely to come next”</text>
+        <text x="988" y="367" class="td end">MLP</text>
+        <text x="765" y="440" class="ts mid">Every figure that follows answers the same question:</text>
+        <text x="765" y="466" class="t mid" style="font-weight:600">“What did this step add to x?”</text>
+        <text x="765" y="522" class="td mid">From start to finish, only three operations ever touch this x</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 1・主角</span>
+    <ul>
+      <li>別被「16 維向量」四個字嚇到：<b>它就是一個長度 16 的 list</b>，沒有更多了。</li>
+      <li>整個模型跑一輪＝這個 list 被加料<b>三次</b>（＋位置、＋前文的料、＋加工的料）。<b>這頁不解釋那兩份料哪來的</b>——它們是圖 4、圖 5 的主題，這裡只先讓聽眾看到「動詞永遠是加」。</li>
+      <li>加完三次、進 lm_head 之前：「此刻的意義」和「對下一個字母的預測」同時濃縮在這 16 個數字裡——圖 7 揭曉這兩件事是<b>同一件事</b>。</li>
+      <li>尾鉤：這個 x 從頭到尾只會被三種運算對待。下一頁開始，一種一頁。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 2 · addition ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 2</span>① Addition: two vectors, two ideas stacked</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="td">The model uses only three operations. The next three pages take one each, on the same example.</text>
+        <text x="20" y="78" class="t">“stands for the letter m”</text>
+        <text x="230" y="78" style="font:15px var(--mono);fill:var(--ink2)">[ 0.3, -0.1,  0.7, … ]</text>
+        <text x="470" y="78" class="td">← a row of wte</text>
+        <text x="0" y="126" class="t" style="fill:var(--c-now);font-weight:650">＋</text>
+        <text x="20" y="126" class="t">“position 3”</text>
+        <text x="230" y="126" style="font:15px var(--mono);fill:var(--ink2)">[ 0.1,  0.4, -0.2, … ]</text>
+        <text x="470" y="126" class="td">← a row of wpe</text>
+        <line x1="0" y1="146" x2="590" y2="146" class="axis"/>
+        <rect x="0" y="158" width="590" height="46" class="tint-bus" rx="8"/>
+        <text x="20" y="187" class="t" style="font-weight:600">“the m at position 3”</text>
+        <text x="230" y="187" style="font:15px var(--mono);fill:var(--ink)">[ 0.4,  0.3,  0.5, … ]</text>
+        <text x="470" y="187" class="td">two notes stacked</text>
+
+        <text x="0" y="258" class="ts">A second use of addition: laying a correction on top (what attention / MLP produced)</text>
+        <rect x="40" y="282" width="90" height="40" class="tint-bus" rx="8"/>
+        <text x="85" y="307" class="tn mid" style="fill:var(--ink)">x</text>
+        <text x="152" y="307" class="t mid" style="fill:var(--c-now);font-weight:650">＋</text>
+        <rect x="176" y="282" width="120" height="40" class="box" rx="8"/>
+        <text x="236" y="307" class="ts mid" style="fill:var(--ink)">correction</text>
+        <path d="M300 302 H336" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="342" y="282" width="160" height="40" class="tint-bus" rx="8"/>
+        <text x="422" y="307" class="ts mid" style="fill:var(--ink)">the updated x</text>
+
+        <rect x="0" y="366" width="590" height="104" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="366" width="4" height="104" class="f-bus"/>
+        <text x="24" y="400" style="font:600 17px var(--sans);fill:var(--ink)">new x　＝　<tspan class="f-bus">old x</tspan>　＋　correction　(the residual)</text>
+        <text x="24" y="432" class="ts">The point: <tspan style="fill:var(--ink);font-weight:600">old x always appears on the right-hand side</tspan> — never wiped, only added to</text>
+
+        <text x="303" y="536" class="td mid">Addition stacks, never transforms — a new idea like “looking for a vowel” needs multiplication</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · the three additions</span><span>zip = two lists side by side</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="111:bus,134:bus,141:bus">
+111	x = [t + p for t, p in zip(tok_emb, pos_emb)] # …
+	# ★ x, tok_emb, pos_emb: the vector plus two notes
+⋯
+134	    x = [a + b for a, b in zip(x, x_residual)]
+	# ★ left: the new x; right: x_residual, the old x, kept
+⋯
+141	    x = [a + b for a, b in zip(x, x_residual)]
+	# ★ the identical line: once after attention, once after MLP
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 2・相加</span>
+    <ul>
+      <li>相加的意義：<b>把兩份理解疊在一起</b>——字母的意義＋位置的感覺＝帶著位置的字母意義。</li>
+      <li>對寫過程式的人：殘差就是 <b>x += 修正</b>，不是 x = 修正。全場沒有任何一步會「洗掉」x。</li>
+      <li>句型順帶學：zip＝兩個 list 並排走；list comprehension＝對每一格做同一件事。</li>
+      <li>尾鉤：加法只會疊、不會變——想變出「我在找母音」這種新理解，得靠第二種運算：相乘。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 3a · dot product ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 3a</span>② Multiplication I: the dot product</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <text x="0" y="30" class="ts">Two vectors, 16 numbers each. This page does one thing: work out their dot product once.</text>
+
+        <rect x="0" y="56" width="700" height="44" class="tint-bus" rx="10"/>
+        <text x="24" y="84" class="t" style="font-weight:600">x</text>
+        <text x="60" y="84" style="font:16px var(--mono);fill:var(--ink)">= [  0.4,   0.3,   0.5,  … ]</text>
+        <text x="700" y="84" class="td">← the vector itself, that “m at position 3”</text>
+        <rect x="0" y="110" width="700" height="44" class="box" rx="10"/>
+        <text x="24" y="138" class="t" style="font-weight:600">w</text>
+        <text x="60" y="138" style="font:16px var(--mono);fill:var(--ink)">= [  0.2,  -0.1,   0.9,  … ]</text>
+        <text x="700" y="132" class="td">← a question, for instance “is this a vowel?”</text>
+        <text x="700" y="152" class="td">　　the numbers in it <tspan style="fill:var(--ink2)">come from training</tspan>, not from a person</text>
+
+        <text x="0" y="200" class="t" style="font-weight:600">Dot product ＝ multiply term by term, then add it all up</text>
+
+        <text x="70" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.4×0.2</text>
+        <text x="160" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="266" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.3×(−0.1)</text>
+        <text x="360" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋</text>
+        <text x="450" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink)">0.5×0.9</text>
+        <text x="556" y="248" class="mid" style="font:16px var(--mono);fill:var(--ink3)">＋ …</text>
+        <text x="70" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.08</text>
+        <text x="266" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">−0.03</text>
+        <text x="450" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.45</text>
+        <text x="556" y="276" class="mid" style="font:15px var(--mono);fill:var(--c-now)">0.73</text>
+        <text x="556" y="298" class="mid td">13 terms left</text>
+        <path d="M620 258 H700" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="708" y="234" width="150" height="46" class="tint-bus" rx="10"/>
+        <text x="783" y="265" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">1.23</text>
+        <text x="874" y="258" class="t">← one number only</text>
+        <text x="874" y="282" class="td">two 16-dim vectors in, one number out</text>
+
+        <line x1="0" y1="320" x2="1140" y2="320" class="axis"/>
+
+        <text x="0" y="358" class="t" style="font-weight:600">In Python it is this one line</text>
+        <rect x="0" y="376" width="700" height="52" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="24" y="409" style="font:16px var(--mono);fill:var(--ink)">sum(wi * xi for wi, xi in zip(w, x))</text>
+        <text x="60" y="446" class="td">multiply term by term</text>
+        <path d="M96 430 V416" class="wire" opacity=".6"/>
+        <text x="330" y="446" class="td">zip: two lists side by side, one (wi, xi) pair at a time</text>
+        <path d="M356 430 V416" class="wire" opacity=".6"/>
+        <text x="24" y="476" class="td">sum(…) ＝ add them all together</text>
+
+        <rect x="760" y="360" width="380" height="176" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="760" y="360" width="4" height="176" class="f-bus"/>
+        <text x="784" y="392" class="t" style="font-weight:600">What this number means</text>
+        <text x="784" y="420" class="ts"><tspan style="fill:var(--ink);font-weight:600">“how well x matches this question”</tspan></text>
+        <text x="784" y="446" class="ts">large positive → strong support</text>
+        <text x="784" y="468" class="ts">near 0 → weak · negative → opposite</text>
+        <text x="784" y="496" class="td">One more factor: the larger the numbers in</text>
+        <text x="784" y="516" class="td">the vectors, the larger the dot product (Fig 4a)</text>
+
+        <text x="0" y="536" class="td">One dot product yields one number, but the main line needs 16 — so it is done 16 times.</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 3a・內積</span>
+    <ul>
+      <li>很多人不是不會，只是<b>很久沒算數學了</b>。所以這一頁用真數字算完一次，不趕。</li>
+      <li>整個內積就一句話：<b>兩個 16 維向量進去、一個數字出來</b>。在模型裡，這個數字被當作相容度分數。</li>
+      <li>先埋：等一下 attention 用它判斷「目前的 q 應該向前面哪個 k 拿多少資訊」。</li>
+      <li>順手埋第二件事（<b>圖 7 會用到</b>）：內積大小同時受方向與數值尺度影響。把 w 每個數字都乘兩倍，內積也跟著變兩倍。</li>
+      <li>尾鉤：一個內積只給一個數字，但主幹上要的是 16 個數字——所以要做 16 次，那就是矩陣。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 3b · matrix ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 3b</span>② Multiplication II: a matrix is a stack</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <text x="0" y="26" class="ts">Python has no matrix type — <tspan fill="var(--ink)" font-weight="600">a matrix is a nested list (a list of lists)</tspan>, one vector per row.</text>
+
+        <rect x="0" y="44" width="560" height="222" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="20" y="76" style="font:15px var(--mono);fill:var(--ink)">w = [ [ 0.2, -0.1,  0.9, … ],</text>
+        <text x="74" y="110" style="font:15px var(--mono);fill:var(--ink)">[ 0.7,  0.3, -0.4, … ],</text>
+        <text x="88" y="144" style="font:15px var(--mono);fill:var(--ink3)">⋮</text>
+        <text x="74" y="178" style="font:15px var(--mono);fill:var(--ink)">[-0.5,  0.8,  0.1, … ] ]</text>
+        <text x="360" y="76" class="td">← row 0, 16 numbers</text>
+        <text x="360" y="110" class="td">← row 1</text>
+        <text x="360" y="178" class="td">← row 15</text>
+        <path d="M520 62 H540 V190 H520" class="wire-bus"/>
+        <text x="20" y="222" class="ts" style="fill:var(--c-bus)">Each row is itself a 16-dim vector — 16 rows in all here</text>
+        <text x="20" y="248" class="td">(how many rows is up to the matrix: fc1 has 64, lm_head 27. Note: w in Warm-up 3a was one vector; here w is a stack)</text>
+
+        <text x="600" y="66" class="t" style="font-weight:600">One dot product of x with each row</text>
+        <rect x="600" y="86" width="140" height="40" class="tint-bus" rx="8"/>
+        <text x="670" y="112" class="tn mid" style="fill:var(--ink)">x (16 numbers)</text>
+        <path d="M740 106 H772" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="790" y="152" class="ts">x · row 0</text><text x="1020" y="152" class="td">← from Warm-up 3a</text>
+        <path d="M900 147 H950" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="962" y="152" class="tn" style="fill:var(--ink)">1.23</text>
+        <text x="790" y="186" class="ts">x · row 1</text>
+        <path d="M900 181 H950" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="962" y="186" class="tn" style="fill:var(--ink)">−1.20</text>
+        <text x="790" y="216" class="ts" style="fill:var(--ink3)">　⋮</text>
+        <text x="962" y="216" class="tn" style="fill:var(--ink3)">⋮</text>
+        <text x="790" y="248" class="ts">x · row 15</text>
+        <path d="M900 243 H950" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="962" y="248" class="tn" style="fill:var(--ink)">0.34</text>
+        <rect x="770" y="266" width="330" height="62" class="tint-bus" rx="8"/>
+        <text x="935" y="290" class="ts mid" style="fill:var(--ink);font-weight:600">as many rows, as many numbers out</text>
+        <text x="935" y="314" class="td mid">16 rows here, so a 16-dim vector again</text>
+
+        <line x1="0" y1="342" x2="1140" y2="342" class="axis"/>
+
+        <text x="0" y="378" class="t" style="font-weight:600">In code: the outer loop runs the rows, the inner is the line above</text>
+        <rect x="0" y="396" width="820" height="76" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="24" y="424" style="font:15px var(--mono);fill:var(--ink)">def linear(x, w):</text>
+        <text x="24" y="452" style="font:15px var(--mono);fill:var(--ink)">    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]</text>
+        <path d="M300 458 V478" class="wire-bus"/>
+        <text x="150" y="496" class="td">dot product with one row</text>
+        <path d="M478 458 V478" class="wire-bus"/>
+        <text x="404" y="496" class="td">wo takes each row in turn</text><text x="404" y="514" class="td" style="font-size:11px">(lowercase wo ＝ one row; unrelated to the capital Wo on the right)</text>
+        <text x="24" y="528" class="td" style="font-family:var(--mono)">matrix = lambda nout, nin, …: [[… for _ in range(nin)] for _ in range(nout)]</text>
+        <text x="24" y="550" class="td">Building one is a nested list too: outer nout ＝ rows, inner nin ＝ numbers per row</text>
+
+        <rect x="860" y="396" width="280" height="120" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="860" y="396" width="4" height="120" class="f-attn"/>
+        <text x="884" y="424" class="ts" style="fill:var(--ink);font-weight:600">Used 7 times in all, always the same</text>
+        <text x="884" y="450" class="tn" style="font-size:12.5px">Wq　Wk　Wv　Wo</text>
+        <text x="1060" y="450" class="td">← attention</text>
+        <text x="884" y="472" class="tn" style="font-size:12.5px">fc1　fc2</text>
+        <text x="1060" y="472" class="td">← MLP</text>
+        <text x="884" y="494" class="tn" style="font-size:12.5px">lm_head</text>
+        <text x="1060" y="494" class="td">← exit</text>
+        <text x="884" y="514" class="td">only the numbers in the rows differ</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 3b・矩陣</span>
+    <ul>
+      <li>一句話：<b>矩陣就是一疊向量，相乘就是拿 x 跟每一列各做一次內積。</b></li>
+      <li>Python 沒有矩陣型別，就是 list 裡面裝 list——左圖那個寫法，跟右邊的數學是同一件事。</li>
+      <li>形狀怎麼看：矩陣有幾列，出來就是幾個數字。fc1 有 64 列，所以 16 個數字進去、64 個出來。</li>
+      <li>「16 維 × 矩陣能算出什麼」，取決於矩陣裡那些列是什麼——<b>而那些列是訓練學出來的</b>。</li>
+      <li>尾鉤：算出來的數字正負混雜、大小不一——誰來過濾？下一頁的第三種運算。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 4a · non-linearity ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 4a</span>③ Non-linearity — the network's if (relu)</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="28" class="ts">relu ＝ a threshold: any signal not strong enough becomes zero</text>
+        <text x="130" y="84" class="mid" style="font:16px var(--mono);fill:var(--ink)">−1.2</text>
+        <text x="250" y="84" class="mid" style="font:16px var(--mono);fill:var(--ink)">+3.4</text>
+        <text x="370" y="84" class="mid" style="font:16px var(--mono);fill:var(--ink)">−0.8</text>
+        <text x="490" y="84" class="mid" style="font:16px var(--mono);fill:var(--ink)">+0.1</text>
+        <path d="M130 96 V122" class="wire"/>
+        <path d="M250 96 V122" class="wire"/>
+        <path d="M370 96 V122" class="wire"/>
+        <path d="M490 96 V122" class="wire"/>
+        <rect x="70" y="126" width="480" height="38" class="tint-now" rx="8"/>
+        <text x="310" y="151" class="t mid" style="font-weight:650">relu</text>
+        <path d="M250 168 V196" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M490 168 V196" class="wire-now" marker-end="url(#ar-now)"/>
+        <text x="130" y="224" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
+        <text x="250" y="224" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+3.4</text>
+        <text x="370" y="224" class="mid" style="font:16px var(--mono);fill:#5c5b55">0</text>
+        <text x="490" y="224" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">+0.1</text>
+        <text x="303" y="262" class="td mid">Negatives go to zero, positives pass unchanged — no if statement, just one expression</text>
+
+        <line x1="0" y1="296" x2="606" y2="296" class="axis"/>
+
+        <text x="0" y="332" class="t" style="font-weight:600">Why this step has to be here</text>
+        <rect x="0" y="350" width="596" height="126" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="350" width="4" height="126" class="f-now"/>
+        <text x="20" y="382" class="ts">Addition stacks, multiplication changes angle — both are linear</text>
+        <text x="20" y="410" class="ts"><tspan fill="var(--ink)" font-weight="600">Non-linearity is the only place that can tell cases apart</tspan></text>
+        <text x="20" y="440" class="td">Without relu the MLP's two linear steps collapse into one — the middle layer does nothing</text>
+        <text x="20" y="462" class="td">softmax is non-linear too, but a supporting act; “only three operations” still holds</text>
+
+        <text x="303" y="520" class="td mid">That is all three: <tspan style="fill:var(--ink2)">① addition　② multiplication (dot product / matrix)　③ non-linearity (relu)</tspan></text>
+        <text x="303" y="542" class="td mid">Every step that follows falls into one of these three</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · non-linearity</span><span>relu's derivative: 0 or 1</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="50:now,139:now">
+50	def relu(self): return Value(max(0, self.data),
+	↪     (self,), (float(self.data > 0),))
+	# ★ self.data: the number itself; parens = the note
+⋯
+139	x = [xi.relu() for xi in x]   # all 16 pass the threshold
+</pre>
+<div class="codesep"><b>The note is 0 or 1</b> · detectors that stay off are never adjusted</div>
+<pre class="py">
+	# relu's _local_grads = (1,) or (0,)
+	# 0 → no gradient flows back this round (Fig 9.5)
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 4a・非線性</span>
+    <ul>
+      <li><b>relu 就像神經網路裡的門檻</b>——在 MLP 的兩次線性轉換之間加入分情況的能力；拿掉它，兩次線性轉換可以合併成一次。</li>
+      <li>相加是疊、相乘是換角度，都還是線性的——非線性是唯一能製造「分情況」的地方。另外還有 softmax（attention／抽樣見）和下一頁的 rmsnorm，它們都是配角，「只有三種運算」仍然成立。</li>
+      <li>收尾一句：<b>運算只有三種、數字只有 4,192 個</b>。之後每張圖都可以問「這一步用的是哪一種運算？」——Attention＝用這三種搬前文、MLP＝用這三種想。</li>
+      <li>尾鉤：三種運算講完了，但還有一個零參數的配角每次內積前都會上工——下一頁。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 4b · rmsnorm ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 4b</span>rmsnorm — the volume desk</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="28" class="ts">rmsnorm ＝ a volume desk: <tspan fill="var(--ink)" font-weight="600">it sets loudness, never direction</tspan></text>
+
+        <text x="60" y="88" style="font:15px var(--mono);fill:var(--ink2)">[ 3.2, -1.6,  4.8, … ]</text>
+        <text x="330" y="88" class="td">← additions and matrices make loudness drift</text>
+        <path d="M150 100 V148" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="168" y="130" class="ts">÷ RMS ＝ 4 (root mean square of the 16, illustrative)</text>
+        <text x="60" y="178" style="font:15px var(--mono);fill:var(--ink)">[ 0.8, -0.4,  1.2, … ]</text>
+        <text x="330" y="178" class="td">← same direction, standard loudness</text>
+
+        <line x1="0" y1="214" x2="606" y2="214" class="axis"/>
+
+        <text x="0" y="250" class="t" style="font-weight:600">It runs three times, always before a dot product</text>
+        <rect x="0" y="268" width="190" height="50" class="tint-bus" rx="8"/>
+        <text x="95" y="292" class="ts mid" style="fill:var(--ink)">before the main line</text>
+        <text x="95" y="310" class="td mid">L112</text>
+        <rect x="203" y="268" width="190" height="50" class="tint-bus" rx="8"/>
+        <text x="298" y="292" class="ts mid" style="fill:var(--ink)">before attention</text>
+        <text x="298" y="310" class="td mid">L117</text>
+        <rect x="406" y="268" width="190" height="50" class="tint-bus" rx="8"/>
+        <text x="501" y="292" class="ts mid" style="fill:var(--ink)">before the MLP</text>
+        <text x="501" y="310" class="td mid">L137</text>
+        <text x="0" y="350" class="td">The pattern: level the loudness first, then compare against other vectors</text>
+
+        <rect x="0" y="382" width="596" height="112" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="382" width="4" height="112" class="f-bus"/>
+        <text x="20" y="414" class="ts">Without it, loudness keeps growing and dot-product scores lose a common scale,</text>
+        <text x="20" y="440" class="ts">so similarity is misjudged and softmax lets one extreme value take nearly everything</text>
+        <text x="20" y="470" class="td"><tspan fill="var(--ink)" font-weight="600">No parameters</tspan>: not one of the 4,192 belongs to it — plumbing, not knowledge</text>
+
+        <text x="303" y="538" class="td mid">rmsnorm and softmax are supporting acts — “only three operations” still holds</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · rmsnorm</span><span>three lines, no parameters</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="104:bus,105:bus,106:bus">
+103	def rmsnorm(x):   # ★ rmsnorm: the volume desk
+104	    ms = sum(xi * xi for xi in x) / len(x)   # ms: mean loudness
+105	    scale = (ms + 1e-5) ** -0.5   # scale: back to standard
+106	    return [xi * scale for xi in x]   # loudness only
+</pre>
+<div class="codesep"><b>The three places it runs</b> · each immediately before a linear</div>
+<pre class="py" data-hl="112:bus,117:bus,137:bus">
+112	    x = rmsnorm(x)   # before the main line
+⋯
+117	    x = rmsnorm(x)   # before attention
+⋯
+137	    x = rmsnorm(x)   # before the MLP
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 4b・音控台</span>
+    <ul>
+      <li><b>rmsnorm 為什麼存在</b>：相加一直疊、相乘會放大縮小，x 的音量會漂移；音量一漂，內積沒有共同尺度、softmax 被極端值綁架。所以每次做內積前先過音控。</li>
+      <li><b>零參數＝它不是知識，是水電</b>：4,192 個數字裡沒有半個屬於它。這一點要講出來，否則聽眾會以為又多了一批要學的參數。</li>
+      <li>三個上工位置先點一下就好，圖 4c 的接線圖會再看到它們——這裡只要建立「內積前先統一音量」這個習慣。</li>
+      <li>這頁講快一點，它是配角；重點是不要讓 rmsnorm 在後面的圖裡變成沒交代過的陌生字。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ warm-up 5 · Value ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Warm-up 5</span>Value: the plumbing training needs</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:56fr 44fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <text x="0" y="22" class="td">an ordinary number</text>
+        <rect x="0" y="38" width="150" height="52" class="box"/>
+        <text x="75" y="71" class="tn mid" style="font-size:17px">0.13</text>
+
+        <text x="0" y="140" class="td">a Value</text>
+        <rect x="0" y="156" width="150" height="52" class="tint-bus"/>
+        <text x="75" y="189" class="tn mid" style="font-size:17px">0.13</text>
+        <text x="75" y="228" class="td mid">.data</text>
+        <text x="166" y="188" class="t">＋</text>
+
+        <rect x="196" y="146" width="330" height="72" rx="8" class="tint-now"/>
+        <text x="216" y="176" class="ts">a note:</text>
+        <text x="216" y="200" class="ts" style="fill:var(--c-now)">“its sources, and the derivative for each”</text>
+        <text x="360" y="242" class="td mid">_children ／ _local_grads</text>
+
+        <line x1="0" y1="286" x2="640" y2="286" class="axis"/>
+
+        <text x="0" y="330" class="tb">Forward (the answer)</text>
+        <path d="M186 324 H236" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="248" y="330" class="t">exactly like a plain decimal, <tspan class="tb">ignore it</tspan></text>
+
+        <text x="0" y="382" class="tb">Backward (training)</text>
+        <path d="M186 376 H236" class="wire-now" marker-end="url(#ar-now)"/>
+        <text x="248" y="382" class="t">following the notes backwards answers</text>
+        <text x="248" y="408" class="ts">“which way each parameter must move to lower loss”</text>
+        <text x="248" y="432" class="td">(worked out by hand at training time)</text>
+
+        <rect x="0" y="470" width="640" height="76" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)"/>
+        <text x="22" y="504" class="tb">Value is not part of the model — it is what makes training possible.</text>
+        <text x="22" y="532" class="ts">From here on it can be read as an ordinary float.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · only these lines</span><span>L30–72 · a third of the file</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="34:bus,41:now">
+30	class Value:
+⋯
+33	def __init__(self, data, children=(),
+	↪              local_grads=()):
+34	    self.data = data      # ★ the number itself
+	# forward uses .data only
+⋯
+39	def __add__(self, other):
+⋯
+41	    return Value(self.data + other.data,
+	↪                 (self, other), (1, 1))
+	# ★ add: compute the sum, note it down
+	#   “sources: these two; derivative 1 each”
+</pre>
+        </div>
+        <div class="codesep">The price of zero dependencies: the note PyTorch gives you is written out here in <b>40 lines</b>.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">預 5・讓聽眾安心忽略它</span>
+    <ul>
+      <li>這頁的目的<b>不是</b>講 autograd（那是圖 9.5），而是讓聽眾能安心<b>忽略</b>它——不講，他們會被 Value(...) 卡住一整場。</li>
+      <li>為什麼它在原始碼排這麼前面（L30–72，將近全檔三分之一）：matrix() 造出來的每個參數都是 Value，不先定義它第 80 行就跑不動。<b>行數多 ≠ 重要——模型本體只有 L108–144 那三十幾行。</b></li>
+      <li>純 Python 零依賴的代價就在這裡：PyTorch 幫你寫好的那張便條，這個檔案自己寫了 40 行。</li>
+      <li>尾鉤：這張便條怎麼一路接回去、算出每個參數該往哪動——<b>圖 9.5 會用五行乘法手算一次</b>。這裡明確說出「圖 9.5」，聽眾才願意先放下它。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ fig 0.5a · map of the file ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Fig 0.5a</span>The first 100 lines are not the Transformer</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols solo">
+    <div class="pane left">
+      <svg viewBox="0 0 1140 560">
+        <rect x="0" y="16" width="1140" height="268" rx="10" fill="rgba(255,255,255,.03)" stroke="var(--border)" stroke-dasharray="6 4"/>
+        <text x="24" y="50" class="td">Infrastructure — plumbing, all of it; not one line here is the Transformer</text>
+
+        <text x="24" y="98" class="tn" style="fill:var(--ink3)">L9–27</text>
+        <text x="150" y="98" class="t">① data ＋ tokenizer</text>
+        <text x="520" y="98" class="ts">text → integers</text>
+        <text x="880" y="98" class="td">see Fig 2</text>
+
+        <text x="24" y="144" class="tn" style="fill:var(--ink3)">L30–72</text>
+        <text x="150" y="144" class="t">② Value / autograd</text>
+        <text x="520" y="144" class="ts">numbers that carry notes</text>
+        <text x="880" y="144" class="td">see Warm-up 5</text>
+
+        <text x="24" y="190" class="tn" style="fill:var(--ink3)">L75–90</text>
+        <text x="150" y="190" class="t">③ state_dict ＋ params</text>
+        <text x="520" y="190" class="ts">4,192 pieces of knowledge</text>
+        <text x="880" y="190" class="td">see Fig 0</text>
+
+        <text x="24" y="236" class="tn" style="fill:var(--ink3)">L94–106</text>
+        <text x="150" y="236" class="t">④ three helper functions</text>
+        <text x="520" y="236" class="tn" style="font-size:13.5px">linear／softmax／rmsnorm</text>
+        <text x="880" y="236" class="td">see Warm-up 3b · 4b</text>
+
+        <rect x="0" y="308" width="1140" height="66" class="tint-bus"/>
+        <text x="24" y="348" class="tn" style="fill:var(--ink3)">L108–144</text>
+        <text x="150" y="348" class="tb">⑤ def gpt(...)</text>
+        <text x="520" y="348" class="ts">the model itself, barely thirty lines — all of this talk happens here</text>
+
+        <rect x="0" y="392" width="1140" height="58" class="box"/>
+        <text x="24" y="428" class="tn" style="fill:var(--ink3)">L150–199</text>
+        <text x="150" y="428" class="t">⑥ training loop / inference loop</text>
+        <text x="520" y="428" class="ts">loops around gpt() (see Fig 9.5, Fig 10)</text>
+
+        <text x="0" y="504" class="th">“A 200-line GPT” does not mean the model is 200 lines.</text>
+        <text x="0" y="542" class="ts">The first 100 lines are preparation; the model itself is the thirty-odd lines in the middle — that is the part to understand.</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 0.5a・檔案地圖</span>
+    <ul>
+      <li>「200 行的 GPT」容易讓人以為模型有 200 行。<b>模型本體只有 L108–144。</b>其他都是資料、autograd、初始化、迴圈。</li>
+      <li>四段基礎準備<b>都已經講過或等一下會講</b>——這頁只是把它們排成一張目錄，讓聽眾知道自己站在哪。<b>三十秒帶過就好，不要展開任何一段。</b></li>
+      <li>唯一要說出口的一句：「等一下所有的圖，都在 L108–144 那個框裡。」</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ fig 0.5b · the gpt() signature ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Fig 0.5b</span>Calling gpt(): what the four arguments are</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:60fr 40fr;--code-fs:13.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 640 560">
+        <text x="0" y="40" class="tn" style="font-size:18px;fill:var(--ink)">logits = gpt( token_id, pos_id, keys, values )</text>
+        <path d="M201 52 V72" class="wire-now"/>
+        <path d="M301 52 V72" class="wire-bus"/>
+        <path d="M379 52 V72" class="wire-kv"/>
+        <path d="M458 52 V72" class="wire-kv"/>
+        <path d="M379 72 H458" class="wire-kv"/>
+
+        <circle cx="10" cy="112" r="5" class="f-now"/>
+        <text x="30" y="118" class="tn" style="fill:var(--c-now)">token_id</text>
+        <text x="150" y="118" class="ts">the number of the one letter in hand right now</text>
+        <text x="150" y="142" class="td">0–26</text>
+
+        <circle cx="10" cy="186" r="5" class="f-bus"/>
+        <text x="30" y="192" class="tn" style="fill:var(--c-bus)">pos_id</text>
+        <text x="150" y="192" class="ts">the current position</text>
+        <text x="150" y="216" class="td">0–15</text>
+
+        <circle cx="10" cy="260" r="5" class="f-kv"/>
+        <text x="30" y="266" class="tn" style="fill:var(--c-kv)">keys, values</text>
+        <text x="150" y="266" class="ts">the k and v left by earlier letters</text>
+        <text x="150" y="290" class="td">the only intermediate values kept across rounds　(see Fig 9)</text>
+
+        <text x="0" y="330" class="ts">returns <tspan class="tn">logits</tspan> ＝ 27 scores, one per next letter</text>
+        <text x="430" y="330" class="td">(see Fig 7)</text>
+
+        <line x1="0" y1="358" x2="640" y2="358" class="axis"/>
+
+        <rect x="0" y="386" width="640" height="160" rx="10" fill="rgba(201,133,0,.08)" stroke="var(--c-now)" stroke-width="1.4"/>
+        <text x="22" y="420" class="tb" style="fill:var(--c-now)">★ The one thing to make explicit</text>
+        <text x="22" y="454" class="tb">In this implementation gpt() takes one token per call.</text>
+        <text x="22" y="484" class="ts">The e and m before it are held in keys / values.</text>
+        <text x="22" y="516" class="ts">One call ＝ one letter in, 27 scores out;</text>
+        <text x="22" y="538" class="ts">the earlier text is not in the argument list, it is in the cache.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · signature</span><span>model itself, L108–144</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="108:bus,144:bus">
+108	def gpt(token_id, pos_id, keys, values):
+	# ★ gpt: the model itself, this one function
+109	    tok_emb = state_dict['wte'][token_id]
+110	    pos_emb = state_dict['wpe'][pos_id]
+⋯
+144	    return logits
+	# 27 scores, nothing more
+⋯
+194	logits = gpt(token_id, pos_id, keys, values)
+	# ★ how the outer loop calls it
+</pre>
+        </div>
+        <div class="codesep">The two kinds of number in Warm-up 0: <b>keys / values</b> are computed values, kept across steps only by the cache.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 0.5b・把四個參數的帳先還掉</span>
+    <ul>
+      <li>不先講這頁，圖 1 一開場 gpt(token_id, pos_id, keys, values) 就會同時欠四筆帳（分別要到圖 2／圖 3／圖 9 才還）。</li>
+      <li>回收預 0：keys／values 是「算出來的」那一欄裡唯一活過一輪的東西——這就是預 0 埋的例外。</li>
+      <li>把範圍說準：<b>在這個實作的呼叫方式裡</b>，gpt() 一次接收一個 token；前文的 k、v 留在 cache 裡。這不是宣稱所有 GPT API 都只能收一個 token。</li>
+      <li>尾鉤：知道怎麼呼叫它了，下一頁看它裡面有幾站。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 3 fig 1 · overview ═══════════ -->
+<section class="slide std" data-station="1,2,3,4,5">
+  <header>
+    <h1><span class="figno">Fig 1</span>Overview — one pass returns 27 scores</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:54fr 46fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 630 560">
+        <text x="20" y="120" class="t mid" style="font:600 20px var(--mono)">em</text>
+        <path d="M40 116 H50" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="54" y="92" width="96" height="48" class="box"/>
+        <text x="102" y="121" class="ts mid" style="fill:var(--ink)">Tokenizer</text>
+        <text x="102" y="178" class="tn mid" style="font-size:12px">char → id</text>
+        <text x="102" y="196" class="tn mid" style="font-size:12px">[e]=4</text>
+        <path d="M150 116 H162" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="166" y="92" width="108" height="48" class="tint-bus"/>
+        <text x="220" y="121" class="ts mid" style="fill:var(--ink)">Embedding</text>
+        <text x="220" y="178" class="tn mid" style="font-size:12px">wte[id] + wpe[pos]</text>
+        <path d="M274 116 H286" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="290" y="70" width="118" height="92" class="box"/>
+        <text x="349" y="100" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+        <text x="349" y="122" class="ts mid">＋</text>
+        <text x="349" y="146" class="ts mid" style="fill:var(--c-mlp)">MLP</text>
+        <text x="349" y="178" class="td mid" style="font-size:12px">the “Block”</text>
+        <path d="M408 116 H420" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="424" y="92" width="96" height="48" class="tint-bus"/>
+        <text x="472" y="121" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">lm_head</text>
+        <text x="472" y="178" class="tn mid" style="font-size:12px">16 → 27 scores</text>
+        <text x="472" y="194" class="td mid" style="font-size:11px">27 ＝ candidate letters</text>
+        <path d="M520 116 H532" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="536" y="92" width="84" height="48" class="tint-rand"/>
+        <text x="578" y="121" class="ts mid" style="fill:var(--ink)">Sampling</text>
+        <text x="578" y="84" class="ts mid">weighted draw</text>
+        <text x="626" y="40" class="ts end" style="fill:var(--c-rand)">the only random choice in generation</text>
+
+        <path d="M578 140 V162" class="wire-rand" marker-end="url(#ar-rand)"/>
+        <text x="578" y="196" class="mid" style="font:600 22px var(--mono);fill:var(--c-now)">m</text>
+        <path d="M578 208 V382 H20 V150" class="wire dash" marker-end="url(#ar-grey)"/>
+        <text x="300" y="374" class="td mid">the letter drawn becomes the next round's input (autoregression)</text>
+
+        <path d="M327 166 V264" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <text x="319" y="212" class="ts end" style="fill:var(--c-kv)">appended each round</text>
+        <path d="M371 264 V168" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+        <text x="379" y="212" class="ts" style="fill:var(--c-kv)">all read back</text>
+        <rect x="279" y="268" width="140" height="62" class="tint-kv" rx="10"/>
+        <rect x="285" y="274" width="128" height="50" fill="none" stroke="var(--c-kv)" stroke-width="1.2" rx="7"/>
+        <text x="349" y="296" class="ts mid" style="fill:var(--c-kv);font-weight:600">one KV cache per layer</text>
+        <text x="349" y="316" class="ts mid">k, v of earlier letters</text>
+        <text x="349" y="350" class="td mid">state kept across rounds, not data flowing past</text>
+
+        <text x="0" y="498" class="td">Shape</text>
+        <text x="64" y="498" class="ts mid">letter</text>
+        <path d="M84 493 H94" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="100" y="478" width="50" height="30" class="box" rx="6"/>
+        <text x="125" y="498" class="tn mid">int</text>
+        <path d="M152 493 H164" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="170" y="478" width="46" height="30" class="tint-bus" rx="6"/>
+        <text x="193" y="498" class="tn mid" style="fill:var(--ink)">16</text>
+        <path d="M218 493 H230" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="234" y="478" width="46" height="30" class="tint-bus" rx="6"/>
+        <text x="257" y="498" class="tn mid" style="fill:var(--ink)">16</text>
+        <path d="M282 493 H294" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="298" y="478" width="46" height="30" class="tint-bus" rx="6"/>
+        <text x="321" y="498" class="tn mid" style="fill:var(--ink)">16</text>
+        <path d="M346 493 H358" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="362" y="478" width="46" height="30" class="box" rx="6"/>
+        <text x="385" y="498" class="tn mid">27</text>
+        <text x="416" y="480" class="td mid" style="fill:var(--c-rand)">draw</text>
+        <path d="M410 493 H422" class="wire-rand" marker-end="url(#ar-rand)"/>
+        <text x="428" y="498" class="ts">1 letter</text>
+        <path d="M170 522 H344" stroke="var(--c-bus)" stroke-width="1.5" fill="none"/>
+        <text x="257" y="543" class="ts mid" style="fill:var(--c-bus)">16 dimensions the whole way</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · inference loop</span><span>the whole pipeline in 11 lines</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="194:bus,195-196:rand">
+189	for sample_idx in range(20):   # ★ sample_idx: which name
+190	    keys, values = [[] for _ in range(n_layer)],
+	↪         [[] for _ in range(n_layer)]
+	# ★ keys, values: the KV cache itself — append only (Fig 9)
+191	    token_id = BOS   # ★ token_id: the letter in hand
+192	    sample = []   # ★ sample: letters produced so far
+193	    for pos_id in range(block_size):
+194	        logits = gpt(token_id, pos_id, keys, values)
+	# ★ gpt: the whole model in one function; logits: 27 scores
+195	        probs = softmax([l / temperature for l in logits])
+	# ★ probs: 27 probabilities; temperature in Fig 8
+196	        token_id = random.choices(range(vocab_size),
+	↪             weights=[p.data for p in probs])[0]
+197	        if token_id == BOS:
+198	            break
+199	        sample.append(uchars[token_id])
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 1・全景地圖</span>
+    <ul>
+      <li>回收預 1：預 1 看的是 x 的<b>內在履歷</b>，這一張是<b>工廠的外觀</b>——五站流水線。</li>
+      <li>中間<b>全程 16 維不變</b>：不是「越算越大」，而是同一個 16 維向量被反覆修改。</li>
+      <li><b>①④的轉換方向相對</b>：wte 是 id→向量，lm_head 是向量→分數；它們是兩組獨立參數，不共享權重。</li>
+      <li><b>⑤是這段生成流程唯一的隨機選擇</b>，前面的 forward 都是確定性的計算。</li>
+      <li>雙線框的 KV cache 是<b>跨輪留下來的中間狀態</b>（紫色），而且每一層各有一份。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 4 fig 2 · tokenizer ═══════════ -->
+<section class="slide std" data-station="1">
+  <header>
+    <h1><span class="figno">Fig 2</span>Tokenizer — just numbering characters</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="ts">Every character occurring in the training data, sorted and numbered:</text>
+        <rect x="0" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="23" y="65" class="tn mid" style="fill:var(--ink)">a</text>
+        <text x="23" y="81" class="td mid">0</text>
+        <rect x="54" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="77" y="65" class="tn mid" style="fill:var(--ink)">b</text>
+        <text x="77" y="81" class="td mid">1</text>
+        <rect x="108" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="131" y="65" class="tn mid" style="fill:var(--ink)">c</text>
+        <text x="131" y="81" class="td mid">2</text>
+        <rect x="162" y="46" width="46" height="42" class="tint-now" rx="6"/>
+        <text x="185" y="65" class="tn mid" style="fill:var(--ink)">e</text>
+        <text x="185" y="81" class="td mid" style="fill:var(--c-now)">4</text>
+        <text x="232" y="72" class="ts">⋯</text>
+        <rect x="262" y="46" width="46" height="42" class="box" rx="6"/>
+        <text x="285" y="65" class="tn mid" style="fill:var(--ink)">z</text>
+        <text x="285" y="81" class="td mid">25</text>
+        <text x="322" y="72" class="ts">＋</text>
+        <rect x="348" y="46" width="66" height="42" class="box" rx="6"/>
+        <text x="381" y="65" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <text x="381" y="81" class="td mid">26</text>
+        <text x="436" y="56" class="ts">→ vocab = 27</text>
+        <text x="436" y="76" class="td">26 letters + 1 special</text>
+        <text x="0" y="112" class="td"><tspan style="fill:var(--ink2)">BOS</tspan> = Beginning of Sequence — literally “start”, but here it works as a <tspan style="fill:var(--ink2)">separator</tspan></text>
+
+        <text x="0" y="150" style="font:600 19px var(--mono);fill:var(--ink)">emma</text>
+        <path d="M76 144 H100" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="112" y="150" style="font:19px var(--mono);fill:var(--ink2)">[ 4, 12, 12, 0 ]</text>
+        <text x="0" y="180" class="td">One letter, one token — no BPE, no subwords</text>
+
+        <text x="0" y="232" class="ts">A marker at both ends — <tspan style="fill:var(--ink)">deliberately the same symbol</tspan> (one separator, used twice):</text>
+        <rect x="0" y="258" width="76" height="58" class="tint-now" rx="8"/>
+        <text x="38" y="283" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <text x="38" y="303" class="td mid" style="fill:var(--c-now)">26</text>
+        <rect x="88" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="126" y="283" class="tn mid" style="fill:var(--ink)">e</text>
+        <text x="126" y="303" class="td mid">4</text>
+        <rect x="176" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="214" y="283" class="tn mid" style="fill:var(--ink)">m</text>
+        <text x="214" y="303" class="td mid">12</text>
+        <rect x="264" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="302" y="283" class="tn mid" style="fill:var(--ink)">m</text>
+        <text x="302" y="303" class="td mid">12</text>
+        <rect x="352" y="258" width="76" height="58" class="box" rx="8"/>
+        <text x="390" y="283" class="tn mid" style="fill:var(--ink)">a</text>
+        <text x="390" y="303" class="td mid">0</text>
+        <rect x="440" y="258" width="76" height="58" class="tint-now" rx="8"/>
+        <text x="478" y="283" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <text x="478" y="303" class="td mid" style="fill:var(--c-now)">26</text>
+        <text x="38" y="340" class="ts mid" style="fill:var(--c-now)">▲</text>
+        <text x="38" y="362" class="ts mid">“it starts”</text>
+        <text x="478" y="340" class="ts mid" style="fill:var(--c-now)">▲</text>
+        <text x="478" y="362" class="ts mid">“it ends”</text>
+
+        <rect x="0" y="420" width="580" height="86" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="420" width="4" height="86" class="f-rand"/>
+        <text x="26" y="450" class="t" style="font-weight:600">“How does the model know when to stop?”</text>
+        <text x="26" y="478" class="ts">Stopping is a token it has to learn to predict — drawing BOS ends generation.</text>
+        <text x="26" y="500" class="td">So BOS stands at both the front and the back — the very same number 26.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · tokenizer</span><span>one line: sorted(set(…))</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="25:now">
+24	uchars = sorted(set(''.join(docs))) # unique characters …
+	# ★ uchars: sorted character table; docs: all 32,033 names
+25	BOS = len(uchars) # token id for a special Beginning …
+	# ★ BOS: start-and-end symbol = 26 (hence vocab_size = 27)
+26	vocab_size = len(uchars) + 1 # total number of unique …
+</pre>
+<div class="codesep"><b>Training</b> · BOS wraps both ends</div>
+<pre class="py">
+157	tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]
+	# ★ tokens: one name as numbers [26, 4, 12, 12, 0, 26]
+</pre>
+<div class="codesep"><b>Generating</b> · drawing BOS ends it</div>
+<pre class="py" data-hl="197-198:rand">
+196	token_id = random.choices(range(vocab_size),
+	↪     weights=[p.data for p in probs])[0]
+197	if token_id == BOS:
+198	    break
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 2・Tokenizer</span>
+    <ul>
+      <li>一個字母一個 token，沒有 BPE、沒有 subword——就是 <b>sorted(set(...)) 一行</b>。</li>
+      <li>BOS 同時當開頭和結尾；生成時抽到它就停手。</li>
+      <li><b>「模型怎麼知道要停？」的答案：停止也是一個它要學會預測的 token。</b></li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 5 fig 3 · embedding ═══════════ -->
+<section class="slide std" data-station="2">
+  <header>
+    <h1><span class="figno">Fig 3</span>Embedding — from symbol into meaning</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="160" y="28" class="t mid">token id = 4 (“e”)</text>
+        <text x="446" y="28" class="t mid">position pos = 1</text>
+        <rect x="60" y="44" width="200" height="120" class="tint-bus" rx="10"/>
+        <line x1="60" y1="68" x2="260" y2="68" stroke="rgba(57,135,229,.35)"/>
+        <line x1="60" y1="92" x2="260" y2="92" stroke="rgba(57,135,229,.35)"/>
+        <line x1="60" y1="140" x2="260" y2="140" stroke="rgba(57,135,229,.35)"/>
+        <text x="160" y="61" class="td mid">wte (<tspan style="fill:var(--ink2)">27 rows</tspan> × 16 numbers)</text>
+        <rect x="63" y="95" width="194" height="21" class="tint-now" rx="4"/>
+        <text x="160" y="110" class="td mid" style="fill:var(--ink)">row 4 ＝ the vector for “e”</text>
+        <text x="160" y="133" class="td mid">⋮</text>
+        <rect x="346" y="44" width="200" height="120" class="tint-bus" rx="10"/>
+        <line x1="346" y1="68" x2="546" y2="68" stroke="rgba(57,135,229,.35)"/>
+        <line x1="346" y1="92" x2="546" y2="92" stroke="rgba(57,135,229,.35)"/>
+        <line x1="346" y1="140" x2="546" y2="140" stroke="rgba(57,135,229,.35)"/>
+        <text x="446" y="61" class="td mid">wpe (<tspan style="fill:var(--ink2)">16 rows</tspan> × 16 numbers)</text>
+        <rect x="349" y="71" width="194" height="21" class="tint-now" rx="4"/>
+        <text x="446" y="86" class="td mid" style="fill:var(--ink)">row 1 ＝ vector for position 1</text>
+        <text x="446" y="133" class="td mid">⋮</text>
+        <text x="160" y="188" class="tn mid">[ 16 numbers ]</text>
+        <text x="446" y="188" class="tn mid">[ 16 numbers ]</text>
+        <path d="M160 196 V226 H281" class="wire-bus"/>
+        <path d="M446 196 V226 H325" class="wire-bus"/>
+        <circle cx="303" cy="226" r="17" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
+        <text x="303" y="233" class="mid" style="font-size:19px;fill:var(--c-bus)">＋</text>
+        <text x="336" y="226" class="ts">add</text><text x="336" y="244" class="td">two meanings stacked</text>
+        <path d="M303 243 V272" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="243" y="276" width="120" height="38" class="box"/>
+        <text x="303" y="300" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <text x="376" y="294" class="td">← volume desk: loudness pulled</text><text x="376" y="310" class="td">　　back to standard, direction kept</text>
+        <path d="M303 314 V344" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="153" y="348" width="300" height="46" class="tint-bus"/>
+        <text x="303" y="371" class="t mid">onto the main line (16 dims)</text>
+        <text x="303" y="388" class="td mid" style="font-family:var(--mono)">residual stream</text>
+        <text x="303" y="418" class="td mid">from here on, every step only adds to this line</text>
+
+        <rect x="0" y="444" width="600" height="116" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="444" width="4" height="116" class="f-bus"/>
+        <text x="26" y="480" class="t" style="font-weight:600">This is where a symbol turns into meaning</text>
+        <text x="26" y="506" class="ts">wpe is the only source of position — without it, emma and amme are identical.</text>
+        <text x="26" y="532" class="td">Adding them does not blur them: 16 numbers are room enough to point the two meanings</text>
+        <text x="26" y="550" class="td">in different directions, so each later matrix can still ask for the one it needs.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · first stop in gpt()</span><span>two lookups ＋ one addition</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="109-111:bus">
+108	def gpt(token_id, pos_id, keys, values):
+109	    tok_emb = state_dict['wte'][token_id] # token embedding
+110	    pos_emb = state_dict['wpe'][pos_id] # position embedding
+	# the two notes from earlier — here is where they come from
+111	    x = [t + p for t, p in zip(tok_emb, pos_emb)] # joint …
+	# addition, on stage for real
+112	    x = rmsnorm(x) # note: not redundant due to backward …
+	# the volume desk (rmsnorm) starts work
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 3・Embedding</span>
+    <ul>
+      <li>這是「符號」變成「意義」的轉折點（109–112）——也是<b>預 2「相加」第一次正式上場</b>（L111 那個「＋」）。</li>
+      <li>rmsnorm（預 4b 的音控台）全場上工三次：這裡、attention 作答前、MLP 作答前——永遠在「作答前」。旁路帶的是沒過音控的 x，所以這裡再過一次不多餘。</li>
+      <li>加上 wpe 是模型唯一知道「我在第幾個字母」的管道——拿掉它，<b>emma 和 amme 對模型完全相同</b>。</li>
+      <li>wpe 不是公式，<b>就是普通參數</b>：跟 wte 一樣進 state_dict、一樣被攤平進 params、訓練迴圈一視同仁地更新。「第 0 格」「第 3 格」的意思是模型自己從資料裡學出來的。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 6 fig 3b · context limit ═══════════ -->
+<section class="slide std" data-station="2">
+  <header>
+    <h1><span class="figno">Fig 3b</span>The context limit is the row count of wpe</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="0" y="26" class="ts">wpe is a matrix with only block_size = 16 rows:</text>
+        <rect x="40" y="46" width="340" height="272" class="tint-bus" rx="10"/>
+        <line x1="40" y1="86" x2="380" y2="86" stroke="rgba(57,135,229,.35)"/>
+        <line x1="40" y1="126" x2="380" y2="126" stroke="rgba(57,135,229,.35)"/>
+        <line x1="40" y1="278" x2="380" y2="278" stroke="rgba(57,135,229,.35)"/>
+        <text x="100" y="71" class="tn end">pos 0</text>
+        <text x="240" y="71" class="td mid">[ 16 numbers ]</text>
+        <text x="100" y="111" class="tn end">pos 1</text>
+        <text x="240" y="111" class="td mid">[ 16 numbers ]</text>
+        <text x="240" y="210" class="ts mid">⋮</text>
+        <text x="100" y="303" class="tn end">pos 15</text>
+        <text x="240" y="303" class="td mid">[ 16 numbers ]</text>
+        <text x="400" y="76" class="ts">block_size = 16</text>
+        <text x="400" y="92" class="td">(longest name ＝ 15 letters,</text><text x="400" y="108" class="td">　plus the leading BOS ＝ 16)</text>
+        <rect x="40" y="336" width="340" height="40" rx="8" fill="rgba(230,103,103,.07)" stroke="var(--c-rand)" stroke-dasharray="6 4" stroke-width="1.6"/>
+        <text x="100" y="361" class="tn end" style="fill:var(--c-rand)">pos 16</text>
+        <text x="240" y="361" class="ts mid" style="fill:var(--c-rand)">✗ no such row</text>
+        <text x="400" y="354" class="ts" style="fill:var(--c-rand)">not found → IndexError</text>
+        <text x="400" y="374" class="td">not degraded — nonexistent</text>
+
+        <text x="0" y="428" class="ts">Position can be supplied in two ways:</text>
+        <rect x="0" y="444" width="290" height="104" class="tint-bus" rx="10"/>
+        <text x="16" y="472" class="t" style="font-weight:600">Learned</text>
+        <text x="16" y="500" class="ts">ordinary parameters, trained like wte</text>
+        <text x="16" y="530" class="td">GPT-2 · this project</text>
+        <rect x="310" y="444" width="290" height="104" class="box" rx="10"/>
+        <text x="326" y="472" class="t" style="font-weight:600">A fixed formula</text>
+        <text x="326" y="500" class="ts">computed with sin/cos, never trained</text>
+        <text x="326" y="530" class="td">the original Transformer paper</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py</span><span>what “128K context” actually is</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="77:now">
+77	block_size = 16 # maximum context length
+	↪ of the attention window
+	↪ (note: the longest name is 15 characters)
+</pre>
+<div class="codesep"><b>Matrix size</b> · 16 rows, one per position</div>
+<pre class="py" data-hl="81:bus">
+81	state_dict = {'wte': matrix(vocab_size, n_embd),
+	↪ 'wpe': matrix(block_size, n_embd),
+	↪ 'lm_head': matrix(vocab_size, n_embd)}
+	# wpe has only block_size = 16 rows
+</pre>
+<div class="codesep"><b>Used as a lookup</b> · pos_id above 15 raises IndexError</div>
+<pre class="py">
+110	    pos_emb = state_dict['wpe'][pos_id] # position …
+	# pos_id above 15 → this line raises IndexError
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 3b・context 上限</span>
+    <ul>
+      <li>block_size 取訓練資料裡最長的名字（15 個字母）。第 17 個位置<b>不是效果變差，是物理上不存在</b>。</li>
+      <li>收尾：「你聽過『這個模型 context 是 128K』——在最小的模型裡，那件事就長這樣：<b>一個只有 16 列的矩陣</b>。」</li>
+      <li>兩種給法都不必展開細節，重點只有一個：<b>位置不是天生的，是額外餵進去的一份資料</b>。（現代模型還有第三種做法，但那要先講完 q/k 才講得通——留到最後有人問再說。）</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 7 fig 4 · one across, one down ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4</span>Transformer Block — one across, one down</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="300" y="24" class="tn mid">the x at this position (16 dims)</text>
+        <path d="M300 34 V64" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="90" y="68" width="420" height="118" class="tint-attn"/>
+        <text x="300" y="100" class="mid" style="font-size:17px;font-weight:650;fill:var(--c-attn)">Attention　——　across</text>
+        <text x="300" y="130" class="t mid">“Which of the earlier information is needed?”</text>
+        <text x="300" y="160" class="ts mid">reads across positions: the only place a token can take from others</text>
+        <path d="M300 186 V224" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="316" y="210" class="td">x now carries meaning from earlier tokens</text>
+        <rect x="90" y="228" width="420" height="118" class="tint-mlp"/>
+        <text x="300" y="260" class="mid" style="font-size:17px;font-weight:650;fill:var(--c-mlp)">MLP　——　down</text>
+        <text x="300" y="290" class="t mid">“What follows from that information?”</text>
+        <text x="300" y="320" class="ts mid">a two-layer network inside the block; reads no other token</text>
+        <path d="M300 346 V376" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="300" y="400" class="tn mid">the updated x (16 dims)</text>
+
+        <text x="300" y="452" class="t mid" style="font-weight:600">These two, alternating, are the whole Transformer</text>
+        <rect x="60" y="472" width="225" height="72" class="tint-attn" rx="12"/>
+        <text x="172" y="502" class="mid" style="font-size:19px;font-weight:650;fill:var(--c-attn)">Moving</text>
+        <text x="172" y="528" class="ts mid">Attention ＝ where to take it from</text>
+        <rect x="320" y="472" width="225" height="72" class="tint-mlp" rx="12"/>
+        <text x="432" y="502" class="mid" style="font-size:19px;font-weight:650;fill:var(--c-mlp)">Refining</text>
+        <text x="432" y="528" class="ts mid">MLP ＝ what to make of it</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · one Block in full</span><span>119–132 in Figs 4a–4c</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="115-133:attn,134:bus,135-140:mlp,141:bus">
+114	for li in range(n_layer):
+115	    # 1) Multi-head Attention block
+116	    x_residual = x
+117	    x = rmsnorm(x)
+118	    q = linear(x, state_dict[f'layer{li}.attn_wq'])
+	# q, k, v are defined in Fig 4a-0; structure first
+⋯
+133	    x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])
+	# ★ x_attn: the four head outputs joined (16 dims, Fig 4b-0)
+134	    x = [a + b for a, b in zip(x, x_residual)]
+135	    # 2) MLP block
+136	    x_residual = x
+137	    x = rmsnorm(x)
+138	    x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139	    x = [xi.relu() for xi in x]
+140	    x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+141	    x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4・一橫一縱</span>
+    <ul>
+      <li><b>「一橫一縱」就是整個 Transformer 的骨架</b>：Attention 負責搬運、MLP 負責加工，兩者交替就是全部。（這句話在圖 6 會再出現，那時它會有更深的意思。）</li>
+      <li><b>只有 Attention 會跨 token</b>——把它拿掉，模型退化成「每個字母各自獨立預測」，完全不知道前面出現過什麼。</li>
+      <li><b>MLP 的橫向是斷開的</b>：138–140 那三行只吃 x 這一個向量，手上根本沒有其他位置的資料。這是程式碼裡看得到的事實。</li>
+      <li>箭頭只從左邊來（causal）：任務是「猜下一個」，看得到答案就是作弊。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 8 fig 4 · laid out in time ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4 · timeline</span>Positions laid out — computing the 4th</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="26" style="font-size:15px;font-weight:650;fill:var(--c-attn)">Across · reads back</text>
+        <text x="178" y="26" class="ts">the first three are long since done; only the rightmost is computing</text>
+        <text x="80" y="66" class="mid" style="font:16px var(--mono);fill:var(--ink2)">BOS</text>
+        <text x="220" y="66" class="mid" style="font:16px var(--mono);fill:var(--ink2)">e</text>
+        <text x="360" y="66" class="mid" style="font:16px var(--mono);fill:var(--ink2)">m</text>
+        <rect x="468" y="44" width="64" height="30" class="tint-now" rx="6"/>
+        <text x="500" y="65" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">m</text>
+        <text x="565" y="58" class="td">◀ only this</text>
+        <text x="565" y="74" class="td">　one now</text>
+        <text x="80" y="102" class="ts mid" style="fill:var(--c-kv)">k,v</text>
+        <text x="220" y="102" class="ts mid" style="fill:var(--c-kv)">k,v</text>
+        <text x="360" y="102" class="ts mid" style="fill:var(--c-kv)">k,v</text>
+        <text x="500" y="102" class="ts mid" style="fill:var(--c-now)">q,k,v</text>
+        <path d="M80 112 V160" class="wire-kv"/>
+        <path d="M220 112 V160" class="wire-kv"/>
+        <path d="M360 112 V160" class="wire-kv"/>
+        <path d="M80 160 H486" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <path d="M500 112 V148" class="wire-now"/>
+        <circle cx="500" cy="160" r="6" class="f-now"/>
+        <text x="80" y="200" class="ts">first three k,v <tspan fill="var(--c-kv)">reused as is</tspan></text>
+        <text x="0" y="246" class="td"><tspan style="fill:var(--c-now)">q, k, v are defined in Fig 4a-0</tspan> — this page is about which positions update and which do not.</text>
+        <text x="500" y="200" class="ts mid">each earlier meaning</text>
+        <text x="500" y="220" class="ts mid">merged in, in proportion</text>
+
+        <line x1="0" y1="258" x2="641" y2="258" class="axis"/>
+
+        <text x="0" y="296" style="font-size:15px;font-weight:650;fill:var(--c-mlp)">Down · this one only</text>
+        <text x="170" y="296" class="ts">once merged, a single arrow remains</text>
+        <text x="80" y="336" class="mid" style="font:16px var(--mono);fill:var(--ink3)">BOS</text>
+        <text x="220" y="336" class="mid" style="font:16px var(--mono);fill:var(--ink3)">e</text>
+        <text x="360" y="336" class="mid" style="font:16px var(--mono);fill:var(--ink3)">m</text>
+        <text x="500" y="336" class="mid" style="font:600 16px var(--mono);fill:var(--ink)">m</text>
+        <text x="80" y="380" class="ts mid" style="fill:var(--ink3)">・</text>
+        <text x="220" y="380" class="ts mid" style="fill:var(--ink3)">・</text>
+        <text x="360" y="380" class="ts mid" style="fill:var(--ink3)">・</text>
+        <text x="190" y="416" class="td">← the first three do not move this round</text>
+        <path d="M500 346 V386" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <rect x="450" y="390" width="100" height="44" class="tint-mlp"/>
+        <text x="500" y="417" class="ts mid" style="fill:var(--ink);font-weight:600">MLP</text>
+        <path d="M500 434 V474" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <text x="500" y="498" class="tn mid">the updated x (16)</text>
+        <text x="320" y="544" class="ts mid">The MLP works on this one 16-dim vector — no data from other positions reaches it</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py</span><span>across reads all · down works alone</span></div>
+        <div class="codebody">
+<div class="codesep"><b>Across</b> · reads back the k, v of every earlier position</div>
+<pre class="py" data-hl="121-122:kv,129-131:attn">
+121	keys[li].append(k)
+122	values[li].append(v)
+⋯
+129	attn_logits = [sum(q_h[j] * k_h[t][j]
+	↪     for j in range(head_dim)) / head_dim**0.5
+	↪     for t in range(len(k_h))]
+130	attn_weights = softmax(attn_logits)
+131	head_out = [sum(attn_weights[t] * v_h[t][j]
+	↪     for t in range(len(v_h)))
+	↪     for j in range(head_dim)]
+</pre>
+<div class="codesep"><b>Down</b> · only this one vector x is available</div>
+<pre class="py" data-hl="138-140:mlp">
+138	x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139	x = [xi.relu() for xi in x]
+140	x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4・攤開</span>
+    <ul>
+      <li><b>一輪只有一格在算。</b>橫向那張站著四個 token，但真正在運算的只有最右邊那格；前三格貢獻的是「算過就冰起來」的 k,v。（這裡先埋，圖 9 收。）</li>
+      <li>重點不是「自己融合自己」，而是<b>這一格把前面每個 token 的意義按比例拌進來</b>。</li>
+      <li>小字但誠實：上面畫的是推論時的樣子。訓練時整個名字一次餵進去、每格各走一遍 MLP——但各格之間仍然完全不交談。</li>
+      <li>接下來三張圖，都在拆 Attention 方框裡到底發生了什麼。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ fig 4a-0 · meeting q, k, v ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4a-0</span>Meet q, k, v — three views of one x</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <rect x="140" y="10" width="360" height="36" class="tint-bus" rx="8"/>
+        <text x="320" y="33" class="ts mid" style="fill:var(--ink)">x after rmsnorm ＝ what this “m” understands right now</text>
+        <path d="M320 46 L146 84" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 46 V84" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 46 L494 84" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="504" y="66" class="td">three 16×16 matrices</text>
+        <text x="504" y="82" class="td">(multiply ×3)</text>
+        <rect x="106" y="88" width="80" height="30" class="box" rx="6"/>
+        <text x="146" y="108" class="tn mid" style="fill:var(--ink)">× Wq</text>
+        <rect x="280" y="88" width="80" height="30" class="box" rx="6"/>
+        <text x="320" y="108" class="tn mid" style="fill:var(--ink)">× Wk</text>
+        <rect x="454" y="88" width="80" height="30" class="box" rx="6"/>
+        <text x="494" y="108" class="tn mid" style="fill:var(--ink)">× Wv</text>
+        <path d="M146 118 V138" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M320 118 V138" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M494 118 V138" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="61" y="142" width="170" height="84" class="tint-attn" rx="10"/>
+        <text x="146" y="168" style="font:600 14px var(--mono);fill:var(--ink)" text-anchor="middle">q (16)</text>
+        <text x="146" y="192" class="ts mid">what is being looked for</text>
+        <text x="146" y="212" class="td mid">a query · used once</text>
+        <rect x="235" y="142" width="170" height="84" class="tint-attn" rx="10"/>
+        <text x="320" y="168" style="font:600 14px var(--mono);fill:var(--ink)" text-anchor="middle">k (16)</text>
+        <text x="320" y="192" class="ts mid">what this position is</text>
+        <text x="320" y="212" class="td mid">the spine label</text>
+        <rect x="409" y="142" width="170" height="84" class="tint-attn" rx="10"/>
+        <text x="494" y="168" style="font:600 14px var(--mono);fill:var(--ink)" text-anchor="middle">v (16)</text>
+        <text x="494" y="192" class="ts mid">what it can supply</text>
+        <text x="494" y="212" class="td mid">the contents</text>
+        <path d="M320 226 V246" class="wire-kv"/>
+        <path d="M494 226 V246" class="wire-kv"/>
+        <path d="M320 246 H406" class="wire-kv"/>
+        <path d="M494 246 H420" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <rect x="250" y="252" width="330" height="34" class="tint-kv" rx="8"/>
+        <text x="415" y="274" class="ts mid" style="fill:var(--c-kv)">k and v go into the KV cache — one per position</text>
+        <text x="146" y="252" class="td mid">later cut into 4 pieces</text>
+        <text x="146" y="268" class="td mid">4 each per head (Fig 4b-0)</text>
+
+        <line x1="0" y1="316" x2="620" y2="316" class="axis"/>
+        <text x="320" y="356" class="t mid">q and k only set the shares; what is taken is v.</text>
+        <rect x="40" y="382" width="560" height="112" class="tint-attn" rx="12"/>
+        <text x="142" y="430" class="tn mid" style="fill:var(--ink)">q · k</text>
+        <path d="M196 424 H250" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="320" y="430" class="t mid" style="font-weight:600">set the shares</text>
+        <path d="M390 424 H444" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="500" y="430" class="tn mid" style="fill:var(--ink)">v</text>
+        <text x="320" y="470" class="ts mid">Fig 4a walks it through with real numbers: score → share → take</text>
+        <text x="0" y="536" class="td">(where x comes from: wte ＋ wpe ＋ earlier text — Figs 3 and 4)</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · three slips</span><span>the longest line, unfolded</span></div>
+        <div class="codebody">
+<div class="codesep"><b>Three slips</b> · all computed from the same x</div>
+<pre class="py" data-hl="118-120:attn">
+118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
+	# ★ q / k / v: the query / the spine label / the contents
+</pre>
+<div class="codesep"><b>① Score</b> · unfolded: for each earlier t, dot q with its k, then ÷√4</div>
+<pre class="py" data-hl="129:attn">
+129	attn_logits = [sum(q_h[j] * k_h[t][j]
+	↪     for j in range(head_dim)) / head_dim**0.5
+	↪     for t in range(len(k_h))]
+	# ★ q_h, k_h: the 4 dims of q, k given to this head
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4a-0・q/k/v 前置（零數字）</span>
+    <ul>
+      <li>三張紙條都是<b>同一個 x 自己算出來的</b>（L118-120），不是外面發的。</li>
+      <li>為什麼要三個角度、不拿 x 直接比 x？——「我在找的」跟「我是誰」通常不是同一件事：m 在找母音，但它自己是子音。三個矩陣，各司其職。</li>
+      <li>k、v 是「留給後人查的」，q 是「當下用完就丟的」——這個不對稱，圖 9 的 KV cache 會收。</li>
+      <li><b>「打分數／分比例／按比例拿」這三個動詞，圖 4a、圖 4b-0 會原字重複，不要中途換詞。</b></li>
+      <li>① 是全檔最長的一行，先在右欄拆開；圖 4a 馬上帶著數字一格一格走一遍。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 9 fig 4a · three steps of one head ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4a</span>One head does only three things</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="14" class="td" style="fill:var(--c-now);font-weight:600">Illustrative, not checkpoint weights · “e m” so far, choosing the 3rd letter · head 0 · 4 dims per vector</text>
+
+        <line x1="0" y1="28" x2="641" y2="28" class="axis"/>
+        <rect x="0" y="36" width="118" height="30" class="tint-attn" rx="8"/>
+        <text x="59" y="57" class="mid" style="font:600 15px var(--sans);fill:var(--ink)">① Score</text>
+        <text x="132" y="57" class="ts">the current q is compared once with the k of each earlier position</text>
+        <rect x="200" y="80" width="240" height="34" class="tint-now"/>
+        <text x="320" y="102" class="tn mid" style="fill:var(--ink)">q (query for “m” · 4 numbers)</text>
+        <path d="M320 114 L128 146" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 114 V146" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 114 L512 146" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="46" y="150" width="148" height="34" class="box"/>
+        <text x="120" y="172" class="tn mid" style="fill:var(--ink)">k(BOS)</text>
+        <rect x="246" y="150" width="148" height="34" class="box"/>
+        <text x="320" y="172" class="tn mid" style="fill:var(--ink)">k(e)</text>
+        <rect x="446" y="150" width="148" height="34" class="box"/>
+        <text x="520" y="172" class="tn mid" style="fill:var(--ink)">k(m)</text>
+        <text x="120" y="212" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">2.7</text>
+        <text x="320" y="212" class="mid" style="font:17px var(--mono);fill:var(--ink2)">0.5</text>
+        <text x="520" y="212" class="mid" style="font:17px var(--mono);fill:var(--ink2)">−1.2</text>
+        <text x="320" y="236" class="td mid">higher score ＝ more relevant　(÷√4 ＝ ÷2: keeps scores from blowing up)</text>
+
+        <line x1="0" y1="252" x2="641" y2="252" class="axis"/>
+        <rect x="0" y="260" width="118" height="30" class="tint-attn" rx="8"/>
+        <text x="59" y="281" class="mid" style="font:600 15px var(--sans);fill:var(--ink)">② Share</text>
+        <text x="132" y="281" class="ts">softmax: squeezes the three scores into shares that add to exactly 100%</text>
+        <text x="120" y="320" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">0.85</text>
+        <text x="320" y="320" class="mid" style="font:17px var(--mono);fill:var(--ink2)">0.13</text>
+        <text x="520" y="320" class="mid" style="font:17px var(--mono);fill:var(--ink2)">0.02</text>
+        <rect x="73" y="330" width="94" height="14" rx="2.5" class="bar"/>
+        <rect x="313" y="330" width="14" height="14" rx="2.5" class="bar"/>
+        <rect x="518" y="330" width="3" height="14" rx="1.5" class="bar"/>
+        <text x="320" y="368" class="td mid">look more at one, look less at another — the total to share is fixed at 1</text>
+
+        <line x1="0" y1="384" x2="641" y2="384" class="axis"/>
+        <rect x="0" y="392" width="118" height="30" class="tint-attn" rx="8"/>
+        <text x="59" y="413" class="mid" style="font:600 15px var(--sans);fill:var(--ink)">③ Take</text>
+        <text x="132" y="413" class="ts">85% of v(BOS)　13% of v(e)　2% of v(m), all added up</text>
+        <text x="320" y="450" class="mid" style="font:15px var(--mono);fill:var(--ink)"><tspan fill="var(--c-attn)">0.85</tspan>·v(BOS) ＋ <tspan fill="var(--c-attn)">0.13</tspan>·v(e) ＋ <tspan fill="var(--c-attn)">0.02</tspan>·v(m)</text>
+        <path d="M320 460 V478" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="230" y="482" width="180" height="38" class="tint-attn"/>
+        <text x="320" y="506" class="tn mid" style="fill:var(--ink)">head_out (4 numbers)</text>
+        <text x="424" y="496" class="td">3 earlier letters or 300,</text>
+        <text x="424" y="514" class="td">the output is always 4</text>
+
+        <line x1="0" y1="534" x2="641" y2="534" class="axis"/>
+        <text x="0" y="554" class="t">With these illustrative values, head 0 draws mainly on the BOS position.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · inside one head</span><span>three steps, one line each</span></div>
+        <div class="codebody">
+<div class="codesep">⋯　<b>118-120</b>: q, k, v ＝ the three slips from Fig 4a-0</div>
+<div class="codesep"><b>① Score</b></div>
+<pre class="py" data-hl="129:attn">
+129	attn_logits = [sum(q_h[j] * k_h[t][j]
+	↪     for j in range(head_dim)) / head_dim**0.5
+	↪     for t in range(len(k_h))]
+	# ★ attn_logits: the scores (2.7 / 0.5 / −1.2)
+</pre>
+<div class="codesep"><b>② Share</b></div>
+<pre class="py" data-hl="130:attn">
+130	attn_weights = softmax(attn_logits)
+	# ★ attn_weights: shares summing to 1 (0.85 / 0.13 / 0.02)
+</pre>
+<div class="codesep"><b>③ Take</b></div>
+<pre class="py" data-hl="131:attn">
+131	head_out = [sum(attn_weights[t] * v_h[t][j]
+	↪     for t in range(len(v_h)))
+	↪     for j in range(head_dim)]
+	# ★ head_out: the 4 numbers taken back in proportion
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4a・一個 head（核心）</span>
+    <ul>
+      <li>三個動詞跟上一張一模一樣。左邊的 ①②③ 跟右欄的 ①②③ 是同一件事——<b>左圖上出現的每個數字，右欄都指得出是哪一行算的。</b></li>
+      <li>÷√4 就是 ÷2（＝ 129 那行的 <code>/ head_dim**0.5</code>）：維度越高內積越大，除掉避免 softmax 太極端。</li>
+      <li><b>softmax 輸出加起來＝1</b>：「注意力」這名字就從這來——一組必須分完的比例，多看這裡就得少看那裡。</li>
+      <li>進去是 4 維的 q，過去有 3 個或 300 個字母，出來永遠 4 個數字——<b>序列長度在這裡消失了</b>。</li>
+      <li><b>q 只有一個，k/v 有一串</b>——這個不對稱是整張圖的骨架（圖 9 收）。</li>
+      <li>收尾那句橋是給下一張用的：這只是一個 head 的答案，也就是一套注意力分布。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 9b fig 4b-0 · split, run, rejoin ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4b-0</span>Four of them: split, run each, rejoin</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="320" y="26" class="t mid" style="font-weight:600">Those three steps of Fig 4a actually run four times at once.</text>
+
+        <text x="320" y="66" class="ts mid">q, k, v — 16 numbers each</text>
+        <rect x="30" y="78" width="580" height="40" class="tint-bus"/>
+        <line x1="175" y1="78" x2="175" y2="118" stroke="var(--c-bus)" stroke-width="1.4" stroke-dasharray="4 4"/>
+        <line x1="320" y1="78" x2="320" y2="118" stroke="var(--c-bus)" stroke-width="1.4" stroke-dasharray="4 4"/>
+        <line x1="465" y1="78" x2="465" y2="118" stroke="var(--c-bus)" stroke-width="1.4" stroke-dasharray="4 4"/>
+        <text x="102" y="104" class="tn mid" style="fill:var(--ink)">0-3</text>
+        <text x="247" y="104" class="tn mid" style="fill:var(--ink)">4-7</text>
+        <text x="392" y="104" class="tn mid" style="fill:var(--ink)">8-11</text>
+        <text x="537" y="104" class="tn mid" style="fill:var(--ink)">12-15</text>
+        <text x="320" y="138" class="td mid">just cut apart; nothing new</text>
+
+        <path d="M102 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M247 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M392 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M537 146 V174" class="wire-attn" marker-end="url(#ar-attn)"/>
+
+        <rect x="32" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="102" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 0</text>
+        <text x="102" y="234" class="ts mid">① Score</text>
+        <text x="102" y="260" class="ts mid">② Share</text>
+        <text x="102" y="286" class="ts mid">③ Take</text>
+        <rect x="177" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="247" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 1</text>
+        <text x="247" y="234" class="ts mid">① Score</text>
+        <text x="247" y="260" class="ts mid">② Share</text>
+        <text x="247" y="286" class="ts mid">③ Take</text>
+        <rect x="322" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="392" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 2</text>
+        <text x="392" y="234" class="ts mid">① Score</text>
+        <text x="392" y="260" class="ts mid">② Share</text>
+        <text x="392" y="286" class="ts mid">③ Take</text>
+        <rect x="467" y="178" width="140" height="132" class="tint-attn" rx="10"/>
+        <text x="537" y="204" class="mid" style="font:600 14px var(--mono);fill:var(--ink)">head 3</text>
+        <text x="537" y="234" class="ts mid">① Score</text>
+        <text x="537" y="260" class="ts mid">② Share</text>
+        <text x="537" y="286" class="ts mid">③ Take</text>
+        <text x="320" y="332" class="td mid">each group runs those three steps once — the four never exchange anything</text>
+
+        <path d="M102 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M247 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M392 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <path d="M537 340 V368" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="102" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <text x="175" y="402" class="mid" style="font:20px var(--mono);fill:var(--ink3)">│</text>
+        <text x="247" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <text x="320" y="402" class="mid" style="font:20px var(--mono);fill:var(--ink3)">│</text>
+        <text x="392" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <text x="465" y="402" class="mid" style="font:20px var(--mono);fill:var(--ink3)">│</text>
+        <text x="537" y="402" class="mid" style="font:600 20px var(--mono);fill:var(--ink)">4</text>
+        <rect x="30" y="418" width="580" height="40" class="tint-bus"/>
+        <text x="320" y="444" class="ts mid" style="fill:var(--ink)">concat → 16 numbers — not an element-wise sum</text>
+
+        <rect x="0" y="482" width="641" height="70" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="482" width="4" height="70" class="f-attn"/>
+        <text x="26" y="512" class="t" style="font-weight:600">Split, run, rejoin — those three actions and no more</text>
+        <text x="26" y="538" class="ts">Not one extra parameter: Wq / Wk / Wv are still 16×16.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · multi-head</span><span>split · run · rejoin</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="79:now">
+79	head_dim = n_embd // n_head
+	# ★ head_dim: 16 ÷ 4 ＝ 4
+</pre>
+<div class="codesep"><b>Split</b> · one slice, nothing else</div>
+<pre class="py" data-hl="124:attn,126-128:now">
+124	for h in range(n_head):
+125	    hs = h * head_dim   # ★ hs: slice start (0, 4, 8, 12)
+126	    q_h = q[hs:hs+head_dim]
+127	    k_h = [ki[hs:hs+head_dim] for ki in keys[li]]
+128	    v_h = [vi[hs:hs+head_dim] for vi in values[li]]
+	# ki / vi: the k, v of each earlier position in the cache
+</pre>
+<div class="codesep"><b>Run</b> · 129-131 ＝ exactly the three steps of Fig 4a</div>
+<div class="codesep"><b>Rejoin</b> · [4 │ 4 │ 4 │ 4] concat → 16, not a sum</div>
+<pre class="py" data-hl="132:attn">
+132	    x_attn.extend(head_out)
+	# ★ x_attn: the 16 numbers from the four heads joined
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4b-0・切、跑、拼（只講動作）</span>
+    <ul>
+      <li>「切成四個 head」在程式裡就是 <code>q[hs:hs+head_dim]</code> <b>一行切片</b>（126）。很多教材把 multi-head 畫得很神祕，其實就是把 16 個數字分成 4 組。</li>
+      <li>每個 head 方塊裡的 ①②③ 就是上一張那三步，<b>原封不動再跑一次</b>，只是拿到的是自己那 4 維。</li>
+      <li>拼回去也只有一行（132）——<b>進來 16 個數字，出去還是 16 個數字。</b></li>
+      <li>這張只講「怎麼做」。「為什麼要這樣做」下一張。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 10 fig 4b · why four heads ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4b</span>Why four heads: four patterns at once</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="20" class="td" style="fill:var(--c-now);font-weight:600">Illustrative, not checkpoint weights · same moment, same layer: each head forms its own pattern</text>
+        <text x="210" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">BOS</text>
+        <text x="320" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">e</text>
+        <text x="430" y="58" class="mid" style="font:15px var(--mono);fill:var(--ink2)">m</text>
+        <rect x="512" y="38" width="56" height="28" class="tint-now" rx="6"/>
+        <text x="540" y="58" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">m</text>
+
+        <text x="0" y="112" style="font:600 14px var(--mono);fill:var(--ink)">head 0</text>
+        <text x="0" y="132" class="td">on the previous letter</text>
+        <rect x="165" y="98" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="275" y="98" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="385" y="98" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="495" y="98" width="85" height="24" rx="3" class="bar"/>
+        <line x1="0" y1="152" x2="641" y2="152" class="axis" opacity=".5"/>
+
+        <text x="0" y="200" style="font:600 14px var(--mono);fill:var(--ink)">head 1</text>
+        <text x="0" y="220" class="td">on the start —</text>
+        <text x="0" y="236" class="td">how far into the name</text>
+        <rect x="165" y="186" width="78" height="24" rx="3" class="bar"/>
+        <rect x="275" y="186" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="385" y="186" width="3" height="24" rx="1.5" class="bar"/>
+        <rect x="495" y="186" width="6" height="24" rx="1.5" class="bar"/>
+        <line x1="0" y1="240" x2="641" y2="240" class="axis" opacity=".5"/>
+
+        <text x="0" y="288" style="font:600 14px var(--mono);fill:var(--ink)">head 2</text>
+        <text x="0" y="308" class="td">on the first letter</text>
+        <rect x="165" y="274" width="6" height="24" rx="1.5" class="bar"/>
+        <rect x="275" y="274" width="76" height="24" rx="3" class="bar"/>
+        <rect x="385" y="274" width="4" height="24" rx="1.5" class="bar"/>
+        <rect x="495" y="274" width="4" height="24" rx="1.5" class="bar"/>
+        <line x1="0" y1="328" x2="641" y2="328" class="axis" opacity=".5"/>
+
+        <text x="0" y="376" style="font:600 14px var(--mono);fill:var(--ink)">head 3</text>
+        <text x="0" y="396" class="td">spread out — overall length</text>
+        <text x="0" y="410" class="td" style="font-size:10.5px">(one head could only pick one of these)</text>
+        <rect x="165" y="362" width="25" height="24" rx="3" class="bar"/>
+        <rect x="275" y="362" width="20" height="24" rx="3" class="bar"/>
+        <rect x="385" y="362" width="23" height="24" rx="3" class="bar"/>
+        <rect x="495" y="362" width="22" height="24" rx="3" class="bar"/>
+
+        <text x="0" y="436" class="t" style="font-weight:600">One head can look at many positions, but only with <tspan style="fill:var(--c-attn)">one pattern</tspan></text>
+        <text x="0" y="458" class="ts">A dot product already sums four groups and then adds those sums together.</text>
+        <text x="0" y="476" class="ts">Splitting into heads ＝ <tspan style="fill:var(--ink)">skipping that last addition</tspan>, so each group shares on its own.</text>
+        <rect x="0" y="480" width="300" height="52" class="box" rx="10"/>
+        <text x="16" y="502" class="ts" style="fill:var(--ink);font-weight:600">One head: add it all first, then share</text>
+        <text x="16" y="522" class="td">one set of shares → every feature uses it</text>
+        <rect x="330" y="480" width="311" height="52" class="tint-attn" rx="10"/>
+        <text x="346" y="502" class="ts" style="fill:var(--ink);font-weight:600">Four heads: no final add; each shares</text>
+        <text x="346" y="522" class="td">four sets of shares → four subspaces decide</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · multi-head</span><span>this figure ＝ that for loop ×4</span></div>
+        <div class="codebody">
+<div class="codesep"><b>No new code</b> · split, run, rejoin from Fig 4b-0, four full rounds</div>
+<pre class="py" data-hl="124:attn,132:attn">
+124	for h in range(n_head):
+⋯
+132	    x_attn.extend(head_out)
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4b・為什麼要四個人</span>
+    <ul>
+      <li><b>單頭做不到這件事</b>：16 個輸出維度被迫共用同一組注意力權重，只能「全看剛剛那個」或「全看開頭」，或糊成一團平均。</li>
+      <li><b>切、拼的動作上一張（4b-0）看過了</b>，這張只回答「為什麼」：一個 head 可以把比例分給多格，但所有 4 維共用同一套分布；四個 head 才能同時保留四套取用方式。</li>
+      <li><b>「免費」要當場證給他們看</b>：預 3a 的內積是「逐項相乘再全部加總」——那 16 項的加總，本來就可以拆成四段各自加總、再相加。切 head 就是<b>把最後那三個加號拿掉</b>，讓四段各自走完 softmax。參數一個沒多、乘法一次沒多。</li>
+      <li>這個實作裡的關鍵差別在於 <b>softmax 是每個 4 維切片各算一套，而不是 16 維共用一套</b>——四個子空間因此能保留不同的注意力分布。</li>
+      <li>代價：每個 head 只有 4 維，衡量「像不像」的解析度低很多。<b>取捨＝一個高解析度的問題 vs 四個低解析度的問題。</b></li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 11 fig 4c · attention wiring ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 4c</span>Attention wiring — how four heads return</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="240" y="24" class="tn mid">main line x (16)</text>
+        <path d="M240 34 H560 V482 H262" class="wire-bus" marker-end="url(#ar-bus)" opacity=".65"/>
+        <text x="330" y="28" class="td">skip: passes by untouched</text>
+        <path d="M240 34 V64" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="190" y="68" width="100" height="32" class="box"/>
+        <text x="240" y="89" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <text x="170" y="80" class="td end">volume desk: loudness back</text>
+        <text x="170" y="96" class="td end">to standard, direction kept</text>
+        <path d="M240 100 V112" class="wire-bus"/>
+        <path d="M100 112 H380" class="wire-bus"/>
+        <path d="M100 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <path d="M240 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <path d="M380 112 V118" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="60" y="122" width="80" height="36" class="box"/>
+        <text x="100" y="145" class="tn mid" style="fill:var(--ink)">Wq</text>
+        <rect x="200" y="122" width="80" height="36" class="box"/>
+        <text x="240" y="145" class="tn mid" style="fill:var(--ink)">Wk</text>
+        <rect x="340" y="122" width="80" height="36" class="box"/>
+        <text x="380" y="145" class="tn mid" style="fill:var(--ink)">Wv</text>
+        <path d="M100 158 V186" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M240 158 V186" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M380 158 V186" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="112" y="178" class="td">q(16)</text>
+        <text x="252" y="178" class="td">k(16)</text>
+        <text x="392" y="178" class="td">v(16)</text>
+        <path d="M280 134 H310 V104 H450 V128 H464" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <path d="M420 146 H464" class="wire-kv" marker-end="url(#ar-kv)"/>
+        <text x="438" y="98" class="td end" style="fill:var(--c-kv)">k and v written in</text>
+        <rect x="470" y="112" width="126" height="58" class="tint-kv" rx="10"/>
+        <rect x="476" y="118" width="114" height="46" fill="none" stroke="var(--c-kv)" stroke-width="1.2" rx="7"/>
+        <text x="533" y="138" class="ts mid" style="fill:var(--c-kv);font-weight:600">KV cache</text>
+        <text x="533" y="156" class="td mid">history of k, v</text>
+        <text x="596" y="186" class="td end">k, v of earlier positions</text>
+        <text x="596" y="202" class="td end">kept, not recomputed</text>
+        <rect x="45" y="190" width="398" height="118" class="tint-attn" rx="10"/>
+        <text x="244" y="224" class="t mid" style="fill:var(--ink);font-weight:600">Split, run, rejoin　＝　Fig 4b-0</text>
+        <text x="244" y="256" class="ts mid">each of the four heads runs those three steps, sharing nothing</text>
+        <text x="244" y="286" class="tn mid" style="fill:var(--ink)">[4 │ 4 │ 4 │ 4] concat → 16</text>
+        <path d="M533 170 V250 H449" class="wire-kv dash" marker-end="url(#ar-kv)"/>
+        <text x="541" y="222" class="td" style="fill:var(--c-kv)">read KV</text>
+        <path d="M244 308 V390" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <rect x="184" y="394" width="120" height="40" class="tint-attn"/>
+        <text x="244" y="419" class="tn mid" style="fill:var(--ink)">Wo</text>
+        <text x="316" y="418" class="ts" style="fill:var(--c-attn)">← the only place the four heads mix</text>
+        <path d="M244 434 V464" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <circle cx="244" cy="482" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
+        <text x="244" y="489" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
+        <text x="272" y="500" class="td" style="fill:var(--c-bus)">residual: what was computed is added back to x</text>
+        <text x="272" y="518" class="td">— that is what the bypass is for; x is never overwritten</text>
+        <path d="M244 497 V524" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="244" y="548" class="ts mid">on to the MLP</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · the attention block</span><span>124–132 in Fig 4b-0</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="116:bus,121-122:kv,126:now,133:attn,134:bus">
+116	x_residual = x
+117	x = rmsnorm(x)
+118	q = linear(x, state_dict[f'layer{li}.attn_wq'])
+119	k = linear(x, state_dict[f'layer{li}.attn_wk'])
+120	v = linear(x, state_dict[f'layer{li}.attn_wv'])
+121	keys[li].append(k)   # this position's k, v stored
+122	values[li].append(v)
+123	x_attn = []
+124	for h in range(n_head):
+125	    hs = h * head_dim
+126	    q_h = q[hs:hs+head_dim]   # the “split”, one line
+⋯
+132	    x_attn.extend(head_out)
+133	x = linear(x_attn, state_dict[f'layer{li}.attn_wo'])
+	# Wo: the only place the four heads mix
+134	x = [a + b for a, b in zip(x, x_residual)]
+	# the bypass rejoins here
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 4c・接線</span>
+    <ul>
+      <li>中間那塊<b>上一張整張講完了</b>，這裡壓成一個方塊帶過。這張只看它獨有的四件事：<b>rmsnorm 的位置、KV cache 的讀寫、Wo、以及那條原封不動繞過去的殘差。</b></li>
+      <li><b>Wo 是翻譯層</b>：head 寫在第 8 格的數字，跟主幹第 8 格的意義毫無關係——那只是切片的記帳方式。Wo 把「四個 head 各說各話」翻譯成主幹聽得懂的語言。</li>
+      <li>Wo 也是四個 head <b>第一次能被聯合判斷</b>的地方。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 12 fig 5 · MLP ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 5</span>MLP — 64 soft detectors and a threshold</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <text x="260" y="22" class="tn mid">main line x (16)</text>
+        <path d="M260 32 H540 V480 H278" class="wire-bus" marker-end="url(#ar-bus)" opacity=".65"/>
+        <text x="350" y="26" class="td">passes by untouched</text>
+        <path d="M260 32 V58" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="210" y="62" width="100" height="32" class="box"/>
+        <text x="260" y="83" class="ts mid" style="fill:var(--ink);font-family:var(--mono)">rmsnorm</text>
+        <path d="M260 94 V120" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <polygon points="200,124 320,124 420,190 100,190" class="tint-mlp"/>
+        <text x="260" y="152" class="t mid" style="font-weight:600">fc1 (16 → 64)</text>
+        <text x="260" y="176" class="ts mid">64 “detectors”</text>
+        <text x="436" y="148" class="td">each row dots with x:</text>
+        <text x="436" y="166" class="td">a soft “is X present?”</text>
+        <rect x="100" y="200" width="320" height="32" class="box"/>
+        <text x="260" y="221" class="mid" style="font:13px var(--mono);fill:var(--ink2)">−1.2　+3.4　−0.8　+0.1　⋯</text>
+        <path d="M260 232 V256" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <rect x="100" y="260" width="320" height="34" class="tint-now"/>
+        <text x="260" y="282" class="t mid" style="font-weight:600">relu ── the threshold</text>
+        <text x="436" y="270" class="td">negative → 0 (off)</text>
+        <text x="436" y="288" class="td">positive → strength kept</text>
+        <rect x="100" y="308" width="320" height="32" class="box"/>
+        <text x="260" y="329" class="mid" style="font:13px var(--mono);fill:var(--ink2)"><tspan fill="#5c5b55">0</tspan>　　+3.4　　<tspan fill="#5c5b55">0</tspan>　　+0.1　⋯</text>
+        <path d="M260 340 V364" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <polygon points="100,368 420,368 320,434 200,434" class="tint-mlp"/>
+        <text x="260" y="396" class="t mid" style="font-weight:600">fc2 (64 → 16)</text>
+        <text x="260" y="420" class="ts mid">64 “responses”</text>
+        <text x="436" y="392" class="td">fc2 combines them into</text>
+        <text x="436" y="410" class="td">a 16-dim correction</text>
+        <path d="M260 434 V462" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <circle cx="260" cy="480" r="15" fill="none" stroke="var(--c-bus)" stroke-width="2"/>
+        <text x="260" y="487" class="mid" style="font-size:17px;fill:var(--c-bus)">＋</text>
+        <path d="M260 495 V518" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <rect x="0" y="440" width="188" height="88" rx="10" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="440" width="4" height="88" class="f-mlp"/>
+        <text x="16" y="462" class="td" style="fill:var(--ink2)">One detector might ask</text>
+        <text x="16" y="484" class="td">“two consonants in a row?”</text>
+        <text x="16" y="504" class="td">once it fires, it adds</text>
+        <text x="16" y="520" class="td">“a vowel is due” to the line</text>
+        <text x="303" y="551" class="t mid" style="font-weight:600">relu stops the two linear steps merging, so behaviour depends on the input</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · MLP</span><span>wider → filter → narrower</span></div>
+        <div class="codebody">
+<div class="codesep"><b>All of relu</b> · the derivative is 0 or 1</div>
+<pre class="py" data-hl="50:now">
+50	def relu(self): return Value(max(0, self.data),
+	↪     (self,), (float(self.data > 0),))
+</pre>
+<div class="codesep"><b>The two 4× matrices</b> · 64 soft feature detectors</div>
+<pre class="py" data-hl="87-88:mlp">
+87	state_dict[f'layer{i}.mlp_fc1'] = matrix(4 * n_embd, n_embd)
+88	state_dict[f'layer{i}.mlp_fc2'] = matrix(n_embd, 4 * n_embd)
+	# fc1 ＝ 64 detector scores; fc2 writes back to 16
+</pre>
+<div class="codesep"><b>The MLP block itself</b> · three lines ＋ the residual</div>
+<pre class="py" data-hl="138:mlp,139:now,140:mlp,141:bus">
+136	x_residual = x
+137	x = rmsnorm(x)
+138	x = linear(x, state_dict[f'layer{li}.mlp_fc1'])
+139	x = [xi.relu() for xi in x]
+140	x = linear(x, state_dict[f'layer{li}.mlp_fc2'])
+141	x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 5・MLP</span>
+    <ul>
+      <li>回到預 3b：<b>fc1 就是一個 64 列的矩陣</b>——每一列都是一個偵測器，跟 x 做一次內積問一題。</li>
+      <li><b>為什麼要先撐胖再壓瘦？</b>（預 4a 欠的論證，在這裡還。<b>不要講矩陣乘法</b>，講聽眾手上已經有的東西：）fc1 做的是「x 跟每一列做內積」，fc2 做的也是「跟每一列做內積」。如果中間沒有那道門檻，整段就只是<b>內積接內積</b>——而內積接內積，永遠可以事先算好一組列、一次做完。撐到 64 維再壓回 16 維完全白做。</li>
+      <li>加了 relu 就不一樣了：<b>哪些偵測器有開口，是看 x 才知道的</b>。同一段程式對不同的 x 表現得像不同的規則——這是「事先算好一組列」永遠做不到的事。這就是「分情況」的全部意思。</li>
+      <li>把 MLP 看成<b>64 個軟性特徵偵測器</b>：每個偵測器給一個連續分數，relu 關掉負值，剩下的啟動再一起寫回主幹；不是 64 條可逐字讀出的離散規則。</li>
+      <li>以英文名字想像：某個神經元專門偵測「剛剛連續兩個子音」，一觸發就往主幹加上「接下來該是母音了」的方向。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 13 fig 6 · residual ═══════════ -->
+<section class="slide std" data-station="3">
+  <header>
+    <h1><span class="figno">Fig 6</span>Residual — every sub-layer adds back</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="320" y="34" class="ts mid">No stage replaces the main line — each correction is computed from the latest x, then added back</text>
+        <text x="320" y="60" class="td mid">Any stage may abstain (output ≈ 0 → everything passes through), so more layers never hurt</text>
+        <text x="24" y="98" class="tn">embedding</text>
+        <text x="600" y="98" class="tn end">lm_head</text>
+        <rect x="20" y="108" width="580" height="44" rx="8" fill="rgba(57,135,229,.10)" stroke="var(--c-bus)" stroke-width="2"/>
+        <line x1="26" y1="122" x2="594" y2="122" stroke="rgba(57,135,229,.22)"/>
+        <line x1="26" y1="130" x2="594" y2="130" stroke="rgba(57,135,229,.22)"/>
+        <line x1="26" y1="138" x2="594" y2="138" stroke="rgba(57,135,229,.22)"/>
+        <text x="34" y="135" class="ts" style="fill:var(--c-bus);font-weight:600">a 16-lane bus</text>
+        <path d="M600 130 H616" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <path d="M160 152 V246" class="wire-attn"/>
+        <path d="M160 246 H164" class="wire-attn" marker-end="url(#ar-attn)" opacity="0"/>
+        <text x="148" y="205" class="ts end" style="fill:var(--c-attn)">read</text>
+        <path d="M240 246 V158" class="wire-attn" marker-end="url(#ar-attn)"/>
+        <text x="252" y="205" class="ts" style="fill:var(--c-attn)">＋ added back</text>
+        <rect x="125" y="250" width="150" height="60" class="tint-attn"/>
+        <text x="200" y="276" class="tn mid" style="fill:var(--ink)">attn0</text>
+        <text x="200" y="298" class="ts mid">computes a correction</text>
+        <path d="M400 152 V246" class="wire-mlp"/>
+        <text x="388" y="205" class="ts end" style="fill:var(--c-mlp)">read</text>
+        <path d="M480 246 V158" class="wire-mlp" marker-end="url(#ar-mlp)"/>
+        <text x="492" y="205" class="ts" style="fill:var(--c-mlp)">＋ added back</text>
+        <rect x="365" y="250" width="150" height="60" class="tint-mlp"/>
+        <text x="440" y="276" class="tn mid" style="fill:var(--ink)">mlp0</text>
+        <text x="440" y="298" class="ts mid">computes a correction</text>
+        <text x="320" y="348" class="ts mid">Every stage: read the bus → compute a correction → <tspan style="font-weight:650" fill="var(--ink)">add</tspan> it back, never overwrite</text>
+
+        <rect x="20" y="380" width="600" height="146" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="40" y="412" class="ts">Written out, the vector entering lm_head is <tspan fill="var(--ink)">literally</tspan>:</text>
+        <text x="70" y="448" style="font:15px var(--mono);fill:var(--ink)">x_final ＝ <tspan fill="var(--c-bus)">the normalised embedding (letter ＋ position)</tspan></text>
+        <text x="70" y="478" style="font:15px var(--mono);fill:var(--ink)">　　　　＋ <tspan fill="var(--c-attn)">the attention correction</tspan></text>
+        <text x="70" y="508" style="font:15px var(--mono);fill:var(--ink)">　　　　＋ <tspan fill="var(--c-mlp)">the MLP correction</tspan></text>
+        <text x="320" y="552" class="td mid">More layers just insert two more plus signs on this bus — the architecture is untouched</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py</span><span>every plus in the talk is this line</span></div>
+        <div class="codebody">
+<div class="codesep">The <b>(1, 1)</b> here · the note addition writes — used in Fig 9.5</div>
+<pre class="py" data-hl="41:now">
+39	def __add__(self, other):   # ★ other: the other addend
+40	    other = other if isinstance(other, Value)
+	↪         else Value(other)
+41	    return Value(self.data + other.data,
+	↪         (self, other), (1, 1))
+	# the note says (1, 1) — gradients pass through unchanged
+</pre>
+<div class="codesep"><b>A whole Block ＝ two plus signs on a loop</b></div>
+<pre class="py" data-hl="134:bus,141:bus">
+114	for li in range(n_layer):   # more layers ＝ one more round
+⋯
+134	    x = [a + b for a, b in zip(x, x_residual)]
+⋯
+141	    x = [a + b for a, b in zip(x, x_residual)]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 6・殘差（最深刻的一張）</span>
+    <ul>
+      <li>每個子層都用<b>殘差相加</b>，但修正不是彼此獨立的固定向量：attention 先更新 x，MLP 再讀更新後的 x 算下一份修正。這是逐層組合，不是一次性的靜態總和。</li>
+      <li>右欄那個 <b>(1, 1)</b> 現在<b>只要點一下、不要展開</b>——這頁還沒講到訓練，講了會岔題。一句話帶過：「加法寫的便條是 (1, 1)，這個 1 等一下會讓訓練變得很順，圖 9.5 再說。」</li>
+      <li>為什麼要多層？把 n_layer 從 1 改成 2，就只是在匯流排上<b>再插兩個加號</b>，架構一個字都不用改。</li>
+      <li><b>全場最好用的一句話</b>：Attention 決定「去哪裡拿資訊」，MLP 決定「拿到之後要想什麼」，殘差確保「兩者都只是往共用主幹上添加，而不是覆蓋」。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 14 fig 7 · lm_head ═══════════ -->
+<section class="slide std" data-station="4">
+  <header>
+    <h1><span class="figno">Fig 7</span>lm_head — a vector back into a letter</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 606 560">
+        <rect x="178" y="14" width="250" height="40" class="tint-bus"/>
+        <text x="303" y="39" class="tn mid" style="fill:var(--ink)">final x on the main line (16)</text>
+        <path d="M303 54 V82" class="wire-bus" marker-end="url(#ar-bus)"/>
+        <text x="303" y="74" class="ts mid">a <tspan style="fill:var(--ink)">dot product</tspan> with each of the 27 candidate rows (<tspan class="ts">⊙</tspan>)</text>
+        <text x="303" y="96" class="td mid">each row is 16-dim; each yields one logit</text>
+        <rect x="60" y="114" width="170" height="34" class="box"/>
+        <text x="145" y="136" class="tn mid" style="fill:var(--ink)">row for “a”</text>
+        <text x="258" y="136" class="ts mid">⊙</text>
+        <rect x="300" y="122" width="161" height="18" rx="3" class="bar-bus"/>
+        <text x="469" y="136" class="tn">+1.8</text>
+        <rect x="60" y="154" width="170" height="34" class="box"/>
+        <text x="145" y="176" class="tn mid" style="fill:var(--ink)">row for “e”</text>
+        <text x="258" y="176" class="ts mid">⊙</text>
+        <rect x="300" y="162" width="109" height="18" rx="3" class="bar-bus"/>
+        <text x="417" y="176" class="tn">+0.4</text>
+        <rect x="60" y="194" width="170" height="34" class="tint-now"/>
+        <text x="145" y="216" class="tn mid" style="fill:var(--ink)">row for “m”</text>
+        <text x="258" y="216" class="ts mid">⊙</text>
+        <rect x="300" y="202" width="210" height="18" rx="3" class="bar-bus"/>
+        <text x="518" y="216" class="tn" style="fill:var(--ink);font-weight:600">+3.1</text>
+        <text x="145" y="248" class="ts mid">⋮</text>
+        <rect x="60" y="262" width="170" height="34" class="box"/>
+        <text x="145" y="284" class="tn mid" style="fill:var(--ink)">row for “z”</text>
+        <text x="258" y="284" class="ts mid">⊙</text>
+        <rect x="300" y="270" width="19" height="18" rx="3" class="bar-bus"/>
+        <text x="327" y="284" class="tn">−2.0</text>
+        <text x="303" y="326" class="ts mid">whichever matches the current x best gets the highest logit — reading out, not thinking</text>
+
+        <rect x="0" y="348" width="606" height="96" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <text x="30" y="382" class="ts">Back to the dot product of Warm-up 3a: its size depends on two things</text>
+        <text x="30" y="412" class="t"><tspan fill="var(--c-bus)">① the directions</tspan>　　<tspan fill="var(--c-now)">② the scale on both sides</tspan></text>
+        <text x="30" y="434" class="td">Scale amplifies negative scores as well as positive; it is no fixed bias or head start</text>
+
+        <rect x="0" y="464" width="606" height="82" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="464" width="4" height="82" class="f-bus"/>
+        <text x="26" y="492" class="t" style="font-weight:600">It no longer reasons — it only outputs</text>
+        <text x="26" y="516" class="ts">Purely linear · one position · no relu · no other tokens. Translating needs only a dictionary.</text>
+        <text x="26" y="538" class="td"><tspan style="fill:var(--ink2)">Because it is this simple, everything before must do the work</tspan> — all pressure comes through here.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · the exit</span><span>structurally unable to reason</span></div>
+        <div class="codebody">
+<div class="codesep"><b>Same shape (27 × 16)</b> · opposite directions, independent weights</div>
+<pre class="py" data-hl="81:bus">
+81	state_dict = {'wte': matrix(vocab_size, n_embd),
+	↪ 'wpe': matrix(block_size, n_embd),
+	↪ 'lm_head': matrix(vocab_size, n_embd)}
+	# lm_head has wte's shape but not its weights
+</pre>
+<div class="codesep"><b>All of the “translation”</b> · one line of dot products, no relu</div>
+<pre class="py" data-hl="143:bus">
+94	def linear(x, w):
+95	    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+⋯
+143	logits = linear(x, state_dict['lm_head'])
+	# the last matrix: 27 candidate rows, one score each
+144	return logits
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 7・lm_head</span>
+    <ul>
+      <li>MLP 算完後主幹上那 16 個數字仍是<b>內部語言</b>——第 8 維不代表「字母 m」，它沒有名字。lm_head 是唯一把內部語言翻回外部符號的地方。</li>
+      <li><b>回收預 3a 埋的那句</b>：內積同時受方向關係與數值尺度影響；尺度會放大正分也會放大負分，不能當成固定 bias。這份程式沒有 bias 參數。</li>
+      <li><b>正因為它笨，前面才被逼得聰明</b>：訓練壓力全要穿過 lm_head，唯一能讓 loss 下降的方式，就是逼 Attention＋MLP 把向量準備到「只差一次內積就能讀出答案」。</li>
+      <li>比喻：MLP 是在腦中想清楚；lm_head 是<b>張嘴的那一瞬間</b>——出口只有 27 個字母，必須挑一個。壓縮發生在這裡，思考不在這裡。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 15 fig 8 · sampling ═══════════ -->
+<section class="slide std" data-station="5">
+  <header>
+    <h1><span class="figno">Fig 8</span>Sampling — the only random choice here</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <rect x="30" y="16" width="160" height="36" class="box"/>
+        <text x="110" y="39" class="tn mid" style="fill:var(--ink)">27 logits</text>
+        <path d="M110 52 V74" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="78" width="160" height="36" class="box"/>
+        <text x="110" y="101" class="tn mid" style="fill:var(--ink)">÷ temperature</text>
+        <text x="110" y="136" class="td mid">0.5 → wider gaps · safer</text>
+        <text x="110" y="154" class="td mid">1.5 → flatter · more random</text><text x="110" y="172" class="td mid" style="font-size:11px">÷0.5 doubles the gaps (1.3 apart → 2.6)</text><text x="110" y="188" class="td mid" style="font-size:11px">softmax reads the <tspan style="fill:var(--ink2)">gap</tspan>, not the ratio</text>
+        <path d="M110 196 V204" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="208" width="160" height="36" class="box"/>
+        <text x="110" y="231" class="tn mid" style="fill:var(--ink)">softmax</text>
+        <text x="110" y="254" class="td mid">squeezes 27 scores into</text>
+        <text x="110" y="270" class="td mid">shares adding to exactly 100%</text>
+        <path d="M110 278 V296" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="30" y="300" width="160" height="40" class="tint-rand"/>
+        <text x="110" y="325" class="ts mid" style="fill:var(--ink);font-weight:600">one weighted draw</text>
+        <text x="110" y="362" class="ts mid" style="fill:var(--c-rand)">the only randomness here</text>
+        <path d="M110 372 V392" class="wire-rand" marker-end="url(#ar-rand)"/>
+        <text x="110" y="416" class="mid" style="font:600 17px var(--mono);fill:var(--ink)">one letter</text>
+
+        <text x="260" y="30" class="ts">With only BOS — what the model expects first (illustrative)</text>
+        <text x="272" y="62" class="tn mid">a</text>
+        <rect x="292" y="46" width="250" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="96" class="tn mid">m</text>
+        <rect x="292" y="80" width="185" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="130" class="tn mid">j</text>
+        <rect x="292" y="114" width="148" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="164" class="tn mid">k</text>
+        <rect x="292" y="148" width="117" height="22" rx="3" class="bar-bus"/>
+        <text x="272" y="192" class="tn mid">⋮</text>
+        <text x="272" y="224" class="tn mid">x</text>
+        <rect x="292" y="208" width="4" height="22" rx="2" class="bar-bus"/>
+        <text x="310" y="224" class="td">← almost no name starts with x</text>
+
+        <text x="260" y="286" class="ts">After seeing e, m, m, a</text>
+        <text x="272" y="318" class="tn mid" style="font-size:11.5px">BOS</text>
+        <rect x="292" y="302" width="290" height="22" rx="3" class="bar-rand"/>
+        <text x="292" y="348" class="ts" style="fill:var(--c-rand)">“the name is over” — very high probability</text>
+        <text x="272" y="382" class="tn mid">n</text>
+        <rect x="292" y="366" width="9" height="22" rx="2" class="bar-grey"/>
+        <text x="272" y="414" class="tn mid">l</text>
+        <rect x="292" y="398" width="6" height="22" rx="2" class="bar-grey"/>
+
+        <text x="320" y="500" class="t mid" style="font-weight:650">Vowels versus consonants, name length — nobody specified any of it</text>
+        <text x="320" y="530" class="ts mid">This distribution is a by-product of guessing the next letter — that is what learning looks like</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · sampling</span><span>randomness only in choices</span></div>
+        <div class="codebody">
+<div class="codesep"><b>Temperature</b> · just dividing the scores</div>
+<pre class="py" data-hl="187:rand">
+187	temperature = 0.5 # in (0, 1], control the …
+</pre>
+<div class="codesep"><b>The draw</b> · weighted by the shares softmax produced</div>
+<pre class="py" data-hl="195-196:rand">
+193	for pos_id in range(block_size):
+194	    logits = gpt(token_id, pos_id, keys, values)
+195	    probs = softmax([l / temperature for l in logits])
+	# temperature just divides the scores
+196	    token_id = random.choices(range(vocab_size),
+	↪         weights=[p.data for p in probs])[0]
+	# the only random choice in generation, this one line
+197	    if token_id == BOS:
+198	        break
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 8・抽樣</span>
+    <ul>
+      <li>模型從沒被告知「字母分母音子音」、沒被告知「名字通常幾個字母」——分佈完全是「猜下一個字母」這件事的<b>副產品</b>。</li>
+      <li>前面全是確定性的乘加；同一個模型每次跑出不同名字，原因只在這一格。</li>
+      <li>溫度 0.5 拉大差距更保守、1.5 壓平更隨機——它只是在 softmax 前把分數除一下。（temperature 在圖 1 的配碼露過臉，這裡才是主場。）</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 16 fig 9 · autoregression ═══════════ -->
+<section class="slide std" data-station="1,2,3,4,5">
+  <header>
+    <h1><span class="figno">Fig 9</span>Autoregression — putting it all together</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:13px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="70" y="24" class="td mid">round 1</text>
+        <text x="195" y="24" class="td mid">round 2</text>
+        <text x="320" y="24" class="td mid">round 3</text>
+        <text x="445" y="24" class="td mid">round 4</text>
+        <text x="570" y="24" class="td mid">round 5</text>
+        <text x="70" y="54" class="mid" style="font:15px var(--mono);fill:var(--ink)">BOS</text>
+        <text x="195" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">e</text>
+        <text x="320" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="445" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="570" y="54" class="mid" style="font:15px var(--mono);fill:var(--c-now)">a</text>
+        <text x="70" y="72" class="td mid" style="font-size:11px">pos 0</text>
+        <text x="195" y="72" class="td mid" style="font-size:11px">pos 1</text>
+        <text x="320" y="72" class="td mid" style="font-size:11px">pos 2</text>
+        <text x="445" y="72" class="td mid" style="font-size:11px">pos 3</text>
+        <text x="570" y="72" class="td mid" style="font-size:11px">pos 4</text>
+        <rect x="32" y="84" width="76" height="34" class="box"/>
+        <text x="70" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="157" y="84" width="76" height="34" class="box"/>
+        <text x="195" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="282" y="84" width="76" height="34" class="box"/>
+        <text x="320" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="407" y="84" width="76" height="34" class="box"/>
+        <text x="445" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <rect x="532" y="84" width="76" height="34" class="box"/>
+        <text x="570" y="106" class="tn mid" style="fill:var(--ink)">GPT</text>
+        <path d="M70 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M195 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M320 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M445 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <path d="M570 118 V136" class="wire" marker-end="url(#ar-grey)"/>
+        <text x="70" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">e</text>
+        <text x="195" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="320" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">m</text>
+        <text x="445" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-now)">a</text>
+        <text x="570" y="158" class="mid" style="font:600 15px var(--mono);fill:var(--c-rand)">BOS</text>
+        <path d="M84 158 L179 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <path d="M209 158 L304 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <path d="M334 158 L429 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <path d="M459 158 L554 50" class="wire-now dash" marker-end="url(#ar-now)"/>
+        <text x="570" y="184" class="ts mid" style="fill:var(--c-rand)">BOS drawn → stop</text>
+        <text x="255" y="184" class="td mid">the letter drawn becomes the next round's input</text>
+
+        <line x1="0" y1="208" x2="641" y2="208" class="axis"/>
+        <text x="0" y="238" class="ts">The KV cache grows each round — what is already there is never recomputed:</text>
+        <text x="44" y="276" class="td end">round 1</text>
+        <rect x="56" y="256" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="102" y="276" class="tn mid" style="fill:var(--ink)">k₀ v₀</text>
+        <text x="44" y="316" class="td end">round 2</text>
+        <rect x="56" y="296" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="316" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="296" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="202" y="316" class="tn mid" style="fill:var(--ink)">k₁ v₁</text>
+        <text x="44" y="356" class="td end">round 3</text>
+        <rect x="56" y="336" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="356" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="336" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="202" y="356" class="tn mid">k₁ v₁</text>
+        <rect x="256" y="336" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="302" y="356" class="tn mid" style="fill:var(--ink)">k₂ v₂</text>
+        <text x="44" y="396" class="td end">round 4</text>
+        <rect x="56" y="376" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="396" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="376" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="202" y="396" class="tn mid">k₁ v₁</text>
+        <rect x="256" y="376" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="302" y="396" class="tn mid">k₂ v₂</text>
+        <rect x="356" y="376" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="402" y="396" class="tn mid" style="fill:var(--ink)">k₃ v₃</text>
+        <text x="44" y="436" class="td end">round 5</text>
+        <rect x="56" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="102" y="436" class="tn mid">k₀ v₀</text>
+        <rect x="156" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="202" y="436" class="tn mid">k₁ v₁</text>
+        <rect x="256" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="302" y="436" class="tn mid">k₂ v₂</text>
+        <rect x="356" y="416" width="92" height="30" class="tint-kv" rx="6"/>
+        <text x="402" y="436" class="tn mid">k₃ v₃</text>
+        <rect x="456" y="416" width="92" height="30" class="tint-now" rx="6"/>
+        <text x="502" y="436" class="tn mid" style="fill:var(--ink)">k₄ v₄</text>
+        <rect x="480" y="284" width="14" height="14" class="tint-now" rx="3"/>
+        <text x="502" y="296" class="td">new (rightmost only)</text>
+        <rect x="480" y="312" width="14" height="14" class="tint-kv" rx="3"/>
+        <text x="502" y="324" class="td">reused as is</text>
+
+        <text x="320" y="488" class="mid" style="font-size:16px;fill:var(--ink2)">Final output: <tspan style="font:700 26px var(--mono)" fill="var(--ink)">emma</tspan></text>
+        <text x="320" y="518" class="ts mid" style="fill:var(--ink)">each forward returns scores; sampling picks one token, which goes into the next round</text>
+        <text x="320" y="540" class="td mid">old k/v are not recomputed, yet the new q still scores every position in the cache</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · one name</span><span>the Fig 1 flow, state in focus</span></div>
+        <div class="codebody">
+<div class="codesep"><b>Only the new k, v are appended each round</b> (inside gpt())</div>
+<pre class="py" data-hl="121-122:kv">
+121	keys[li].append(k)   # only the new one, each round
+122	values[li].append(v)
+</pre>
+<div class="codesep"><b>One letter per round</b> · the cache resets for every name</div>
+<pre class="py" data-hl="190:kv,196:rand,199:now">
+190	keys, values = [[] for _ in range(n_layer)],
+	↪     [[] for _ in range(n_layer)]
+	# reset for every name
+191	token_id = BOS
+192	sample = []
+193	for pos_id in range(block_size):
+194	    logits = gpt(token_id, pos_id, keys, values)
+195	    probs = softmax([l / temperature for l in logits])
+196	    token_id = random.choices(range(vocab_size),
+	↪         weights=[p.data for p in probs])[0]
+197	    if token_id == BOS:
+198	        break
+199	    sample.append(uchars[token_id])
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 9・自迴歸（收攏全局）</span>
+    <ul>
+      <li><b>一次 forward 回傳下一字的分數</b>，抽樣才選出一個 token；選出的 token 再成為下一輪輸入。</li>
+      <li><b>KV cache 的意義</b>：每輪只有當下 token 的 k、v 是新的，過去的直接沿用；但新的 q 仍會讀取並對全部歷史 k 打分。</li>
+      <li>這也是為什麼 <b>q 只有一個而 k/v 有一串</b>——回頭呼應 4a-0／4a（4a-0 埋的那句：k、v 留給後人查，q 用完即丟）。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ fig 9.5 · how the notes travel back ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Fig 9.5</span>From generating back to learning</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:12.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="18" class="ts"><tspan class="tb">①　Forward</tspan>　shown on a toy expression of just two steps</text>
+
+        <rect x="0" y="30" width="64" height="34" class="tint-bus" rx="7"/>
+        <text x="32" y="52" class="tn mid" style="fill:var(--ink)">w = 2</text>
+        <text x="78" y="53" class="t mid">×</text>
+        <rect x="92" y="30" width="64" height="34" class="tint-bus" rx="7"/>
+        <text x="124" y="52" class="tn mid" style="fill:var(--ink)">x = 3</text>
+        <path d="M160 47 H196" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="202" y="30" width="70" height="34" class="box" rx="7"/>
+        <text x="237" y="52" class="tn mid" style="fill:var(--ink)">y = 6</text>
+        <text x="292" y="52" class="td">← intermediate</text>
+
+        <rect x="0" y="76" width="64" height="34" class="box" rx="7"/>
+        <text x="32" y="98" class="tn mid" style="fill:var(--ink)">y = 6</text>
+        <text x="78" y="99" class="t mid">＋</text>
+        <rect x="92" y="76" width="64" height="34" class="tint-bus" rx="7"/>
+        <text x="124" y="98" class="tn mid" style="fill:var(--ink)">c = 1</text>
+        <path d="M160 93 H196" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="202" y="76" width="70" height="34" class="tint-now" rx="7"/>
+        <text x="237" y="98" class="tn mid" style="fill:var(--ink)">L = 7</text>
+        <text x="292" y="98" class="td">← treat as the loss</text>
+
+        <text x="0" y="140" class="ts">As it computes, each step leaves a note (<tspan class="tn" style="font-size:12.5px">_local_grads</tspan>):</text>
+        <text x="16" y="166" class="tn" style="font-size:13px;fill:var(--c-now)">multiply → (3, 2)</text>
+        <text x="176" y="166" class="td">＝ the other operand: move w by 1 and y moves by 3</text>
+        <text x="16" y="188" class="tn" style="font-size:13px;fill:var(--c-now)">add → (1, 1)</text>
+        <text x="176" y="188" class="td">＝ move either by 1 and L moves by 1</text>
+
+        <line x1="0" y1="212" x2="641" y2="212" class="axis"/>
+
+        <text x="0" y="240" class="ts"><tspan class="tb">②　Backward</tspan>　start at L and <tspan class="tb">multiply the notes back</tspan></text>
+
+        <rect x="0" y="254" width="440" height="30" class="tint-now" rx="6"/>
+        <text x="16" y="275" style="font:14px var(--mono);fill:var(--ink)">L.grad = 1</text>
+        <text x="190" y="275" class="td">start: L against itself, ×1</text>
+        <path d="M60 284 V296" class="wire-now"/>
+        <text x="16" y="314" style="font:14px var(--mono);fill:var(--ink)">c.grad = 1 × 1 = 1</text>
+        <text x="190" y="314" class="td">through the add note (1, 1)</text>
+        <text x="16" y="342" style="font:14px var(--mono);fill:var(--ink)">y.grad = 1 × 1 = 1</text>
+        <text x="190" y="342" class="td">through the add note (1, 1)</text>
+        <path d="M60 350 V362" class="wire-now"/>
+        <text x="16" y="380" style="font:14px var(--mono);fill:var(--ink)">w.grad = 1 × 3 = 3</text>
+        <text x="190" y="380" class="td">through the multiply note (3, 2)</text>
+        <text x="16" y="408" style="font:14px var(--mono);fill:var(--ink)">x.grad = 1 × 2 = 2</text>
+        <text x="190" y="408" class="td">through the multiply note (3, 2)</text>
+        <text x="400" y="352" class="ts" style="fill:var(--c-now)">Each node does one thing:</text>
+        <text x="400" y="376" class="ts" style="fill:var(--c-now)">the note × its own grad,</text>
+        <text x="400" y="400" class="ts" style="fill:var(--c-now)">handed to its sources. Done.</text>
+
+        <rect x="0" y="436" width="641" height="72" rx="12" fill="rgba(201,133,0,.08)" stroke="var(--c-now)" stroke-width="1.4"/>
+        <text x="22" y="466" class="tb"><tspan style="font-family:var(--mono)">w.grad = 3</tspan> means: move w from 2 to 2.001 and L goes from 7 to 7.003.</text>
+        <text x="22" y="494" class="ts">That number is the <tspan class="tb">gradient</tspan>. To lower L, nudge the <tspan class="tb">other way</tspan> — training is no more than this.</text>
+
+        <text x="0" y="526" class="td">In the real model, one backward walk over the same graph accumulates gradients for all 4,192 parameters.</text>
+        <text x="0" y="548" class="td">Add notes are all 1, and ×1 passes through unchanged — that is the residual highway of Fig 6.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · the notes</span><span>held back until now</span></div>
+        <div class="codebody">
+<div class="codesep"><b>The note each operation writes</b> · the value in the parentheses</div>
+<pre class="py" data-hl="41:now,45:now">
+39	def __add__(self, other):   # a + b
+41	    return Value(self.data + other.data,
+	↪     (self, other), (1, 1))
+	# ★ add: 1 on both sides
+43	def __mul__(self, other):   # a * b
+45	    return Value(self.data * other.data,
+	↪     (self, other), (other.data, self.data))
+	# ★ multiply: the note holds the other operand
+50	def relu(self): … (float(self.data &gt; 0),)
+	# ★ relu: 1 or 0 — a closed path passes nothing
+</pre>
+<div class="codesep"><b>The core of backward() is three lines</b> · L59–72</div>
+<pre class="py" data-hl="69:now,72:now">
+69	self.grad = 1   # ★ start from the loss
+70	for v in reversed(topo):   # one pass, back to front
+71	    for child, local_grad in
+	↪         zip(v._children, v._local_grads):
+72	        child.grad += local_grad * v.grad
+	# ★ the table above ＝ this line, run five times
+</pre>
+        </div>
+        <div class="codesep">topo ＝ the nodes ordered first, so that on the way back <b>every upstream grad is already final</b>.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 9.5・把預 5 欠的帳還掉</span>
+    <ul>
+      <li><b>這頁是全場唯一還過的一筆大帳</b>：預 5、圖 0、預 4a 各埋過一次「圖 9.5 收」——收在這裡。不講，聽眾會帶著「所以它到底怎麼學」聽完整場。</li>
+      <li><b>一定要在投影片上手算一次</b>，不要只講原理。五行乘法，每個人都跟得上——跟完之後「反向傳播」就不再是名詞，是他剛剛做過的事。</li>
+      <li>梯度的定義只講這一句：<b>「這個參數挪一點點，loss 會跟著挪幾倍」</b>。不要講偏微分、不要畫切線。</li>
+      <li>回收圖 6：加法的便條是 (1, 1)，乘 1 等於原封不動——所以殘差那條主幹，梯度可以一路直達最前面不衰減。<b>圖 6 說「殘差讓層數多不會傷害模型」，理由現在才完整。</b></li>
+      <li>回收預 4a：relu 的便條是 0 或 1——沒開口的偵測器，這一輪完全不會被調整。</li>
+      <li>尾鉤：現在知道每個參數該往哪動了，下一頁看它怎麼真的動——以及一筆「emma」到底給了幾個學習訊號。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 17 fig 10 · training ═══════════ -->
+<section class="slide std" data-station="">
+  <header>
+    <h1><span class="figno">Fig 10</span>Training — one goal: guess the next letter</h1>
+    <nav class="map"></nav>
+  </header>
+  <div class="cols" style="--split:55fr 45fr;--code-fs:12.5px">
+    <div class="pane left">
+      <svg viewBox="0 0 641 560">
+        <text x="0" y="20" class="td">One training example: “emma” · every question is fed the real previous letter, never the model's own draw</text>
+        <rect x="30" y="32" width="70" height="40" class="tint-now" rx="8"/>
+        <text x="65" y="58" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <rect x="128" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="163" y="58" class="tn mid" style="fill:var(--ink)">e</text>
+        <rect x="226" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="261" y="58" class="tn mid" style="fill:var(--ink)">m</text>
+        <rect x="324" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="359" y="58" class="tn mid" style="fill:var(--ink)">m</text>
+        <rect x="422" y="32" width="70" height="40" class="box" rx="8"/>
+        <text x="457" y="58" class="tn mid" style="fill:var(--ink)">a</text>
+        <rect x="520" y="32" width="70" height="40" class="tint-now" rx="8"/>
+        <text x="555" y="58" class="tn mid" style="fill:var(--ink)">BOS</text>
+        <path d="M65 76 Q114 112 159 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M163 76 Q212 112 257 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M261 76 Q310 112 355 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M359 76 Q408 112 453 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <path d="M457 76 Q506 112 551 78" fill="none" class="wire-now" marker-end="url(#ar-now)"/>
+        <text x="114" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="212" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="310" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="408" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="506" y="116" class="ts mid" style="fill:var(--c-now)">?</text>
+        <text x="320" y="152" class="t mid" style="font-weight:600">One computation per position: “what is the next letter?”</text>
+        <text x="320" y="176" class="td mid">one “emma” ＝ 5 learning signals, not 1</text>
+
+        <rect x="140" y="196" width="360" height="58" class="box" rx="10"/>
+        <text x="320" y="220" class="tn mid" style="fill:var(--ink)">loss ＝ −log P(correct answer)</text>
+        <text x="320" y="242" class="td mid">computed at each position, then averaged</text>
+        <text x="508" y="204" class="td">lower odds,</text>
+        <text x="508" y="224" class="td">heavier penalty</text>
+        <text x="508" y="248" class="td" style="font-family:var(--mono)">1 → 0</text>
+        <text x="508" y="266" class="td" style="font-family:var(--mono)">0.01 → 4.6</text>
+        <path d="M320 254 V274" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="140" y="278" width="360" height="58" class="tint-now" rx="10"/>
+        <text x="320" y="302" class="mid" style="font:600 15px var(--mono);fill:var(--ink)">loss.backward()</text>
+        <text x="320" y="324" class="ts mid">one backward pass over the same graph → 4,192 gradients</text>
+        <path d="M320 336 V356" class="wire" marker-end="url(#ar-grey)"/>
+        <rect x="140" y="360" width="360" height="58" class="box" rx="10"/>
+        <text x="320" y="384" class="t mid" style="font-weight:600">Adam — a small step for each of the 4,192</text>
+        <text x="320" y="406" class="td mid">avg of the gradient ÷ √avg of its square</text>
+        <path d="M500 389 H604 V52 H596" class="wire dash" marker-end="url(#ar-grey)"/>
+        <text transform="rotate(-90 620 240)" x="620" y="240" class="td mid">then on to the next training step</text>
+
+        <rect x="0" y="452" width="641" height="88" rx="12" fill="#1f1f1e" stroke="rgba(255,255,255,.10)"/>
+        <rect x="0" y="452" width="4" height="88" class="f-now"/>
+        <text x="26" y="486" class="t" style="font-weight:600">Training has exactly one task — guess the next letter</text>
+        <text x="26" y="512" class="ts">The chain rule runs through lm_head, MLP, attention and embedding, adjusting every parameter.</text>
+        <text x="26" y="534" class="td">Vowels and consonants, name length — all of it is a by-product.</text>
+      </svg>
+    </div>
+    <div class="pane right">
+      <div class="codecard">
+        <div class="codehead"><span>microgpt_en.py · one training step</span><span>nothing exotic about Adam</span></div>
+        <div class="codebody">
+<pre class="py" data-hl="165:bus,167:now,172:now">
+156	doc = docs[step % len(docs)]   # ★ step: which step
+157	tokens = [BOS] + [uchars.index(ch) for ch in doc] + [BOS]
+158	n = min(block_size, len(tokens) - 1)   # ★ n: how many signals
+⋯
+163	for pos_id in range(n):
+164	    token_id, target_id = tokens[pos_id],
+	↪         tokens[pos_id + 1]
+	# ★ target_id: the correct answer ＝ the next letter
+165	    logits = gpt(token_id, pos_id, keys, values)
+166	    probs = softmax(logits)
+167	    loss_t = -probs[target_id].log()
+	# ★ loss_t / loss: the error (−log of the correct prob)
+168	    losses.append(loss_t)
+169	loss = (1 / n) * sum(losses) # final average loss …
+⋯
+172	loss.backward()   # which way each parameter lowers the loss
+⋯
+175	lr_t = learning_rate * (1 - step / num_steps) # …
+	# ★ lr_t / num_steps: step size decays / 1,000 steps total
+176	for i, p in enumerate(params):   # ★ p: all 4,192, one by one
+177	    m[i] = beta1 * m[i] + (1 - beta1) * p.grad
+	# ★ m / v: Adam's two statistics (unrelated to attention v)
+178	    v[i] = beta2 * v[i] + (1 - beta2) * p.grad ** 2
+⋯
+181	    p.data -= lr_t * m_hat / (v_hat ** 0.5 + eps_adam)
+182	    p.grad = 0
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><span class="ntag">圖 10・訓練</span>
+    <ul>
+      <li>訓練從頭到尾只有一個任務——<b>猜下一個字母</b>。沒人教母音子音、沒人教名字長度，全部是順便學會的。</li>
+      <li>losses 是<b>整個名字每個位置各算一次再平均</b>：一筆資料提供 5 個學習訊號，不是 1 個。</li>
+      <li><b>backward() 這格不要再解釋一次</b>——圖 9.5 剛手算過。一句話帶過：「同一套鏈式法則反向走過整張計算圖，一次累積 4,192 個梯度。」</li>
+      <li>訓練時使用的是<b>真實序列的前一個 token</b>，不是模型剛抽到的 token；梯度會一路穿過 lm_head、MLP、attention、embedding。</li>
+      <li>loss 為什麼取 <b>−log</b>：機率 1 → 罰 0；機率 0.9 → 罰 0.1；機率 0.01 → 罰 4.6。<b>越是把正確答案說成不可能，罰得越兇</b>。就這樣，不用講 cross entropy。</li>
+      <li>Adam 沒有黑魔法：就是「梯度的移動平均 ÷ 梯度平方的移動平均開根號」。<b>不懂也不影響理解全場</b>——它只決定「挪多大一步」，方向早在 backward() 就算完了。真的沒時間就說這一句然後跳過右欄下半。</li>
+      <li><b>撞名提醒</b>：Adam 的 m／v 這個 v 跟 attention 的 v 純粹撞名——作者省字母重用了，先點破，聽眾就不會亂連結。</li>
+    </ul>
+  </aside>
+</section>
+<!-- ═══════════ 18 wrap-up ═══════════ -->
+<section class="slide hero" data-station="">
+  <div class="heroBox">
+    <div class="kicker">The whole Transformer in three lines</div>
+    <div style="margin-top:34px">
+      <div style="display:flex;align-items:baseline;gap:22px;justify-content:center;margin:20px 0">
+        <b style="font:650 30px var(--sans);color:var(--c-attn);width:230px;text-align:right">Attention moves</b>
+        <span style="font-size:21px;color:var(--ink2);width:420px;text-align:left">decides where to take information from</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:22px;justify-content:center;margin:20px 0">
+        <b style="font:650 30px var(--sans);color:var(--c-mlp);width:230px;text-align:right">MLP refines</b>
+        <span style="font-size:21px;color:var(--ink2);width:420px;text-align:left">decides what to make of what it took</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:22px;justify-content:center;margin:20px 0">
+        <b style="font:650 30px var(--sans);color:var(--c-bus);width:230px;text-align:right">Residual adds</b>
+        <span style="font-size:21px;color:var(--ink2);width:420px;text-align:left">both only add to the main line, never overwrite</span>
+      </div>
+    </div>
+    <svg viewBox="0 0 900 136" style="width:820px;height:124px;margin-top:26px">
+      <text x="40" y="66" class="tn mid" style="font-size:15px">BOS</text>
+      <path d="M62 62 H92" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="96" y="42" width="118" height="40" class="box"/><text x="155" y="67" class="ts mid">Tokenizer</text>
+      <path d="M214 62 H240" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="244" y="42" width="126" height="40" class="tint-bus"/><text x="307" y="67" class="ts mid">Embedding</text>
+      <path d="M370 62 H396" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="400" y="30" width="150" height="64" class="box"/>
+      <text x="475" y="55" class="ts mid" style="fill:var(--c-attn)">Attention</text>
+      <text x="475" y="79" class="ts mid" style="fill:var(--c-mlp)">＋ MLP</text>
+      <path d="M550 62 H576" class="wire-bus" marker-end="url(#ar-bus)"/>
+      <rect x="580" y="42" width="110" height="40" class="tint-bus"/><text x="635" y="67" class="ts mid">lm_head</text>
+      <path d="M690 62 H716" class="wire" marker-end="url(#ar-grey)"/>
+      <rect x="720" y="42" width="86" height="40" class="tint-rand"/><text x="763" y="61" class="ts mid">Sampling</text><text x="763" y="77" class="td mid" style="fill:var(--c-rand)">randomness</text>
+      <path d="M806 62 H836" class="wire-rand" marker-end="url(#ar-rand)"/>
+      <text x="852" y="68" class="th" style="font-family:var(--mono);fill:var(--c-now)">a</text>
+      <path d="M763 90 V106 H40 V80" class="wire dash" marker-end="url(#ar-grey)"/>
+      <text x="450" y="128" class="td mid">autoregression: the letter drawn becomes the next round's input</text>
+      <path d="M400 20 V6 H550 V20" class="wire-attn" opacity=".7"/>
+      <text x="475" y="18" class="td mid" style="fill:var(--c-attn)">the three lines above</text>
+    </svg>
+    <div class="hint" style="margin-top:16px;font-size:15px;color:var(--c-now)">
+      Training: the correct next letter → loss → backward → Adam → update all 4,192 parameters
+    </div>
+    <div class="hint" style="margin-top:10px;font-size:15px;color:var(--ink2)">
+      More layers ＝ the same thing again　·　Today's large models ＝ the same thing, orders of magnitude bigger
+    </div>
+    <div class="hint" style="margin-top:8px">4,192 numbers · 200 lines of pure Python — addition, multiplication and one threshold, start to finish</div>
+  </div>
+  <aside class="notes"><span class="ntag">總結</span>
+    <ul>
+      <li>收全場：三個顏色跟著三個角色走了一整場——橘色搬運、綠色加工、藍色主幹。</li>
+      <li>最後把訓練也收回來：正確下一字產生 loss，backward 算梯度，Adam 更新那 4,192 個參數。</li>
+      <li>多層 Transformer＝同一件事再做一次；大模型＝同一件事做大很多倍。</li>
+    </ul>
+  </aside>
+</section>
+
+<!-- ═══════════ 19 extras / Q&A ═══════════ -->
+<section class="slide hero" data-station="">
+  <div class="heroBox">
+    <div class="kicker">Extras · further topics</div>
+    <h1 style="font-size:38px">Three directions</h1>
+    <div class="cards">
+      <div class="card">
+        <h3>What the real weights look like</h3>
+        <p>Inspecting a trained checkpoint: the lengths and angles of wpe, and what all four heads actually attend to at one moment.</p>
+        <p class="mono" style="margin-top:10px">scripts/dump_position.py<br>scripts/dump_attention.py</p>
+      </div>
+      <div class="card">
+        <h3>Switching to a Chinese dataset</h3>
+        <p>One character per token pushes the vocabulary past 700 while block_size shrinks — the same code, a completely different split of parameters.</p>
+        <p class="mono" style="margin-top:10px">microgpt.py (names from Jin Yong novels)</p>
+      </div>
+      <div class="card">
+        <h3>What longer training does</h3>
+        <p>The loss keeps falling, but the model starts memorising: generated names land exactly on the training data — overfitting made concrete.</p>
+        <p class="mono" style="margin-top:10px">EXPERIMENTS.md</p>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:40px;font-size:22px;color:var(--ink)">Q &amp; A</div>
+  </div>
+  <aside class="notes"><span class="ntag">補充</span>
+    <ul>
+      <li>這三題都有數字撐著，才適合說「模型自己學會了沒人教它的東西」。</li>
+      <li>中文實驗：名字只有 2–5 個字，block_size 變小、vocab 爆增——參數量的分佈完全變樣。</li>
+      <li><b>有人問「128K context 怎麼來的」時才講</b>（圖 3b 刻意留的）：wpe 這種查表法，超過列數就是 IndexError。現代模型改成不查表——把位置變成一個<b>旋轉角度</b>，直接轉在 q 和 k 上（RoPE）。角度可以一直往下算，所以能外推到訓練時沒看過的長度。這需要聽眾已經懂 q/k，所以擺在最後。</li>
+    </ul>
+  </aside>
+</section>
+
+<div id="pageno"></div>
+</div>
+
+<script>
+/* ---------- mini route map ---------- */
+const STATIONS=['Tokenizer','Embedding','Block','lm_head','Sampling'];
+document.querySelectorAll('.map').forEach(nav=>{
+  const on=(nav.closest('.slide').dataset.station||'').split(',').filter(Boolean).map(Number);
+  // without this label the chips do not read as a route map, and nobody can tell where they are
+  const label=on.length?'You are here':'Route map · not there yet';
+  nav.innerHTML=`<span class="maplabel">${label}</span>`+STATIONS.map((n,i)=>
+    `<span class="chip${on.includes(i+1)?' on':''}"><b>${i+1}</b>${n}</span>`
+  ).join('<i class="tick"></i>');
+});
+
+/* ---------- code rendering: line-number gutter + syntax highlight + data-hl semantic marks ---------- */
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function paint(s){
+  s=esc(s);
+  s=s.replace(/(#.*$)|((?:[frbu]{1,2})?(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"))|\b(def|class|return|for|in|if|elif|else|while|break|import|lambda|not|and|or|None|True|False|from|as|with)\b|\b(\d+(?:\.\d+)?(?:e-?\d+)?)\b|\b(linear|softmax|rmsnorm|gpt|matrix|relu|log|exp|backward|range|len|zip|sum|max|min|sorted|set|enumerate|print|append|extend|index|choices|gauss)\b/g,
+    (m,c,st,kw,nu,fn)=> c?`<span class="${c.includes('★')?'anno':'cm'}">${c}</span>`
+      : st?`<span class="st">${st}</span>`
+      : kw?`<span class="kw">${kw}</span>`
+      : nu?`<span class="nu">${nu}</span>`
+      : `<span class="fn">${fn}</span>`);
+  return s.replace(/^(\s*)↪/,'$1<span class="fold">↪</span>');
+}
+document.querySelectorAll('pre.py').forEach(pre=>{
+  const hl={};
+  (pre.dataset.hl||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(seg=>{
+    const [range,cls]=seg.split(':');
+    const [a,b]=range.split('-').map(Number);
+    for(let i=a;i<=(b||a);i++)hl[i]=cls;
+  });
+  const lines=pre.textContent.replace(/^\n+|\n+$/g,'').split('\n');
+  let lastHl='',inComment=false;
+  pre.innerHTML=lines.map(line=>{
+    const t=line.indexOf('\t');
+    const no=t<0?'':line.slice(0,t);
+    const code=t<0?line:line.slice(t+1);
+    const n=parseInt(no,10);
+    const cont=!no&&/^\s*↪/.test(code);
+    let cls='';
+    if(n&&hl[n]){cls=' hl-'+hl[n];lastHl=cls;}
+    else if(cont&&lastHl){cls=lastHl;}
+    else{lastHl='';}
+    let html;
+    if(cont&&inComment){
+      const m=code.match(/^(\s*)↪ ?([\s\S]*)$/);
+      html=`${m[1]}<span class="fold">↪ </span><span class="cm">${esc(m[2])}</span>`;
+    }else{html=paint(code);}
+    if(!cont)inComment=code.includes('#');
+    return `<div class="row${no==='⋯'?' elide':''}${cls}"><span class="no">${no}</span><span class="cd">${html}</span></div>`;
+  }).join('');
+});
+
+/* ---------- stage scaling + navigation ---------- */
+const stage=document.getElementById('stage');
+const slides=[...document.querySelectorAll('.slide')];
+let cur=0;
+function go(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,j)=>s.classList.toggle('active',j===cur));
+  document.getElementById('pageno').textContent=(cur+1)+' / '+slides.length;
+  history.replaceState(null,'','#'+(cur+1));
+}
+function fit(){
+  const s=Math.min(innerWidth/1280,innerHeight/720);
+  stage.style.transform=`translate(-50%,-50%) scale(${s})`;
+}
+addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)){e.preventDefault();go(cur+1);}
+  else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();go(cur-1);}
+  else if(e.key==='Home'){e.preventDefault();go(0);}
+  else if(e.key==='End'){e.preventDefault();go(slides.length-1);}
+  else if(e.key==='n'){document.body.classList.toggle('notes-on');}
+  else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();}
+});
+stage.addEventListener('click',e=>{
+  if(e.target.closest('.notes'))return;
+  go(e.clientX>innerWidth/2?cur+1:cur-1);
+});
+addEventListener('hashchange',()=>go((parseInt(location.hash.slice(1))||1)-1));
+addEventListener('resize',fit);
+go((parseInt(location.hash.slice(1))||1)-1);
+fit();
+document.body.style.visibility='visible';
+</script>
+</body>
+</html>
