@@ -876,26 +876,48 @@ function hud(title, sub, desc, code) {
 const KV_DIM_STEPS = new Set([4, 5]);  // 第四關 RMSNorm、第五關 殘差分岔
 const KV_DIM_LEVEL = 0.12;
 let kvDim = 1, kvDimTarget = 1;
+// 鏡頭貼到記憶櫃臉上時也要讓開:直式版面把記憶櫃排在軌道正上方,第十八、十九關的
+// 高牆鏡頭往後退之後,鏡頭離記憶櫃只剩 35(其他關卡都在 68 以上),整片面板會糊在
+// 鏡頭前面擋住高牆。用距離判斷而不是列舉關卡,任何鏡頭湊太近的情況都一併解決。
+const KV_NEAR_MIN = 50, KV_NEAR_MAX = 72;
+function kvNearFactor() {
+  return clamp((KV_ORIGIN.distanceTo(camera.position) - KV_NEAR_MIN) / (KV_NEAR_MAX - KV_NEAR_MIN), 0, 1);
+}
 // 每格畫面在 render 前把記憶櫃的 opacity 乘上 kvDim、render 完再還原。
 // 不直接改寫材質的「原始」opacity,因為 setRowEmphasis / 第七關存入等處會自己寫 opacity,
 // 記住基準值遲早會漂掉;乘完就還原則永遠跟著當下的狀態走。
 const kvDimMats = [];
+// selfPod(這一輪 m 的 K/V)是第七關才動態建出來的,不在 kvDimRoots 裡,要每格畫面補進來
+function kvDimAll() {
+  return selfPod ? kvDimRoots.concat(selfPod) : kvDimRoots;
+}
 function collectKVDimMats() {
   kvDimMats.length = 0;
-  for (const root of kvDimRoots) {
+  for (const root of kvDimAll()) {
     root.traverse(o => {
       if (!o.material || !o.material.transparent) return;
       // 文字標籤(BOS / e / K / V)是 onTop 的 sprite,不受深度遮擋,在黑底上同樣的
-      // opacity 比方塊搶眼得多;要再壓一級才真的退到背景去
-      kvDimMats.push({ m: o.material, f: o.material.isSpriteMaterial ? 0.15 : 1 });
+      // opacity 比方塊搶眼得多;改用平方讓它壓得更兇(淡化係數 1 時仍然是 1,不會有跳動)
+      kvDimMats.push({ m: o.material, sprite: !!o.material.isSpriteMaterial });
     });
   }
 }
 function renderWithKVDim() {
-  if (kvDim > 0.999) { renderer.render(scene, camera); return; }
+  // 關卡淡化與距離淡化取比較淡的那個
+  const dim = Math.min(kvDim, kvNearFactor());
+  if (dim > 0.999) { renderer.render(scene, camera); return; }
+  // 幾乎全透明時直接不畫:面板是 depthWrite 的透明 mesh,留著會用深度把後面的
+  // softmax 標籤擋掉——看起來就像那塊標籤憑空消失
+  if (dim < 0.02) {
+    const roots = kvDimAll();
+    roots.forEach(o => { o.userData.kvVis = o.visible; o.visible = false; });
+    renderer.render(scene, camera);
+    roots.forEach(o => { o.visible = o.userData.kvVis; });
+    return;
+  }
   collectKVDimMats();
   const saved = kvDimMats.map(e => e.m.opacity);
-  kvDimMats.forEach(e => { e.m.opacity *= kvDim * e.f; });
+  kvDimMats.forEach(e => { e.m.opacity *= e.sprite ? dim * dim : dim; });
   renderer.render(scene, camera);
   kvDimMats.forEach((e, i) => { e.m.opacity = saved[i]; });
 }
