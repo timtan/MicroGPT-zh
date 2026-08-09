@@ -80,6 +80,10 @@ svg text{font-family:var(--sans)}
 .heroBox .sub{font-size:20px;color:var(--ink2)}
 .hint{margin-top:34px;font-size:13px;color:var(--ink3)}
 .hint b{color:var(--ink2);font-weight:500;font-family:var(--mono)}
+.credit{margin-top:14px;font-size:12.5px;color:var(--ink3)}
+.credit a{color:var(--ink3);text-decoration:none;font-family:var(--mono);
+          border-bottom:1px solid rgba(255,255,255,.18)}
+.credit a:hover{color:var(--ink2);border-bottom-color:var(--ink2)}
 .cards{display:flex;gap:20px;justify-content:center;margin-top:34px}
 .card{flex:1;max-width:330px;text-align:left;background:var(--panel);border:1px solid var(--border);
       border-radius:14px;padding:20px 22px}
@@ -136,6 +140,9 @@ svg text{font-family:var(--sans)}
       <line x1="455" y1="44" x2="455" y2="182" class="axis"/>
     </svg>
     <div class="hint"><b>←</b> <b>→</b> 翻頁 ・ <b>f</b> 全螢幕</div>
+    <div class="credit">explanation of the great work
+      <a href="https://karpathy.github.io/2026/02/12/microgpt/" target="_blank" rel="noopener"
+         onclick="event.stopPropagation()">karpathy.github.io/2026/02/12/microgpt</a></div>
   </div>
 </section>
 
