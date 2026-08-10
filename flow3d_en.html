@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MicroGPT 3D Flow — From Letter to Sample</title>
+<link rel="icon" href="data:,">
+<style>
+  /* touch-action: none stops iOS Safari from turning a vertical swipe into rubber-band
+     scrolling, which would swallow the gesture before the handler sees it */
+  html, body { margin: 0; height: 100%; background: #05070f; overflow: hidden; touch-action: none;
+               font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #intro { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 18px; color: #dbe6ff; background: radial-gradient(ellipse at 50% 40%, rgba(20,30,60,.55), rgba(5,7,15,.92));
+           z-index: 20; transition: opacity .6s; cursor: pointer; }
+  #intro.hidden { opacity: 0; pointer-events: none; }
+  #intro h1 { font-size: 40px; font-weight: 700; margin: 0; letter-spacing: 0.5px;
+              background: linear-gradient(90deg, #7dd3fc, #c4b5fd, #fda4af); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #intro p  { margin: 0; font-size: 17px; color: #93a4c8; }
+  #intro .keys { font-size: 14px; color: #64748b; margin-top: 10px; line-height: 1.9; text-align: center; }
+  #intro .keys b { color: #cbd5f5; font-weight: 600; }
+
+  #info { position: fixed; left: 22px; bottom: 22px; max-width: 520px; z-index: 10;
+          background: rgba(8, 12, 26, .78); border: 1px solid rgba(120, 150, 220, .25);
+          border-radius: 14px; padding: 14px 18px; color: #dbe6ff; backdrop-filter: blur(6px);
+          transition: opacity .4s, transform .4s; }
+  #info.hidden { opacity: 0; transform: translateY(12px); }
+  #info .t { font-size: 19px; font-weight: 700; color: #e2ecff; }
+  #info .t small { font-weight: 400; color: #6b7ba3; margin-left: 8px; font-size: 12px; }
+  #info .d { font-size: 14px; color: #9fb0d6; margin-top: 5px; line-height: 1.65; }
+  #info .c { margin-top: 8px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+             color: #8ef0d2; background: rgba(10, 25, 22, .6); border-left: 3px solid #2dd4a7;
+             padding: 6px 10px; border-radius: 6px; white-space: pre; overflow-x: auto; }
+
+  #progress { position: fixed; right: 22px; bottom: 22px; z-index: 10; color: #8093bd; font-size: 13px;
+              background: rgba(8, 12, 26, .7); border: 1px solid rgba(120, 150, 220, .2);
+              border-radius: 999px; padding: 7px 16px; }
+  #progress b { color: #dbe6ff; }
+  #fastfwd { position: fixed; right: 22px; bottom: 62px; z-index: 10; color: #fbbf24; font-size: 12px;
+             opacity: 0; transition: opacity .2s; }
+  #fastfwd.on { opacity: 1; }
+
+  /* Blind tests: several audience batches said "the text is too small, I just didn't read it",
+     and as a result read blue=positive / yellow=negative backwards → enlarged */
+  /* Top-left, not top-right: the KV Cache panel sits in the top-right corner during stages 9–12 */
+  /* 14px, not the Chinese deck's 15px: English is far less dense, and at 15px this panel grew wide
+     enough to reach the Attention gate label near the top of the frame. Still comfortably above the
+     size that drew the "too small to read" complaints. */
+  #legend { position: fixed; left: 22px; top: 18px; z-index: 10; display: none;
+            background: rgba(8, 12, 26, .82); border: 1px solid rgba(120, 150, 220, .3);
+            border-radius: 10px; padding: 9px 16px; color: #b3c4e6; font-size: 14px; line-height: 1.6; }
+  #legend .sw { display: inline-block; width: 13px; height: 13px; border-radius: 3px;
+                vertical-align: -2px; margin: 0 5px 0 12px; }
+
+  /* Touch devices (phone / iPad) get the gesture hints, mouse-and-keyboard devices get the
+     shortcuts. Detect by pointer type rather than width: an iPad in landscape is far wider
+     than 640px but still has no keyboard */
+  .k-touch { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .k-desktop { display: none; }
+    .k-touch { display: block; }
+  }
+
+  @media (max-width: 640px) {
+    #intro h1 { font-size: 26px; letter-spacing: 1px; }
+    #intro p  { font-size: 14px; padding: 0 20px; }
+    #intro .keys { font-size: 12px; }
+
+    #info { left: 10px; right: 10px; bottom: 10px; max-width: none;
+            padding: 10px 12px; border-radius: 10px; }
+    #info .t { font-size: 15px; }
+    #info .t small { display: block; margin-left: 0; margin-top: 2px; }
+    #info .d { font-size: 12px; line-height: 1.5; margin-top: 4px; }
+    #info .c { font-size: 10.5px; padding: 5px 8px; }
+
+    /* The progress pill shares the top band with the legend. Blind testers on phones could not
+       read it on a single frame — the legend is painted over it. Keep the pill on top and reserve
+       a column for it so the legend wraps beside it instead of across it. */
+    #progress { right: 10px; bottom: auto; top: 10px; font-size: 11px; padding: 5px 12px;
+                z-index: 11; max-width: 88px; text-align: right; }
+    #fastfwd { right: 10px; bottom: auto; top: 52px; font-size: 11px; z-index: 11; }
+    /* The legend has to be on phones too (the colour language is a prerequisite for reading
+       the cubes). English wraps at spaces, so wrapping is a clean degradation and no
+       white-space: nowrap is needed here (the Chinese deck needs it, as Chinese breaks mid-word) */
+    #legend { left: 10px; right: 108px; top: 10px;
+              font-size: 10px; line-height: 1.6; padding: 6px 8px; }
+    #legend .sw { width: 9px; height: 9px; margin: 0 3px 0 6px; }
+  }
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="intro">
+  <h1>From Letter to Sample: One Cube's Journey</h1>
+  <p>A 3D visualisation of the MicroGPT forward pass — 16 dims, 4 heads, 1 layer, 4,192 parameters<br>
+  Only 7 places along the whole route use trained parameters (marked in gold); everything else is fixed arithmetic or carrying data.</p>
+  <div class="keys">
+    <div class="k-desktop">
+      <b>Space / click</b> advances to the next stage (press again while playing = fast-forward)<br>
+      <b>←</b> hold on the previous stage &nbsp; <b>R</b> restart &nbsp; <b>F</b> fullscreen<br><br>
+      Click anywhere to begin
+    </div>
+    <div class="k-touch">
+      <b>Swipe up</b> for the next stage &nbsp; <b>swipe down</b> to hold on the previous one<br>
+      A tap also advances (tap again while playing = fast-forward)<br><br>
+      Tap anywhere to begin
+    </div>
+  </div>
+</div>
+
+<div id="info" class="hidden">
+  <div class="t"><span id="info-title"></span><small id="info-sub"></small></div>
+  <div class="d" id="info-desc"></div>
+  <div class="c" id="info-code"></div>
+</div>
+<div id="progress">Press <b>space</b> to begin · 0 / 21</div>
+<div id="fastfwd">⏩ Fast-forwarding</div>
+<div id="legend">
+  <div id="legend-op">Operation<span class="sw" style="background:#fbbf24"></span>trained parameters<span class="sw" style="background:#2dd4a7"></span>fixed arithmetic<span class="sw" style="background:#94a3b8"></span>no computation</div>
+  <div id="legend-val">Cube height = magnitude<span class="sw" style="background:#3ec7de"></span>positive<span class="sw" style="background:#d98a3d"></span>negative · hue shifts by stage</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+// Touch devices have no keyboard, so the HUD hints have to talk about gestures instead
+// (same test as the CSS .k-touch rule)
+const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+/* ================= Basic scene ================= */
+const BG = 0x05070f;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.Fog(BG, 160, 560);
+
+// A portrait screen (phone) needs a different framing: the scene is laid out horizontally,
+// so the desktop parameters would crop it on both sides
+const PORTRAIT = innerWidth / innerHeight < 1.05;
+// The portrait layout is not "the landscape one, shrunk" — it stacks vertically instead:
+// the locker moves directly above and heads 2-4 move below, which uses the height a portrait
+// screen actually has and keeps the two large labels from crowding each other
+const KV_OFF = PORTRAIT ? new THREE.Vector3(30, 52, 0) : new THREE.Vector3(58, 24, 0);
+const P_SPREAD = PORTRAIT ? 0.5 : 1;    // narrower sideways offsets for the residual copy etc.
+const P_CAM = PORTRAIT ? 1.2 : 1;       // pull the camera back a little further
+const P_TXT = PORTRAIT ? 0.132 : 0.11;  // further back means the text has to grow to stay readable
+
+const BASE_FOV = 46, DESIGN_ASPECT = 16 / 9, MAX_FOV = 70;
+const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.1, 1200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.getElementById('app').appendChild(renderer.domElement);
+// On a narrow screen, widen the vertical fov to preserve as much horizontal view as possible
+// (capped, so the perspective distortion does not get absurd)
+function applyCamProjection() {
+  camera.aspect = innerWidth / innerHeight;
+  if (camera.aspect < DESIGN_ASPECT) {
+    const hHalf = Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * DESIGN_ASPECT);
+    const v = 2 * Math.atan(Math.tan(hHalf) / camera.aspect) * 180 / Math.PI;
+    camera.fov = Math.min(MAX_FOV, v);
+  } else camera.fov = BASE_FOV;
+  camera.updateProjectionMatrix();
+}
+applyCamProjection();
+addEventListener('resize', () => {
+  applyCamProjection();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0x8899cc, 0.55));
+const hemi = new THREE.HemisphereLight(0x8fb0ff, 0x120a1e, 0.5);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+sun.position.set(60, 120, 40);
+scene.add(sun);
+const flashLight = new THREE.PointLight(0xffffff, 0, 140, 1.8);
+scene.add(flashLight);
+
+window.__scene = scene; // debug hook (for inspecting the scene headlessly)
+const staticG = new THREE.Group();   // track and gates: built once, always present
+const dynamicG = new THREE.Group();  // hero, ghosts, particles, beams: cleared on reset
+scene.add(staticG, dynamicG);
+
+/* ================= 45° track ================= */
+// Track direction (0,-1,1) normalised: descends at a 45° pitch from far and high to near and low
+const DIR = new THREE.Vector3(0, -1, 1).normalize();
+const ORIGIN = new THREE.Vector3(0, 150, -190);
+function pathPos(s, out = new THREE.Vector3()) {
+  return out.copy(ORIGIN).addScaledVector(DIR, s);
+}
+
+// Path coordinates of each gate
+const S = {
+  START: -70, ID: 36, WTE: 72, MERGE: 100, RMS: 150,
+  FORK1: 164, PRE1: 176, ATTN: 210, WO: 234, JOIN1: 250,
+  FORK2: 262, PRE2: 272, MLP: 292, RELU: 312, SQUEEZE: 330, JOIN2: 346,
+  WALL: 378
+};
+
+/* ================= Utilities ================= */
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const easeIO = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeIn = k => k * k * k;
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(42);
+const gauss = () => {
+  let u = 0, v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+};
+
+/* ---- tween engine (promise-based, with a timeScale for fast-forward) ---- */
+const tweens = new Set();
+let timeScale = 1;
+function tween(dur, update, ease = easeIO) {
+  return new Promise(res => tweens.add({ t: 0, dur, update, ease, res }));
+}
+const wait = ms => tween(ms, () => {}, k => k);
+function stepTweens(dt) {
+  for (const tw of [...tweens]) {
+    tw.t += dt * 1000 * timeScale;
+    const k = clamp(tw.t / tw.dur, 0, 1);
+    tw.update(tw.ease(k), k);
+    if (k >= 1) { tweens.delete(tw); tw.res(); }
+  }
+}
+
+/* ---- Text sprite ---- */
+function textSprite(text, { fs = 56, color = '#dbe6ff', bg = true, scale = P_TXT, onTop = false } = {}) {
+  const pad = 26;
+  const c = document.createElement('canvas');
+  let ctx = c.getContext('2d');
+  const font = `600 ${fs}px system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif`;
+  ctx.font = font;
+  c.width = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  c.height = fs + pad * 2;
+  ctx = c.getContext('2d');
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (bg) {
+    ctx.fillStyle = 'rgba(8,13,28,0.72)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    roundRect(ctx, 4, 4, c.width - 8, c.height - 8, 18);
+    ctx.fill(); ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = color;
+  ctx.fillText(text, c.width / 2, c.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, depthTest: !onTop
+  }));
+  spr.scale.set(c.width * scale, c.height * scale, 1);
+  spr.renderOrder = onTop ? 8 : 5;
+  return spr;
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* ---- Letter / number cube textures ---- */
+function glyphTexture(glyph, c1, c2, fg) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 256, 256);
+  g.addColorStop(0, c1); g.addColorStop(1, c2);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 10;
+  roundRect(ctx, 8, 8, 240, 240, 26);
+  ctx.stroke();
+  ctx.font = `700 ${glyph.length > 1 ? 115 : 150}px ui-monospace, Menlo, monospace`; // two-digit IDs shrink so they don't touch the edge
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = fg;
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = fg;
+  ctx.fillText(glyph, 128, 140);
+  return new THREE.CanvasTexture(c);
+}
+function glyphCube(glyph, c1, c2, fg, size = 8) {
+  const tex = glyphTexture(glyph, c1, c2, fg);
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(size, size, size),
+    new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.35, metalness: 0.25,
+      emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5
+    })
+  );
+  const grp = new THREE.Group();
+  grp.add(mesh);
+  grp.userData.spinMesh = mesh;
+  return grp;
+}
+
+/* ---- Value strips (runs of 16 / 64 cubes) ---- */
+const HEAD_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399'];
+function valColor(v, hue = 0) {
+  const h = (v >= 0 ? 0.52 : 0.055) + hue; // positive=cyan, negative=orange; hue = the stage's hue offset
+  return new THREE.Color().setHSL(h % 1, 0.85, clamp(0.3 + Math.abs(v) * 0.16, 0.25, 0.72));
+}
+function valScaleY(v) { return clamp(0.4 + Math.abs(v) * 0.85, 0.4, 4.2); }
+function valScaleXZ(v) { return clamp(0.78 + Math.abs(v) * 0.16, 0.78, 1.32); } // bigger value → thicker cube
+
+function makeStrip(vals, { cube = 3, pitch = 3.9, opacity = 1, hue = 0 } = {}) {
+  const grp = new THREE.Group();
+  const n = vals.length;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(cube, cube, cube),
+      new THREE.MeshStandardMaterial({
+        color: valColor(vals[i], hue), roughness: 0.3, metalness: 0.3,
+        transparent: opacity < 1, opacity,
+        emissive: valColor(vals[i], hue), emissiveIntensity: 0.25
+      })
+    );
+    m.position.x = (i - (n - 1) / 2) * pitch;
+    m.scale.y = valScaleY(vals[i]);
+    m.scale.x = m.scale.z = valScaleXZ(vals[i]);
+    m.userData.v = vals[i];
+    grp.add(m);
+  }
+  grp.userData.vals = vals.slice();
+  grp.userData.pitch = pitch;
+  grp.userData.hue = hue;
+  grp.userData.cubes = grp.children.slice(); // label sprites may be attached later; value ops touch cubes only
+  return grp;
+}
+function setStripValues(strip, vals, k = 1, hueTarget) {
+  // k=1 → apply fully; k<1 → interpolate from old to new (for tweens); hueTarget → shift the stage hue at the same time
+  const hue0 = strip.userData.hue || 0;
+  const hue1 = hueTarget !== undefined ? hueTarget : hue0;
+  strip.userData.cubes.forEach((m, i) => {
+    if (i >= vals.length) return;
+    const v0 = m.userData.v, v1 = vals[i];
+    const v = v0 + (v1 - v0) * k;
+    const h = hue0 + (hue1 - hue0) * k;
+    m.scale.y = valScaleY(v);
+    m.scale.x = m.scale.z = valScaleXZ(v);
+    m.material.color.copy(valColor(v, h));
+    m.material.emissive.copy(valColor(v, h));
+    if (k >= 1) m.userData.v = v1;
+  });
+  if (k >= 1) { strip.userData.vals = vals.slice(); strip.userData.hue = hue1; }
+}
+// For moments where the data is changed (residual merges and so on): a white-hot pulse along the whole strip
+function stripPulse(strip, dur = 550) {
+  return tween(dur, k => {
+    const p = Math.sin(k * Math.PI);
+    strip.userData.cubes.forEach(m => { m.material.emissiveIntensity = 0.25 + p * 1.25; });
+  });
+}
+function tintByHeads(strip) {
+  strip.userData.cubes.forEach((m, i) => {
+    const c = new THREE.Color(HEAD_COLORS[Math.floor(i / (strip.userData.cubes.length / 4))]);
+    m.material.color.copy(c);
+    m.material.emissive.copy(c);
+    m.material.emissiveIntensity = 0.4;
+  });
+}
+
+/* ---- Operation colour code: tells at a glance whether a step uses trained knowledge ---- */
+// Applied only to signals about what a step is doing: the ring itself, the ring's label,
+// and that step's impact sparks.
+// Never applied to colours that say which piece of data this is: the cyan/orange of value cubes,
+// HEAD_COLORS, the purple/pink of the KV Cache, the bar chart, the sampling ruler, the residual copy.
+const OP_LEARNED = 0xfbbf24; // gold: trained parameters (the model's knowledge lives here)
+const OP_PURE    = 0x2dd4a7; // teal: fixed arithmetic, no parameters
+const OP_MOVE    = 0x94a3b8; // grey-blue: just carrying / looking up / storing, no computation
+
+/* ---- Gates ---- */
+// Two rules for gate labels: 1) fade out when too close to the camera (perspective blows them
+// up and they block the view)
+// 2) show only gates already passed or about to be reached — later steps' labels do not appear early
+const fadeLabels = []; // { sprite, s }
+// Gates already passed dim *entirely* (the sphere / ring body, not just the label): the previous
+// move no longer matters, and blind tests showed that leaving them at full brightness keeps
+// pulling attention and overlaps the current step so nothing can be read
+const fadeGates = []; // { s, mats:[{ m, o }] }
+const GATE_PAST_MIN = 0.1;
+function registerGate(grp, s) {
+  const mats = [];
+  grp.traverse(o => {
+    if (o.isSprite || !o.material) return; // labels have their own fade rules
+    o.material.transparent = true;
+    mats.push({ m: o.material, o: o.material.opacity });
+  });
+  fadeGates.push({ s, mats });
+}
+let showAllLabels = false; // switched on for the closing panorama
+function gateSphere(label, color, r = 7, s = 0) {
+  const grp = new THREE.Group();
+  const wire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(r, 1),
+    new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.85 })
+  );
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(r * 0.62, 20, 20),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16 })
+  );
+  grp.add(wire, core);
+  const lb = textSprite(label, { color: colToCss(color), fs: 46 });
+  lb.position.y = r + 5;
+  grp.add(lb);
+  fadeLabels.push({ sprite: lb, s });
+  grp.userData_label = lb;
+  pathPos(s, grp.position);
+  grp.userData = { wire, kind: 'sphere', baseR: r };
+  staticG.add(grp);
+  registerGate(grp, s);
+  return grp;
+}
+function gateRing(label, color, r = 40, s = 0, labelFs = 46) {
+  const grp = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(r, 1.1, 12, 64),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+  );
+  ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR);
+  grp.add(ring);
+  const lb = textSprite(label, { color: colToCss(color), fs: labelFs });
+  lb.position.y = r + 10;
+  grp.add(lb);
+  fadeLabels.push({ sprite: lb, s });
+  grp.userData_label = lb;
+  pathPos(s, grp.position);
+  grp.userData = { wire: ring, kind: 'ring', baseR: r };
+  staticG.add(grp);
+  registerGate(grp, s);
+  return grp;
+}
+function gatePlane(label, color, w, h, s) {
+  const grp = new THREE.Group();
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h, 16, 2),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, side: THREE.DoubleSide })
+  );
+  const frame = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, h)),
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 })
+  );
+  grp.add(plane, frame);
+  grp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR);
+  const lb = textSprite(label, { color: colToCss(color), fs: 46 });
+  lb.position.y = h / 2 + 9;
+  lb.quaternion.copy(grp.quaternion).invert();
+  grp.add(lb);
+  fadeLabels.push({ sprite: lb, s });
+  grp.userData_label = lb;
+  pathPos(s, grp.position);
+  grp.userData = { wire: plane, kind: 'plane' };
+  staticG.add(grp);
+  registerGate(grp, s);
+  return grp;
+}
+function colToCss(c) { return '#' + new THREE.Color(c).getHexString(); }
+
+/* ---- Particle burst ---- */
+const bursts = [];
+function burst(pos, color = 0xffffff, count = 70, speed = 26) {
+  const geo = new THREE.BufferGeometry();
+  const p = new Float32Array(count * 3), vel = [];
+  for (let i = 0; i < count; i++) {
+    p[i * 3] = pos.x; p[i * 3 + 1] = pos.y; p[i * 3 + 2] = pos.z;
+    const d = new THREE.Vector3(gaussFree(), gaussFree(), gaussFree()).normalize()
+      .multiplyScalar(speed * (0.35 + Math.random() * 0.85));
+    vel.push(d);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  const mat = new THREE.PointsMaterial({
+    color, size: 1.7, transparent: true, opacity: 1,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const pts = new THREE.Points(geo, mat);
+  dynamicG.add(pts);
+  bursts.push({ pts, vel, life: 0, max: 0.9 });
+}
+function gaussFree() { return (Math.random() * 2 - 1) + (Math.random() * 2 - 1); }
+function stepBursts(dt) {
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i];
+    b.life += dt * timeScale;
+    const arr = b.pts.geometry.attributes.position.array;
+    for (let j = 0; j < b.vel.length; j++) {
+      arr[j * 3] += b.vel[j].x * dt * timeScale;
+      arr[j * 3 + 1] += (b.vel[j].y - 14 * b.life) * dt * timeScale;
+      arr[j * 3 + 2] += b.vel[j].z * dt * timeScale;
+    }
+    b.pts.geometry.attributes.position.needsUpdate = true;
+    b.pts.material.opacity = clamp(1 - b.life / b.max, 0, 1);
+    if (b.life >= b.max) {
+      dynamicG.remove(b.pts);
+      b.pts.geometry.dispose(); b.pts.material.dispose();
+      bursts.splice(i, 1);
+    }
+  }
+}
+
+/* ---- Impact: flash + shake ---- */
+let shakeAmp = 0;
+function impact(pos, color, { count = 70, shake = 0.8, flash = 320 } = {}) {
+  burst(pos, color, count);
+  shakeAmp = Math.max(shakeAmp, shake);
+  flashLight.position.copy(pos);
+  flashLight.color.set(color);
+  flashLight.intensity = flash;
+}
+async function gatePulse(gate) {
+  const w = gate.userData.wire;
+  await tween(420, k => {
+    const s = 1 + Math.sin(k * Math.PI) * 0.35;
+    w.scale.setScalar(s);
+  });
+  w.scale.setScalar(1);
+}
+
+/* ---- Beams ---- */
+function makeBeam(from, to, width, color) {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const len = dir.length();
+  const geo = new THREE.CylinderGeometry(width, width, len, 8, 1, true);
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(from).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  dynamicG.add(m);
+  return m;
+}
+
+/* ================= Values (illustrative; the structural numbers match the code) ================= */
+const letters = 'abcdefghijklmnopqrstuvwxyz';
+const V = {};
+{
+  V.tok = Array.from({ length: 16 }, () => gauss() * 0.75);
+  V.pos = Array.from({ length: 16 }, () => gauss() * 0.75);
+  V.tok[3] += 3.2; V.tok[9] -= 2.9;                 // make the post-merge magnitudes exaggeratedly uneven
+  V.pos[6] += 3.4; V.pos[13] -= 2.7;                // → so RMSNorm visibly flattens everything afterwards
+  V.merged = V.tok.map((v, i) => v + V.pos[i]);      // a real element-wise addition
+  const ms = V.merged.reduce((a, b) => a + b * b, 0) / 16;
+  const scale = Math.pow(ms + 1e-5, -0.5);
+  // Compute RMSNorm for real, then compress visually (|v|^0.55) so "pulled back to a similar size" is obvious
+  V.normed = V.merged.map(v => {
+    const n = v * scale;
+    return Math.sign(n) * Math.pow(Math.abs(n), 0.55);
+  });
+  V.q = V.normed.map(v => v * 0.8 + gauss() * 0.3);
+  V.k = V.normed.map(v => v * 0.7 + gauss() * 0.3);
+  V.v = V.normed.map(v => v * 0.75 + gauss() * 0.3);
+  V.attnCat = V.v.map(v => v * 0.85 + gauss() * 0.2);
+  V.attnOut = Array.from({ length: 16 }, () => gauss() * 0.9);
+  V.afterRes1 = V.normed.map((v, i) => v + V.attnOut[i]);
+  // This time the pre-norm before the MLP does visible work: the residual addition upset the scale, so flatten again
+  const ms2 = V.afterRes1.reduce((a, b) => a + b * b, 0) / 16;
+  const sc2 = Math.pow(ms2 + 1e-5, -0.5);
+  V.norm2 = V.afterRes1.map(v => {
+    const n = v * sc2;
+    return Math.sign(n) * Math.pow(Math.abs(n), 0.55);
+  });
+  V.h64 = Array.from({ length: 64 }, () => gauss() * 0.9);
+  V.relu64 = V.h64.map(v => Math.max(0, v));
+  V.mlpOut = Array.from({ length: 16 }, () => gauss() * 0.9);
+  V.afterRes2 = V.afterRes1.map((v, i) => v + V.mlpOut[i]);
+  V.logits = Array.from({ length: 27 }, () => gauss() * 0.8);
+  V.logits[12] = 3.3;  // 'm': in emma, em is followed by another m (double m)
+  V.logits[11] = 1.6;  // 'l'
+  V.logits[21] = 1.1;  // 'v'
+  const T = 0.5;
+  const mx = Math.max(...V.logits);
+  const ex = V.logits.map(l => Math.exp((l - mx) / T));
+  const tot = ex.reduce((a, b) => a + b, 0);
+  V.probs = ex.map(e => e / tot);
+  V.attnW = [0.22, 0.31, 0.47]; // [BOS, e, m itself]
+}
+
+/* ================= Static world ================= */
+// Starfield
+{
+  const n = 900, p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3(gaussFree(), gaussFree(), gaussFree()).normalize()
+      .multiplyScalar(380 + Math.random() * 260);
+    v.add(pathPos(170));
+    p[i * 3] = v.x; p[i * 3 + 1] = v.y; p[i * 3 + 2] = v.z;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  staticG.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xaabbee, size: 1.1, transparent: true, opacity: 0.65, depthWrite: false
+  })));
+}
+// Dashed track line
+{
+  const pts = [];
+  for (let s = S.START - 20; s <= S.WALL + 30; s += 4) pts.push(pathPos(s));
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
+    color: 0x3a4a78, dashSize: 2.2, gapSize: 3.2, transparent: true, opacity: 0.7
+  }));
+  line.computeLineDistances();
+  staticG.add(line);
+}
+
+// Gates (in forward order) — colour = operation colour code, not the stage colour
+const gates = {
+  id:      gateSphere('Token ID', OP_MOVE, 7, S.ID),                     // dictionary lookup, zero gradient
+  wte:     gateSphere('Embedding lookup (wte)', OP_LEARNED, 8, S.WTE),   // 27×16 = 432
+  wpe:     gateSphere('+ position embedding (wpe)', OP_LEARNED, 8, S.MERGE), // 16×16 = 256
+  rms:     gateRing('RMSNorm', OP_PURE, 34, S.RMS, 40),                  // not even a gain vector
+  pre1:    gateSphere('rmsnorm', OP_PURE, 3.5, S.PRE1),
+  attn:    gateRing('Attention (4 heads)', OP_LEARNED, 42, S.ATTN),      // wq/wk/wv, three 16×16 = 768
+  wo:      gateSphere('wo: mix heads', OP_LEARNED, 4.5, S.WO),           // 256
+  pre2:    gateSphere('rmsnorm', OP_PURE, 3.5, S.PRE2),
+  mlp:     gateRing('MLP expand 16→64', OP_LEARNED, 42, S.MLP),           // 64×16 = 1024
+  relu:    gatePlane('ReLU', OP_PURE, 134, 15, S.RELU),                  // element-wise pure function
+  squeeze: gateRing('squeeze 64→16', OP_LEARNED, 42, S.SQUEEZE)           // 16×64 = 1024
+};
+// Portrait: the locker moves directly above the main track, so the Attention gate label has to
+// step aside or the two blocks of large text overlap.
+// Landscape needs a smaller nudge of its own here, which flow3d.html does not: the label is
+// centre-anchored, and "Attention (4 heads)" is about a quarter wider than the Chinese label it
+// replaces, so its right edge now runs into the KV Cache title. Shifting left restores the clearance.
+// Portrait has a fixed gap between the left screen edge and the locker panel, and the English
+// label is too wide to sit in it at full size at either offset: pushed far enough left to clear
+// the panel it runs off screen, and pulled right enough to stay on screen it hits the panel.
+// Scaling this one label back to roughly the Chinese label's width lets the original offset work.
+if (PORTRAIT) gates.attn.userData_label.scale.multiplyScalar(0.8);
+gates.attn.userData_label.position.x = PORTRAIT ? -48 : -10;
+// In the closing panorama pre1's rmsnorm label would overlap the KV Cache title, so shift it left
+gates.pre1.userData_label.position.x = -26;
+
+// The lm_head wall (27 bar slots) — a portrait screen cannot fit 27 bars at the original
+// width, so the wall and the bar pitch narrow together
+const WALL_W = PORTRAIT ? 96 : 128;
+const BAR_PITCH = WALL_W / 27 * 0.917;
+const BAR_W = 3.1 * WALL_W / 128;
+const wallCenter = pathPos(S.WALL);
+const wallG = new THREE.Group();
+let wallLabel = null;
+{
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(WALL_W, 34, 4),
+    new THREE.MeshStandardMaterial({ color: 0x16203c, roughness: 0.6, metalness: 0.4, emissive: 0x0c1430, emissiveIntensity: 0.6 })
+  );
+  const frame = new THREE.LineSegments(
+    new THREE.EdgesGeometry(wall.geometry),
+    new THREE.LineBasicMaterial({ color: OP_LEARNED, transparent: true, opacity: 0.8 }) // lm_head is another 432 parameters
+  );
+  wallG.add(wall, frame);
+  // 27 slot lines
+  for (let i = 0; i <= 27; i++) {
+    const x = -WALL_W / 2 + i * (WALL_W / 27);
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(x, -17, 2.2), new THREE.Vector3(x, 17, 2.2)
+    ]);
+    wallG.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x38507e, transparent: true, opacity: 0.6 })));
+  }
+  wallG.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), DIR.clone().negate());
+  wallG.position.copy(wallCenter);
+  const lb = textSprite('lm_head: 16 dims → 27 logits', { color: colToCss(OP_LEARNED), fs: 46 });
+  // Lift above the tops of the probability bars: m's bar reaches +44, so 38 would be pierced by it
+  lb.position.copy(wallCenter).addScaledVector(DIR, -6).add(new THREE.Vector3(0, 50, 0));
+  staticG.add(wallG, lb);
+  fadeLabels.push({ sprite: lb, s: S.WALL });
+  wallLabel = lb;
+}
+// Mid-route gates to hide during the wall shot (otherwise they sit between the camera and the bars)
+const MID_GATES = [gates.pre2, gates.mlp, gates.relu, gates.squeeze];
+function setMidGatesVisible(v) { MID_GATES.forEach(g => { g.visible = v; }); }
+
+// Glow sprite (keeps small objects visible in wide shots)
+function glowSprite(color, scale = 26) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.25, colToCss(color) + 'aa');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  spr.scale.setScalar(scale);
+  return spr;
+}
+
+/* ---- The KV Cache locker: slots 1 and 2 already hold BOS and e; slot 3 is waiting for this round's K/V ---- */
+const KV_ORIGIN = pathPos(S.ATTN + 8).add(KV_OFF);
+const KV_SLOT_DY = 15;   // three slots have to fit on screen, so they sit tighter than two did
+const KV_ROW_DY = 2.8;   // within a slot, K on top and V below
+const KV_CUBE = { cube: 1.5, pitch: 1.9, opacity: 0.85 };
+function kvSlot(i, out = new THREE.Vector3()) {
+  return out.copy(KV_ORIGIN).add(new THREE.Vector3(0, (1 - i) * KV_SLOT_DY, 0));
+}
+// What one slot holds: a 16-cube K and a 16-cube V, coloured by the 4 heads
+// (in stage 9 each head takes only its own 4 dims)
+function makeKVRows(kVals, vVals) {
+  const grp = new THREE.Group();
+  const k = makeStrip(kVals, KV_CUBE); tintByHeads(k);
+  const v = makeStrip(vVals, KV_CUBE); tintByHeads(v);
+  k.position.y = KV_ROW_DY; v.position.y = -KV_ROW_DY;
+  grp.add(k, v);
+  const kT = textSprite('K', { fs: 26, color: '#c4b5fd', bg: false, onTop: true });
+  kT.position.set(-19, KV_ROW_DY, 0);
+  const vT = textSprite('V', { fs: 26, color: '#93c5fd', bg: false, onTop: true });
+  vT.position.set(-19, -KV_ROW_DY, 0);
+  grp.add(kT, vT);
+  // Stage 9 emphasises the K row and the V row separately (score against K → then scale V by
+  // the weights), so keep handles for both
+  grp.userData.k = k; grp.userData.v = v;
+  grp.userData.kT = kT; grp.userData.vT = vT;
+  return grp;
+}
+// How strongly one locker row is emphasised: emiss = glow, op = opacity (the K/V row tags follow along)
+// scale = how much bigger the row looks: only 35% goes to the row as a whole (the cube spacing)
+// and 65% to the cubes themselves, so the row never bursts out of its slot frame or covers the
+// K/V row tags on its left
+const ROW_BASE = { scale: 1, emiss: 0.4, op: KV_CUBE.opacity };
+function setRowEmphasis(row, scale, emiss, op, label = null) {
+  row.userData.emph = scale;
+  row.scale.setScalar(1 + (scale - 1) * 0.35);
+  row.userData.cubes.forEach(m => {
+    if (!m.userData.base) m.userData.base = m.scale.clone();
+    m.scale.copy(m.userData.base).multiplyScalar(1 + (scale - 1) * 0.65);
+    m.material.emissiveIntensity = emiss;
+    m.material.opacity = op;
+  });
+  if (label) label.material.opacity = clamp(op / ROW_BASE.op, 0.2, 1);
+}
+// Return all three slots (BOS / e / m itself) to neutral brightness — bosPod and ePod live on
+// staticG, so without a reset their state leaks into the next round
+function resetPodRows() {
+  [bosPod, ePod, selfPod].filter(Boolean).forEach(p => {
+    setRowEmphasis(p.userData.k, ROW_BASE.scale, ROW_BASE.emiss, ROW_BASE.op, p.userData.kT);
+    setRowEmphasis(p.userData.v, ROW_BASE.scale, ROW_BASE.emiss, ROW_BASE.op, p.userData.vT);
+  });
+}
+// The cabinet extends further left to make room for the row tags (BOS / e / m); its right edge
+// stays put so it does not get cropped off screen
+const KV_PAD_L = -7;
+// Slot frames (dim while empty, bright once filled)
+function makeKVSlotFrame(i, opacity) {
+  const geo = new THREE.PlaneGeometry(48, 13);
+  geo.translate(-2, 0, 0);
+  const f = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({ color: 0xc084fc, transparent: true, opacity })
+  );
+  f.position.copy(kvSlot(i));
+  staticG.add(f);
+  return f;
+}
+const kvSlotFrames = [];
+// Root nodes for dimming the whole locker: stages 4 and 5 (rmsnorm / residual fork) are not
+// about memory yet, but this panel is large and sits high in the frame, and blind tests showed
+// it kept pulling attention — so those two stages fade it almost out.
+const kvDimRoots = [];
+{
+  const shellGeo = new THREE.PlaneGeometry(62, 50);
+  shellGeo.translate(KV_PAD_L, 0, 0);
+  const shell = new THREE.Mesh(
+    shellGeo,
+    new THREE.MeshBasicMaterial({ color: 0xc084fc, transparent: true, opacity: 0.10, side: THREE.DoubleSide })
+  );
+  const edge = new THREE.LineSegments(
+    new THREE.EdgesGeometry(shellGeo),
+    new THREE.LineBasicMaterial({ color: 0xc084fc, transparent: true, opacity: 0.55 })
+  );
+  const rack = new THREE.Group();
+  rack.add(shell, edge);
+  rack.position.copy(KV_ORIGIN);
+  staticG.add(rack);
+  const lb = textSprite('KV Cache (memory)', { color: '#c084fc', fs: 44 });
+  lb.position.copy(KV_ORIGIN).add(new THREE.Vector3(KV_PAD_L, 32, 0));
+  staticG.add(lb);
+  fadeLabels.push({ sprite: lb, s: S.ATTN + 8 });
+  kvSlotFrames.push(makeKVSlotFrame(0, 0.7), makeKVSlotFrame(1, 0.7), makeKVSlotFrame(2, 0.25));
+  kvDimRoots.push(rack, lb, ...kvSlotFrames);
+}
+// The already-computed K/V for BOS and e (attention's "past")
+// — kept as top-level objects so position is world space (the beam endpoints rely on this)
+function makePastPod(tag, slot) {
+  const pod = makeKVRows(
+    Array.from({ length: 16 }, () => gauss() * 0.6),
+    Array.from({ length: 16 }, () => gauss() * 0.6)
+  );
+  const lb = textSprite(tag, { fs: 30, color: '#c084fc', bg: false, onTop: true });
+  lb.position.set(-31, 0, 0);
+  pod.add(lb);
+  pod.position.copy(kvSlot(slot));
+  staticG.add(pod);
+  return pod;
+}
+const bosPod = makePastPod('BOS', 0);
+const ePod = makePastPod('e', 1);
+kvDimRoots.push(bosPod, ePod);
+
+/* ================= Camera ================= */
+const camFocus = pathPos(S.START).clone();
+const camOff = new THREE.Vector3(58, 34, 86).multiplyScalar(P_CAM);
+const camOffTarget = camOff.clone();
+let focusMode = 'hero';
+const focusFixed = new THREE.Vector3();
+function setCam(offset, fixedFocus = null) {
+  camOffTarget.copy(offset);
+  if (fixedFocus) { focusMode = 'fixed'; focusFixed.copy(fixedFocus); }
+  else focusMode = 'hero';
+}
+const CLOSE_CAM = new THREE.Vector3(30, 18, 46).multiplyScalar(P_CAM);
+const DEFAULT_CAM = new THREE.Vector3(58, 34, 86).multiplyScalar(P_CAM);
+const WIDE_CAM = new THREE.Vector3(92, 48, 120).multiplyScalar(P_CAM);
+// The wall is the one wide horizontal close-up in the deck; in portrait the camera has to pull
+// back further than for any other stage to fit all 27 bars
+const WALL_CAM = DIR.clone().multiplyScalar(PORTRAIT ? -180 : -100).add(new THREE.Vector3(0, 16, 0));
+// Closing panorama: portrait already has a much wider fov, and multiplying by P_CAM on top would
+// shrink the whole pipeline until the text is unreadable
+const FINALE_CAM = new THREE.Vector3(216, 125, 262).multiplyScalar(PORTRAIT ? 0.9 : 1);
+
+/* ================= Hero state ================= */
+let hero = null, heroS = S.START, heroLift = 0;
+let ghost = null, ghostLift = 0, ghostSide = 0, ghostLabel = null;
+// The residual copy parks far up and to the left (still in frame) and is only pulled back in for
+// the rejoin; in portrait it sits further left so the locker directly above does not cover it
+const GHOST_LIFT = 42, GHOST_SIDE = PORTRAIT ? -46 : -44;
+let bars = null, barLabels = null;
+let attn = null; // the three Q/K/V strips and the beams, during the Attention stages
+let playing = false, idx = 0;
+
+function syncHero() {
+  if (hero) { pathPos(heroS, hero.position); hero.position.y += heroLift; }
+  if (ghost) {
+    pathPos(heroS, ghost.position);
+    ghost.position.y += ghostLift;
+    ghost.position.x += ghostSide;
+  }
+}
+async function travel(toS, dur, ease = easeIO) {
+  const from = heroS;
+  await tween(dur, k => { heroS = from + (toS - from) * k; syncHero(); }, ease);
+}
+function setHero(obj, s = heroS, lift = 0) {
+  if (hero) disposeObj(hero);
+  hero = obj; heroS = s; heroLift = lift;
+  if (hero) { dynamicG.add(hero); syncHero(); }
+}
+// Idempotent: rebuildTo runs several final() calls in a row, and without clearing the old one
+// first you end up with several stacked x_residual copies
+function clearGhost() { if (ghost) disposeObj(ghost); ghost = null; ghostLabel = null; }
+function makeGhost(fromStrip) {
+  clearGhost();
+  // Blind test: the copy was too dark — "it blends into the background, I can't make out the
+  // shape" → raised until it reads as a row of cubes, but still clearly weaker than the hero
+  const g = makeStrip(fromStrip.userData.vals, { opacity: 0.34, hue: fromStrip.userData.hue || 0 });
+  g.children.forEach(m => { m.material.emissiveIntensity = 0.75; });
+  ghostLabel = textSprite('x_residual (saved copy)', { color: '#94a3b8', fs: 32 });
+  ghostLabel.position.y = -14; // Below the copy: above it, the Attention (4 heads) gate label clips the tail
+  g.add(ghostLabel);
+  dynamicG.add(g);
+  return g;
+}
+function disposeObj(obj) {
+  obj.parent && obj.parent.remove(obj);
+  obj.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      if (o.material.map) o.material.map.dispose();
+      o.material.dispose();
+    }
+  });
+}
+
+/* ================= HUD ================= */
+const $ = id => document.getElementById(id);
+function hud(title, sub, desc, code) {
+  $('info').classList.remove('hidden');
+  $('info-title').textContent = title;
+  $('info-sub').textContent = sub || '';
+  $('info-desc').textContent = desc;
+  $('info-code').textContent = code || '';
+  $('info-code').style.display = code ? '' : 'none';
+}
+/* ---- Locker dimming: nearly out for stages 4 and 5, restored once Attention (stage 6) starts ---- */
+// steps[0] is the opening and does not count as a stage, so stage N is exactly steps[N]
+const KV_DIM_STEPS = new Set([4, 5]);  // stage 4 RMSNorm, stage 5 residual fork
+const KV_DIM_LEVEL = 0.12;
+let kvDim = 1, kvDimTarget = 1;
+// The locker also has to get out of the way when the camera comes right up to it: the portrait
+// layout puts it directly above the track, and once the wall shot in stages 18 and 19 pulls back,
+// the camera is only 35 away from it (every other stage is 68 or more), so the whole panel smears
+// across the lens and hides the wall. Judge by distance rather than enumerating stages, and every
+// too-close case is handled at once.
+const KV_NEAR_MIN = 50, KV_NEAR_MAX = 72;
+function kvNearFactor() {
+  return clamp((KV_ORIGIN.distanceTo(camera.position) - KV_NEAR_MIN) / (KV_NEAR_MAX - KV_NEAR_MIN), 0, 1);
+}
+// Each frame, multiply the locker's opacity by kvDim before rendering and restore it afterwards.
+// Do not overwrite the materials' baseline opacity: setRowEmphasis, the stage-7 store and others
+// write opacity themselves, so a remembered baseline would eventually drift. Multiplying and
+// restoring always tracks whatever the current state happens to be.
+const kvDimMats = [];
+// selfPod (this round's K/V for m) is built dynamically in stage 7 and is not in kvDimRoots,
+// so it has to be added in every frame
+function kvDimAll() {
+  return selfPod ? kvDimRoots.concat(selfPod) : kvDimRoots;
+}
+function collectKVDimMats() {
+  kvDimMats.length = 0;
+  for (const root of kvDimAll()) {
+    root.traverse(o => {
+      if (!o.material || !o.material.transparent) return;
+      // The text labels (BOS / e / K / V) are onTop sprites, unaffected by depth occlusion, and
+      // at the same opacity they stand out far more against black than the cubes do. Square the
+      // factor so they get pushed down harder (at a factor of 1 it is still 1, so nothing jumps)
+      kvDimMats.push({ m: o.material, sprite: !!o.material.isSpriteMaterial });
+    });
+  }
+}
+function renderWithKVDim() {
+  // Take whichever is fainter: the stage fade or the distance fade
+  const dim = Math.min(kvDim, kvNearFactor());
+  if (dim > 0.999) { renderer.render(scene, camera); return; }
+  // When almost fully transparent, skip drawing entirely: the panel is a depthWrite transparent
+  // mesh, so leaving it in would use depth to hide the softmax label behind it — which looks
+  // exactly like that label vanishing for no reason
+  if (dim < 0.02) {
+    const roots = kvDimAll();
+    roots.forEach(o => { o.userData.kvVis = o.visible; o.visible = false; });
+    renderer.render(scene, camera);
+    roots.forEach(o => { o.visible = o.userData.kvVis; });
+    return;
+  }
+  collectKVDimMats();
+  const saved = kvDimMats.map(e => e.m.opacity);
+  kvDimMats.forEach(e => { e.m.opacity *= e.sprite ? dim * dim : dim; });
+  renderer.render(scene, camera);
+  kvDimMats.forEach((e, i) => { e.m.opacity = saved[i]; });
+}
+
+function hudProgress() {
+  // The stage currently on screen: while playing that is idx; once it has finished and is held, idx-1
+  const shown = playing ? idx : idx - 1;
+  kvDimTarget = KV_DIM_STEPS.has(shown) ? KV_DIM_LEVEL : 1;
+  // The operation colour code is established from stage 1; the value legend waits until the
+  // embedding lookup (step 3) has produced cubes to describe
+  $('legend').style.display = idx >= 1 ? 'block' : 'none';
+  $('legend-val').style.display = idx >= 3 ? '' : 'none';
+  if (playing) {
+    $('progress').innerHTML = `Playing: <b>${steps[idx].name}</b> (${TOUCH ? 'tap again' : 'press space again'} to fast-forward)`;
+    return;
+  }
+  $('progress').innerHTML = idx >= steps.length
+    ? `Done · <b>R</b> to replay · ${steps.length} / ${steps.length}`
+    : `Next: <b>${steps[idx].name}</b> · ${idx} / ${steps.length}`;
+}
+
+/* ================= The stages ================= */
+const CUBE_ID = () => glyphCube('12', '#0c4a6e', '#22d3ee', '#ecfeff');
+const CUBE_M = () => glyphCube('m', '#4c1d95', '#f472b6', '#fdf4ff');
+
+const steps = [
+  /* 1 ─────────────────────────────── */
+  {
+    name: 'Opening: the letter m',
+    async play() {
+      hud('Opening: a single letter', 'emma, written as far as em', 'BOS and e have already been through the whole pipeline, and their K/V sit in the KV Cache on the right. The third token, m, enters along the 45° track and will be turned step by step into a probability for the next letter.',
+        "doc = 'emma'  # already processed: BOS, e; this round is m");
+      setCam(CLOSE_CAM);
+      setHero(CUBE_M(), S.START);
+      await travel(S.ID - 14, 3000, easeOut);
+    },
+    final() { setHero(CUBE_M(), S.ID - 14); setCam(CLOSE_CAM); }
+  },
+  /* 2 ─────────────────────────────── */
+  {
+    name: 'Token ID',
+    async play() {
+      hud('Stage 1: Token ID', 'tokenizer', 'm is the 13th letter of the alphabet, index 12. The tokenizer maps the letter m to the integer 12 — inside the model there are only numbers, never text.',
+        "tokens = [BOS] + [uchars.index(ch) for ch in doc]  # m → 12");
+      await travel(S.ID, 800, easeIn);
+      impact(pathPos(S.ID), OP_MOVE, { shake: 0.9 });
+      gatePulse(gates.id);
+      await tween(240, k => hero.scale.setScalar(1 - 0.85 * k), easeIn);
+      setHero(CUBE_ID(), S.ID);
+      hero.scale.setScalar(0.15);
+      await tween(420, k => hero.scale.setScalar(0.15 + 1.05 * k), easeOut);
+      hero.scale.setScalar(1);
+      await travel(S.WTE - 16, 1200);
+    },
+    final() { setHero(CUBE_ID(), S.WTE - 16); setCam(CLOSE_CAM); }
+  },
+  /* 3 ─────────────────────────────── */
+  {
+    name: 'Embedding lookup',
+    async play() {
+      hud('Stage 2: embedding lookup', 'wte', "Index 12 selects row 12 of the wte matrix: 16 numbers. The cube unfolds into 16 cubes, whose heights and colours show each dimension's value.",
+        "tok_emb = state_dict['wte'][token_id]  # 16 dims");
+      setCam(DEFAULT_CAM);
+      await travel(S.WTE, 900, easeIn);
+      impact(pathPos(S.WTE), OP_LEARNED, { count: 110, shake: 1.1 });
+      gatePulse(gates.wte);
+      await tween(220, k => hero.scale.setScalar(1 - 0.9 * k), easeIn);
+      const strip = makeStrip(V.tok);
+      strip.userData.cubes.forEach(m => { m.userData.tx = m.position.x; m.position.x = 0; m.scale.setScalar(0.05); });
+      setHero(strip, S.WTE);
+      await tween(950, k => {
+        strip.userData.cubes.forEach((m, i) => {
+          const kk = clamp(k * 1.6 - i * 0.035, 0, 1);
+          const e = easeOut(kk);
+          m.position.x = m.userData.tx * e;
+          const sy = valScaleY(m.userData.v);
+          m.scale.set(0.05 + 0.95 * e, 0.05 + (sy - 0.05) * e, 0.05 + 0.95 * e);
+        });
+      }, k => k);
+      await travel(S.MERGE - 18, 1100);
+    },
+    final() { setHero(makeStrip(V.tok), S.MERGE - 18); setCam(DEFAULT_CAM); }
+  },
+  /* 4 ─────────────────────────────── */
+  {
+    name: 'Position fusion (wpe)',
+    async play() {
+      hud('Stage 3: + position embedding', 'wpe', 'The embedding for position 2 (BOS is 0, e is 1, m is 2) is added element-wise to the token embedding. The distribution of values changes, and the hue shifts with it.',
+        'x = [t + p for t, p in zip(tok_emb, pos_emb)]');
+      const posStrip = makeStrip(V.pos, { opacity: 0.92, hue: 0.12 });
+      const lb = textSprite('position 2 embedding (wpe)', { color: '#e879f9', fs: 40 });
+      lb.position.y = 9;
+      posStrip.add(lb);
+      dynamicG.add(posStrip);
+      const startP = pathPos(S.MERGE - 46).add(new THREE.Vector3(-78, 34, 0));
+      const endP = pathPos(S.MERGE);
+      posStrip.position.copy(startP);
+      // Both approach the wpe gate together and meet at the sphere
+      await Promise.all([
+        travel(S.MERGE, 1600, easeIO),
+        tween(1600, k => posStrip.position.lerpVectors(startP, endP, k))
+      ]);
+      posStrip.remove(lb); disposeObj(lb);
+      impact(endP, OP_LEARNED, { count: 150, shake: 1.1 });
+      gatePulse(gates.wpe);
+      // Cascading cube-by-cube impact merge (shifting the hue at the same time)
+      await Promise.all([
+        tween(900, k => {
+          hero.userData.cubes.forEach((m, i) => {
+            const kk = clamp(k * 1.8 - i * 0.05, 0, 1);
+            if (kk <= 0) return;
+            const pm = posStrip.userData.cubes[i];
+            pm.position.y = (1 - kk) * 3;
+            pm.scale.setScalar(Math.max(0.01, 1 - kk));
+            pm.material.opacity = 0.92 * (1 - kk);
+          });
+          setStripValues(hero, V.merged, easeOut(clamp(k * 1.3, 0, 1)), 0.06);
+        }, k => k),
+        stripPulse(hero, 900)
+      ]);
+      disposeObj(posStrip);
+      setStripValues(hero, V.merged, 1, 0.06);
+      await travel(S.RMS - 24, 1000);
+    },
+    final() { setHero(makeStrip(V.merged, { hue: 0.06 }), S.RMS - 24); setCam(DEFAULT_CAM); }
+  },
+  /* 5 ─────────────────────────────── */
+  {
+    name: 'RMSNorm',
+    async play() {
+      hud('Stage 4: RMSNorm', 'scale correction', 'The row of cubes passes through RMSNorm: every dimension is divided by the root mean square of the whole row, which brings all the values into a comparable range.',
+        'x = rmsnorm(x)  # xi * (mean(x²)+1e-5)^-0.5');
+      await travel(S.RMS, 1100, easeIn);
+      impact(pathPos(S.RMS), OP_PURE, { count: 90, shake: 0.7 });
+      gatePulse(gates.rms);
+      await tween(850, k => {
+        hero.userData.cubes.forEach((m, i) => {
+          const kk = clamp(k * 1.9 - i * 0.055, 0, 1);
+          if (kk <= 0) return;
+          const v0 = V.merged[i], v1 = V.normed[i];
+          const v = v0 + (v1 - v0) * easeOut(kk);
+          m.scale.y = valScaleY(v);
+          m.scale.x = m.scale.z = valScaleXZ(v);
+          m.material.color.copy(valColor(v, 0.06));
+          m.material.emissive.copy(valColor(v, 0.06));
+        });
+      }, k => k);
+      setStripValues(hero, V.normed, 1);
+      await travel(S.FORK1 - 4, 800);
+    },
+    final() { setHero(makeStrip(V.normed, { hue: 0.06 }), S.FORK1 - 4); setCam(DEFAULT_CAM); }
+  },
+  /* 6 ─────────────────────────────── */
+  {
+    name: 'Residual fork',
+    async play() {
+      hud('Stage 5: residual fork', 'residual', 'Before Attention, a semi-transparent copy of the row of cubes is set aside. That is the residual connection: the original data is kept aside and added back once Attention has finished. The main row then passes through a second rmsnorm — the values are already normalised, so nothing changes on this forward pass, but the step is necessary for the gradients during training.',
+        'x_residual = x\nx = rmsnorm(x)  # no change now; it exists for the gradient');
+      ghost = makeGhost(hero);
+      ghostLift = 0; ghostSide = 0;
+      syncHero();
+      await Promise.all([
+        travel(S.PRE1 - 3, 900),
+        tween(900, k => {
+          ghostLift = GHOST_LIFT * easeOut(k);
+          ghostSide = GHOST_SIDE * easeOut(k);
+          syncHero();
+        })
+      ]);
+      // Soft light only, no impact sparks: this bead does nothing on the forward pass, so it
+      // should not look like another update
+      flashLight.position.copy(pathPos(S.PRE1));
+      flashLight.color.set(OP_PURE);
+      flashLight.intensity = 70;
+      gatePulse(gates.pre1);
+      await travel(S.PRE1 + 8, 600);
+    },
+    final() {
+      setHero(makeStrip(V.normed, { hue: 0.06 }), S.PRE1 + 8);
+      ghost = makeGhost(hero); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      setCam(DEFAULT_CAM);
+    }
+  },
+  /* 7 ─────────────────────────────── */
+  {
+    name: 'Attention: split Q/K/V',
+    async play() {
+      hud('Stage 6: Attention — split Q/K/V', '4-head attention', 'Passing through the gold ring, the row splits into three: Q (what is being looked for), K (what this position is) and V (what it can supply). Each is coloured in 4 segments, one per attention head, 4 dims each. Q, K and V come from the trained matrices wq, wk and wv — 768 parameters in total.',
+        'q = linear(x, attn_wq)\nk = linear(x, attn_wk)\nv = linear(x, attn_wv)');
+      setCam(WIDE_CAM);
+      await travel(S.ATTN, 1300, easeIn);
+      impact(pathPos(S.ATTN), OP_LEARNED, { count: 110, shake: 0.9 });
+      gatePulse(gates.attn);
+      hero.visible = false;
+      attn = makeQKVStrips(0.2);
+      await tween(700, k => {
+        [attn.qs, attn.ks, attn.vs].forEach(s => { s.scale.setScalar(0.2 + 0.8 * easeOut(k)); });
+      });
+    },
+    final() {
+      setHero(makeStrip(V.normed, { hue: 0.06 }), S.ATTN);
+      hero.visible = false;
+      ghost = makeGhost(makeStrip(V.normed, { hue: 0.06 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      attn = makeQKVStrips(1);
+      setCam(WIDE_CAM);
+    }
+  },
+  /* 8 ─────────────────────────────── */
+  {
+    name: 'Store K/V in cache',
+    async play() {
+      hud('Stage 7: store K/V in the cache', 'KV cache', 'K and V go into the empty slot of the KV Cache on the right, leaving only Q in the centre. The K/V in the BOS and e slots were computed and stored in the two previous rounds, so nothing is recomputed here; from this point on they are fetched straight from the cache for every head.',
+        'keys[li].append(k)\nvalues[li].append(v)  # the cache goes from 2 slots to 3');
+      // Fade the big labels out first, so they do not fly into the locker along with the strips
+      const labels = [attn.ks.userData.label, attn.vs.userData.label].filter(Boolean);
+      await tween(300, k => { labels.forEach(l => { l.material.opacity = 1 - k; }); });
+      labels.forEach(l => { l.parent.remove(l); disposeObj(l); });
+      attn.ks.userData.label = attn.vs.userData.label = null;
+      // What flies in is the K/V itself, not a copy: the centre really is emptied, leaving only Q
+      const slot = kvSlot(2);
+      const toK = slot.clone().add(new THREE.Vector3(0, KV_ROW_DY, 0));
+      const toV = slot.clone().add(new THREE.Vector3(0, -KV_ROW_DY, 0));
+      const fromK = attn.ks.position.clone(), fromV = attn.vs.position.clone();
+      const qFrom = attn.qs.position.clone(), qTo = pathPos(S.ATTN + 6);
+      const SHRINK = KV_CUBE.pitch / 3.9; // on landing, the size matches the permanent strips inside the locker
+      await tween(1000, k => {
+        attn.ks.position.lerpVectors(fromK, toK, easeIn(k));
+        attn.vs.position.lerpVectors(fromV, toV, easeIn(k));
+        attn.ks.scale.setScalar(1 - (1 - SHRINK) * k);
+        attn.vs.scale.setScalar(1 - (1 - SHRINK) * k);
+        attn.qs.position.lerpVectors(qFrom, qTo, easeOut(k)); // Q returns to the centre of the track alone
+      });
+      impact(slot, OP_MOVE, { count: 50, shake: 0.4 });
+      disposeObj(attn.ks); disposeObj(attn.vs);
+      attn.ks = attn.vs = null;
+      const pod = buildSelfPod();
+      pod.scale.setScalar(0.01);
+      await tween(400, k => pod.scale.setScalar(easeOut(k)));
+    },
+    final() {
+      if (attn.ks) { disposeObj(attn.ks); disposeObj(attn.vs); attn.ks = attn.vs = null; }
+      if (attn.qs) attn.qs.position.copy(pathPos(S.ATTN + 6));
+      buildSelfPod();
+    }
+  },
+  /* 9 ─────────────────────────────── */
+  {
+    name: 'Split into 4 heads',
+    async play() {
+      hud('Stage 8: split into 4 heads', 'multi-head', 'Q is split into 4 segments of 4 dims, one per attention head. Head 1 stays on the main track and heads 2–4 move to the workbench on the left; all 4 run in parallel, with each head\'s K/V taken from the cache on the right.',
+        'q_h = q[hs:hs+head_dim]  # each head operates on only its own 4 dims');
+      // The big Q strip in the centre fades out (K/V went into the cache in the previous stage)
+      await tween(500, k => {
+        attn.qs.scale.setScalar(1 - 0.4 * k);
+        attn.qs.children.forEach(m => { if (m.material) m.material.opacity = 0.95 * (1 - k); });
+      });
+      disposeObj(attn.qs);
+      attn.qs = null;
+      // The 4 heads are born from the centre: head 1 stays, heads 2-4 slide to the left
+      const center = pathPos(S.ATTN + 6);
+      attn.heads = [0, 1, 2, 3].map(h => {
+        const g = makeHeadGroup(h, false);
+        g.position.copy(center);
+        g.scale.setScalar(0.15);
+        return g;
+      });
+      impact(center, OP_MOVE, { count: 80, shake: 0.5 });
+      await tween(1000, k => {
+        attn.heads.forEach((g, h) => {
+          const kk = clamp(k * 1.4 - h * 0.1, 0, 1), e = easeOut(kk);
+          if (h === 0) {
+            g.scale.setScalar(0.15 + 0.85 * e);
+          } else {
+            g.position.lerpVectors(center, headHomePos(h), e);
+            g.scale.setScalar(0.15 + 0.70 * e);
+          }
+        });
+      }, k => k);
+      attn.heads.forEach((g, h) => { g.position.copy(headHomePos(h)); g.scale.setScalar(h === 0 ? 1 : 0.85); });
+      // Dim the three heads on the left: what matters next is how head 1's q interacts with the KV Cache
+      await tween(400, k => {
+        attn.heads.slice(1).forEach(g => setHeadDim(g, 1 - (1 - SIDE_HEAD_DIM) * k));
+      }, easeOut);
+    },
+    final() {
+      [attn.qs, attn.ks, attn.vs].filter(Boolean).forEach(disposeObj);
+      attn.qs = attn.ks = attn.vs = null;
+      attn.heads = [0, 1, 2, 3].map(h => makeHeadGroup(h, false));
+      attn.heads.slice(1).forEach(g => setHeadDim(g, SIDE_HEAD_DIM));
+    }
+  },
+  /* 10 ─────────────────────────────── */
+  {
+    name: 'Attention beams (one head)',
+    async play() {
+      hud('Stage 9: attention beams (head 1 shown)', 'Q·K → weights', "Head 1's q is scored against the k in every slot of the cache, giving the attention weights: BOS 0.22, e 0.31, its own slot 0.47 (beam thickness matches the weight). The v values are then summed in those proportions to give a 4-dim result. The K/V for BOS and e were stored in the two previous rounds and are read straight from the cache. The other 3 heads run the same computation in parallel. All of this is fixed arithmetic with no parameters; the parameters were in the previous step's wq/wk/wv.",
+        'attn_weights = softmax(attn_logits)  # head 1: 0.22 / 0.31 / 0.47');
+      const head0 = attn.heads[0];
+      const qPos = head0.position.clone().add(new THREE.Vector3(0, 2, 0));
+      const r = makeAttnBeams(qPos);
+      attn.beams = r.beams; attn.wlabels = r.wlabels;
+      attn.beams.forEach(b => { b.material.opacity = 0; });
+      attn.wlabels.forEach(w => { w.material.opacity = 0; }); // the numbers appear only after Q·K has scored
+      // The three side heads only breathe and never draw beams: they are computing too, but running
+      // lines to the cache would make the frame far too busy.
+      // Blind-test feedback: once dimmed they "never moved or lit up at all" and read as pure
+      // decoration → the breathing amplitude was increased so they visibly run
+      const sideBreath = tween(4200, k => {
+        attn.heads.slice(1).forEach((g, i) => {
+          const p = Math.sin((k * 2.5 - i * 0.22) * Math.PI * 2);
+          g.scale.setScalar(0.85 * (1 + 0.13 * p));
+          setHeadDim(g, SIDE_HEAD_DIM * (1 + 0.85 * Math.max(0, p)));
+        });
+      }, k => k);
+
+      /* Beat 1: q hits the K row in all three slots and K lights up — score against K first */
+      await tween(700, k => {
+        attn.beams.forEach(b => { b.material.opacity = 0.55 * k; });
+        emphasizeK(k);
+      }, easeOut);
+
+      /* Beat 2: the scores come out */
+      attn.wlabels.forEach((w, i) => burst(w.position, new THREE.Color(V.attnW[i] > 0.4 ? 0xf0abfc : 0xc084fc).getHex(), 18, 10));
+      await tween(600, k => {
+        attn.wlabels.forEach(w => { w.material.opacity = k; });
+      }, easeOut);
+      await wait(320);
+
+      /* Beat 3: K shrinks and dims away, the numbers slide next to V, and each V grows by its own weight */
+      const settle = tween(700, k => {
+        settleK(k);
+        attn.beams.forEach(b => { b.material.opacity = 0.55 - 0.3 * k; });
+      }, easeOut);
+      for (let i = 0; i < 3; i++) {
+        const w = attn.wlabels[i];
+        const from = w.userData.onBeam.clone(), to = w.userData.atV;
+        tween(560, k => {
+          w.position.lerpVectors(from, to, k);
+          w.scale.copy(w.userData.scale0).multiplyScalar(1 - (1 - WLABEL_SHRINK) * k);
+          growV(i, k);
+        }, easeIO);
+        await wait(200);
+      }
+      await settle;
+      await wait(260);
+
+      /* Beat 4: the enlarged v values are drawn back into head 1 in proportion to their weights */
+      const target = head0.position.clone().add(new THREE.Vector3(0, -2, 0));
+      const sucks = attnPodSpecs().map((p, i) => {
+        const s = makeStrip(Array.from({ length: 4 }, () => gauss() * 0.5), { cube: 1.7, pitch: 2.2 });
+        tintSolid(s, HEAD_COLORS[0]);
+        s.userData.from = podRowPos(p.pod, 'v'); // starts from the V row, not the whole slot
+        s.userData.s0 = 0.7 + V.attnW[i] * 1.2;  // the bigger the weight, the bigger the share carried away
+        s.position.copy(s.userData.from);
+        s.scale.setScalar(s.userData.s0);
+        dynamicG.add(s);
+        return s;
+      });
+      await tween(900, k => {
+        sucks.forEach(s => {
+          s.position.lerpVectors(s.userData.from, target, easeIn(k));
+          s.scale.setScalar(s.userData.s0 * (1 - 0.6 * k));
+        });
+      });
+      impact(target, OP_PURE, { count: 60, shake: 0.4 });
+      sucks.forEach(disposeObj);
+      // Head 1's q and the v values drawn back in merge into a single output strip
+      const out0 = swapHeadToOut(head0, 0);
+      out0.scale.setScalar(0.1);
+      await tween(450, k => out0.scale.setScalar(0.1 + 0.9 * easeOut(k)));
+      await sideBreath;
+      attn.heads.slice(1).forEach(g => g.scale.setScalar(0.85));
+      // The three side heads finish too and swap to output strips in turn (they must be re-dimmed
+      // afterwards: swapHeadToOut builds brand-new strips at full brightness)
+      for (let h = 1; h <= 3; h++) {
+        const g = attn.heads[h];
+        const out = swapHeadToOut(g, h);
+        out.scale.setScalar(0.1);
+        burst(g.position, new THREE.Color(HEAD_COLORS[h]).getHex(), 30, 14);
+        // Flash at the moment each finishes (so it is clear these three ran to completion too),
+        // then settle back to the supporting brightness
+        tween(700, k => {
+          out.scale.setScalar(0.1 + 0.9 * easeOut(clamp(k * 2, 0, 1)));
+          setHeadDim(g, 0.95 - (0.95 - SIDE_HEAD_DIM) * easeOut(clamp(k * 1.6 - 0.4, 0, 1)));
+        }, k => k);
+        await wait(230);
+      }
+      await wait(420);
+      // The main beams dim but stay on screen
+      await tween(450, k => {
+        attn.beams.forEach(b => { b.material.opacity = 0.25 - 0.03 * k; });
+      });
+      applyScoredCacheState();
+    },
+    final() {
+      attn.heads.forEach((g, h) => swapHeadToOut(g, h));
+      attn.heads.slice(1).forEach(g => setHeadDim(g, SIDE_HEAD_DIM));
+      const r = makeAttnBeams(attn.heads[0].position.clone(), true);
+      attn.beams = r.beams; attn.wlabels = r.wlabels;
+      applyScoredCacheState();
+    }
+  },
+  /* 11 ─────────────────────────────── */
+  {
+    name: 'Rejoin 4 heads',
+    async play() {
+      hud('Stage 10: rejoin the 4 heads', 'concat', 'The 4-dim result from each head is concatenated in order into the 16-dim x_attn. Each segment still carries its own head colour — nothing has been mixed yet.',
+        'x_attn.extend(head_out)  # 4 heads × 4 dims → 16 dims');
+      // Beams and weight labels leave; the K/V in the locker returns to neutral brightness at the
+      // same time (this round's scoring is over)
+      const k0 = attnPodSpecs().map(p => p.pod.userData.k.userData.emph || 1);
+      const v0 = attnPodSpecs().map(p => p.pod.userData.v.userData.emph || 1);
+      await tween(400, k => {
+        attn.beams.forEach(b => { b.material.opacity = 0.22 * (1 - k); });
+        attn.wlabels.forEach(w => { w.material.opacity = 1 - k; });
+        attnPodSpecs().forEach((p, i) => {
+          setRowEmphasis(p.pod.userData.k, k0[i] + (1 - k0[i]) * k, 0.15 + 0.25 * k,
+            ROW_BASE.op - 0.5 * (1 - k), p.pod.userData.kT);
+          setRowEmphasis(p.pod.userData.v, v0[i] + (1 - v0[i]) * k,
+            vGrowEmiss(i) + (ROW_BASE.emiss - vGrowEmiss(i)) * k, ROW_BASE.op, p.pod.userData.vT);
+        });
+        attn.heads.slice(1).forEach(g => setHeadDim(g, SIDE_HEAD_DIM + (1 - SIDE_HEAD_DIM) * k));
+      });
+      resetPodRows();
+      attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj);
+      attn.beams = []; attn.wlabels = [];
+      // The four outputs fly back to their own segments
+      const center = pathPos(S.ATTN + 6);
+      const starts = attn.heads.map(g => g.position.clone());
+      const targets = attn.heads.map((g, h) => center.clone().add(new THREE.Vector3((4 * h - 6) * 3.9, 0, 0)));
+      await tween(900, k => {
+        attn.heads.forEach((g, h) => {
+          const kk = clamp(k * 1.3 - h * 0.08, 0, 1), e = easeIO(kk);
+          g.position.lerpVectors(starts[h], targets[h], e);
+          const s0 = h === 0 ? 1 : 0.85;
+          g.scale.setScalar(s0 + (1.18 - s0) * e);
+          if (g.userData.label) g.userData.label.material.opacity = 1 - kk;
+        });
+      }, k => k);
+      impact(center, OP_MOVE, { count: 120, shake: 1.0 });
+      attn.heads.forEach(disposeObj);
+      attn.heads = null;
+      // Merge into the complete 16-cube x_attn
+      const strip16 = makeStrip(V.attnCat, { opacity: 0.95 });
+      tintByHeads(strip16);
+      const xl = textSprite('x_attn (heads rejoined)', { color: '#c084fc', fs: 36, bg: false });
+      xl.position.set(0, 17, 0); // Lifted: at 11 it sits on top of the very row it is labelling
+      strip16.add(xl);
+      strip16.userData.label = xl;
+      strip16.position.copy(center);
+      dynamicG.add(strip16);
+      attn.vs = strip16;
+      await stripPulse(strip16, 450);
+    },
+    final() {
+      if (attn.beams) { attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj); attn.beams = []; attn.wlabels = []; }
+      if (attn.heads) { attn.heads.forEach(disposeObj); attn.heads = null; }
+      resetPodRows();
+      const strip16 = makeStrip(V.attnCat, { opacity: 0.95 });
+      tintByHeads(strip16);
+      const xl = textSprite('x_attn (heads rejoined)', { color: '#c084fc', fs: 36, bg: false });
+      xl.position.set(0, 17, 0); // Lifted: at 11 it sits on top of the very row it is labelling
+      strip16.add(xl);
+      strip16.userData.label = xl;
+      strip16.position.copy(pathPos(S.ATTN + 6));
+      dynamicG.add(strip16);
+      attn.vs = strip16;
+    }
+  },
+  /* 10 ─────────────────────────────── */
+  {
+    name: 'wo mixing',
+    async play() {
+      hud('Stage 11: wo mixing', '4 heads → 16 dims', 'x_attn passes through the wo matrix, and the results of the 4 heads are mixed into one 16-dim vector. The head colours disappear and the value colouring returns. Attention is now complete.',
+        'x = linear(x_attn, attn_wo)');
+      if (attn.beams && attn.beams.length) {
+        await tween(300, k => {
+          attn.beams.forEach(b => { b.material.opacity *= (1 - k); });
+          attn.wlabels.forEach(w => { w.material.opacity = 1 - k; });
+        });
+        attn.beams.forEach(disposeObj); attn.wlabels.forEach(disposeObj);
+      }
+      const vs = attn.vs;
+      attn = null;
+      if (vs.userData.label) { vs.remove(vs.userData.label); disposeObj(vs.userData.label); vs.userData.label = null; }
+      // vs becomes the new hero and slides back onto the main track
+      const vsWorld = vs.position.clone();
+      setHero(vs, S.ATTN + 6, vsWorld.y - pathPos(S.ATTN + 6).y);
+      await tween(500, k => { heroLift = (vsWorld.y - pathPos(S.ATTN + 6).y) * (1 - k); syncHero(); });
+      heroLift = 0;
+      await travel(S.WO, 900, easeIn);
+      impact(pathPos(S.WO), OP_LEARNED, { count: 70, shake: 0.6 });
+      gatePulse(gates.wo);
+      // wo: the 4 head colours give way to the value colouring
+      await tween(700, k => {
+        hero.userData.cubes.forEach((m, i) => {
+          const c0 = new THREE.Color(HEAD_COLORS[Math.floor(i / 4)]);
+          const v = V.attnCat[i] + (V.attnOut[i] - V.attnCat[i]) * k;
+          const c1 = valColor(v, 0.06);
+          m.material.color.copy(c0).lerp(c1, k);
+          m.material.emissive.copy(m.material.color);
+          m.scale.y = valScaleY(v);
+          m.scale.x = m.scale.z = valScaleXZ(v);
+        });
+      });
+      hero.userData.cubes.forEach((m, i) => { m.userData.v = V.attnOut[i]; });
+      hero.userData.vals = V.attnOut.slice();
+      hero.userData.hue = 0.06;
+      await travel(S.JOIN1 - 6, 700);
+    },
+    final() {
+      if (attn) {
+        [attn.qs, attn.ks, attn.vs, ...(attn.heads || []), ...(attn.beams || []), ...(attn.wlabels || [])]
+          .filter(Boolean).forEach(disposeObj);
+        attn = null;
+      }
+      setHero(makeStrip(V.attnOut, { hue: 0.06 }), S.JOIN1 - 6);
+      setCam(WIDE_CAM);
+    }
+  },
+  /* 8 ─────────────────────────────── */
+  {
+    name: 'Residual add',
+    async play() {
+      hud('Stage 12: residual add', 'x + x_residual', "The saved copy returns to the main track and is added element-wise to the current row. Attention's output is layered on top of the original data instead of replacing it, and the values and hue change accordingly.",
+        'x = [a + b for a, b in zip(x, x_residual)]');
+      setCam(DEFAULT_CAM);
+      await travel(S.JOIN1, 500);
+      // Pull the saved copy back in from a distance
+      await tween(600, k => {
+        ghostSide = GHOST_SIDE * (1 - k);
+        if (ghost) ghost.userData.cubes.forEach(m => { m.material.opacity = 0.22 + 0.16 * k; });
+        syncHero();
+      });
+      await tween(700, k => { ghostLift = GHOST_LIFT * (1 - easeIn(k)); syncHero(); });
+      impact(pathPos(S.JOIN1), OP_PURE, { count: 120, shake: 1.2 });
+      clearGhost();
+      await Promise.all([
+        tween(600, k => setStripValues(hero, V.afterRes1, k, 0.12), easeOut),
+        stripPulse(hero, 700)
+      ]);
+      setStripValues(hero, V.afterRes1, 1, 0.12);
+      await travel(S.FORK2 - 2, 700);
+    },
+    final() { setHero(makeStrip(V.afterRes1, { hue: 0.12 }), S.FORK2 - 2); clearGhost(); buildSelfPod(); setCam(DEFAULT_CAM); }
+  },
+  /* 9 ─────────────────────────────── */
+  {
+    name: 'Residual fork 2',
+    async play() {
+      hud('Stage 13: residual fork 2', 'residual', 'Before the MLP, the row is copied and saved again. The main row then passes through rmsnorm: the residual addition changed the range of values, so this time the normalisation genuinely flattens them, which makes them easier for the MLP to process.',
+        'x_residual = x\nx = rmsnorm(x)  # this time it does flatten the values');
+      setCam(DEFAULT_CAM);
+      ghost = makeGhost(hero); ghostLift = 0; ghostSide = 0; syncHero();
+      await Promise.all([
+        travel(S.PRE2, 800),
+        tween(800, k => {
+          ghostLift = GHOST_LIFT * easeOut(k);
+          ghostSide = GHOST_SIDE * easeOut(k);
+          syncHero();
+        })
+      ]);
+      impact(pathPos(S.PRE2), OP_PURE, { count: 30, shake: 0.25, flash: 120 });
+      gatePulse(gates.pre2);
+      await tween(600, k => setStripValues(hero, V.norm2, k), easeOut);
+      setStripValues(hero, V.norm2, 1);
+      await travel(S.PRE2 + 6, 500);
+    },
+    final() {
+      setHero(makeStrip(V.norm2, { hue: 0.12 }), S.PRE2 + 6);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(DEFAULT_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: 'MLP expand',
+    async play() {
+      hud('Stage 14: MLP expands 16→64', 'mlp_fc1', 'mlp_fc1 expands the 16 dims into 64, splitting each cube into 4. The extra dimensions provide a larger intermediate space for the computation.',
+        'x = linear(x, mlp_fc1)  # 16 → 64');
+      setCam(WIDE_CAM);
+      await travel(S.MLP, 900, easeIn);
+      impact(pathPos(S.MLP), OP_LEARNED, { count: 140, shake: 1.1 });
+      gatePulse(gates.mlp);
+      const strip64 = makeStrip(V.h64, { cube: 1.5, pitch: 2.02, hue: 0.12 });
+      strip64.userData.cubes.forEach((m, i) => {
+        m.userData.tx = m.position.x;
+        m.position.x = hero.userData.cubes[Math.floor(i / 4)].position.x;
+        m.scale.setScalar(0.1);
+      });
+      const oldHero = hero;
+      hero = null;
+      disposeObj(oldHero);
+      setHero(strip64, S.MLP);
+      await tween(900, k => {
+        strip64.userData.cubes.forEach((m, i) => {
+          const kk = clamp(k * 1.5 - i * 0.008, 0, 1), e = easeOut(kk);
+          m.position.x += (m.userData.tx - m.position.x) * e;
+          const sy = valScaleY(m.userData.v);
+          m.scale.set(0.1 + 0.9 * e, 0.1 + (sy - 0.1) * e, 0.1 + 0.9 * e);
+        });
+      }, k => k);
+      strip64.userData.cubes.forEach(m => { m.position.x = m.userData.tx; });
+      await travel(S.MLP + 6, 500);
+    },
+    final() {
+      setHero(buildStrip64(false), S.MLP + 6);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(WIDE_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: 'ReLU clips negatives',
+    async play() {
+      hud('Stage 15: the ReLU threshold', 'negatives to zero', 'All 64 cubes pass through ReLU: positive values are unchanged; negative values become zero. This is the non-linearity in the network.',
+        'x = [xi.relu() for xi in x]  # max(0, xi)');
+      await travel(S.RELU, 900, easeIn);
+      impact(pathPos(S.RELU), OP_PURE, { count: 80, shake: 0.7 });
+      const strip64 = hero;
+      await tween(800, k => {
+        strip64.userData.cubes.forEach((m, i) => {
+          if (V.h64[i] >= 0) return;
+          const kk = clamp(k * 1.7 - i * 0.008, 0, 1);
+          m.scale.y = valScaleY(V.h64[i]) * (1 - kk) + 0.12 * kk;
+          m.material.color.lerpColors(valColor(V.h64[i], 0.12), new THREE.Color(0x475569), kk);
+          m.material.emissive.copy(m.material.color);
+          m.material.emissiveIntensity = 0.25 * (1 - kk);
+        });
+      }, k => k);
+      await travel(S.RELU + 4, 500);
+    },
+    final() {
+      setHero(buildStrip64(true), S.RELU + 4);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(WIDE_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: 'Squeeze 64→16',
+    async play() {
+      hud('Stage 16: squeeze 64→16', 'mlp_fc2', 'mlp_fc2 squeezes the 64 dims back into 16, merging every 4 cubes into one and restoring the original width.',
+        'x = linear(x, mlp_fc2)  # 64 → 16');
+      await travel(S.SQUEEZE, 800, easeIn);
+      impact(pathPos(S.SQUEEZE), OP_LEARNED, { count: 100, shake: 0.9 });
+      gatePulse(gates.squeeze);
+      const strip64 = hero;
+      const strip16 = makeStrip(V.mlpOut, { hue: 0.12 });
+      strip16.userData.cubes.forEach((m, i) => { m.userData.tx = m.position.x; });
+      await tween(700, k => {
+        strip64.userData.cubes.forEach((m, i) => {
+          const targetX = strip16.userData.cubes[Math.floor(i / 4)].userData.tx;
+          m.position.x += (targetX - m.position.x) * easeIn(k) * 0.4;
+          m.scale.multiplyScalar(1 - 0.5 * k * 0.1);
+          if (m.material) { m.material.transparent = true; m.material.opacity = 1 - k * 0.8; }
+        });
+      });
+      setHero(strip16, S.SQUEEZE);
+      strip16.userData.cubes.forEach(m => { m.scale.x = 0.2; m.scale.z = 0.2; });
+      await tween(500, k => {
+        strip16.userData.cubes.forEach(m => { m.scale.x = 0.2 + 0.8 * easeOut(k); m.scale.z = m.scale.x; });
+      });
+      await travel(S.SQUEEZE + 6, 500);
+    },
+    final() {
+      setHero(makeStrip(V.mlpOut, { hue: 0.12 }), S.SQUEEZE + 6);
+      ghost = makeGhost(makeStrip(V.afterRes1, { hue: 0.12 })); ghostLift = GHOST_LIFT; ghostSide = GHOST_SIDE; syncHero();
+      buildSelfPod();
+      setCam(WIDE_CAM);
+    }
+  },
+  /* ─────────────────────────────── */
+  {
+    name: 'Residual add 2',
+    async play() {
+      hud('Stage 17: residual add 2', 'x + x_residual', 'The saved copy returns to the main track and is added to the current row again, layering the MLP output on top of the original data. That completes one Transformer Block.',
+        'x = [a + b for a, b in zip(x, x_residual)]');
+      setCam(DEFAULT_CAM);
+      await travel(S.JOIN2, 700);
+      await tween(500, k => {
+        ghostSide = GHOST_SIDE * (1 - k);
+        if (ghost) ghost.userData.cubes.forEach(m => { m.material.opacity = 0.22 + 0.16 * k; });
+        syncHero();
+      });
+      await tween(600, k => { ghostLift = GHOST_LIFT * (1 - easeIn(k)); syncHero(); });
+      impact(pathPos(S.JOIN2), OP_PURE, { count: 110, shake: 1.1 });
+      clearGhost();
+      await Promise.all([
+        tween(600, k => setStripValues(hero, V.afterRes2, k, 0.18), easeOut),
+        stripPulse(hero, 700)
+      ]);
+      setStripValues(hero, V.afterRes2, 1, 0.18);
+      await travel(S.JOIN2 + 10, 600);
+    },
+    final() { setHero(makeStrip(V.afterRes2, { hue: 0.18 }), S.JOIN2 + 10); clearGhost(); buildSelfPod(); setCam(DEFAULT_CAM); }
+  },
+  /* 10 ─────────────────────────────── */
+  {
+    name: 'lm_head',
+    async play() {
+      hud('Stage 18: the lm_head wall', '16 dims → 27 logits', 'The 16-dim vector hits the 27-slot lm_head wall and raises 27 bars, one for each of a–z plus BOS, which also marks the end. Bar height is the raw score, the logit.',
+        "logits = linear(x, state_dict['lm_head'])");
+      await Promise.all([
+        travel(S.WALL - 4, 1400, easeIn),
+        tween(1400, k => {
+          if (hero) hero.userData.cubes.forEach(m => { m.material.emissiveIntensity = 0.25 + k * 1.0; });
+        }, easeIn)
+      ]);
+      impact(pathPos(S.WALL - 2), OP_LEARNED, { count: 200, shake: 1.6, flash: 500 });
+      setHero(null);
+      setMidGatesVisible(false); // mid-route gates would block the wall shot, so hide them first
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 10, 0)));
+      buildBars(V.logits, 3.6, false);
+      await tween(1200, k => {
+        bars.children.forEach((b, i) => {
+          const kk = clamp(k * 2.2 - i * 0.045, 0, 1);
+          b.scale.y = Math.max(0.01, barH(V.logits[i], 3.6) * easeOut(kk));
+        });
+      }, k => k);
+      bars.children.forEach((b, i) => { b.scale.y = Math.max(0.15, barH(V.logits[i], 3.6)); });
+    },
+    final() {
+      setHero(null); clearGhost(); buildSelfPod();
+      buildBars(V.logits, 3.6, true);
+      setMidGatesVisible(false);
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 10, 0)));
+    }
+  },
+  /* 11 ─────────────────────────────── */
+  {
+    name: 'Softmax',
+    async play() {
+      hud('Stage 19: softmax + temperature', 'logits → probabilities', 'The 27 logits are divided by the temperature 0.5, exponentiated and normalised into a probability distribution that sums to 1. m has the highest probability, which reflects how often em is followed by m in the training data.',
+        'probs = softmax([l / temperature for l in logits])  # T=0.5');
+      wallLabel.visible = false; // the wall label gives way to this stage's caption
+      const tl = textSprite('softmax: logits ÷ temperature 0.5 → probs', { color: colToCss(OP_PURE), fs: 44 });
+      tl.position.copy(wallLabel.position);
+      tl.material.opacity = 0;
+      dynamicG.add(tl);
+      softmaxLabel = tl;
+      await tween(500, k => { tl.material.opacity = k; }, easeOut);
+      const probH = V.probs.map(p => p * 52);
+      await tween(1400, k => {
+        bars.children.forEach((b, i) => {
+          const h0 = Math.max(0.15, barH(V.logits[i], 3.6));
+          const h1 = Math.max(0.15, probH[i]);
+          b.scale.y = h0 + (h1 - h0) * k;
+          const c = new THREE.Color(i === 12 ? 0xf0abfc : 0x2dd4a7);
+          b.material.color.lerp(c, k * 0.9);
+          b.material.emissive.copy(b.material.color);
+        });
+      });
+      await wait(300); // the label stays on screen so it is still clear during sampling that these are probabilities
+    },
+    final() {
+      setHero(null); clearGhost(); buildSelfPod();
+      buildBars(V.probs.map(p => p * 52), 1, true, true);
+      setMidGatesVisible(false);
+      wallLabel.visible = false;
+      const tl = textSprite('softmax: logits ÷ temperature 0.5 → probs', { color: colToCss(OP_PURE), fs: 44 });
+      tl.position.copy(wallLabel.position);
+      dynamicG.add(tl);
+      softmaxLabel = tl;
+      setCam(WALL_CAM, wallCenter.clone().add(new THREE.Vector3(0, 10, 0)));
+    }
+  },
+  /* 12 ─────────────────────────────── */
+  {
+    name: 'Sampling and the loop',
+    async play() {
+      hud('Finale: sampling → the autoregressive loop', 'random.choices', 'Sampling happens on a track divided in proportion to the probabilities: the higher the probability, the wider the segment and the more likely it is to be picked. This draw lands on m, the second m in emma. The new character goes back to the start and runs through the pipeline again; the KV Cache now holds 3 slots (BOS, e, m) and the next round fills the fourth. This is autoregressive generation: the sequence is produced one character at a time.',
+        'token_id = random.choices(range(vocab_size), weights=probs)[0]  # → m (the second one)');
+      // Track segments sized by probability
+      const rulerW = 110, rulerY = -22, rulerZoff = -20;
+      const ruler = new THREE.Group();
+      let acc = 0;
+      V.probs.forEach((p, i) => {
+        const w = p * rulerW;
+        if (w < 0.35) { acc += w; return; }
+        const seg = new THREE.Mesh(
+          new THREE.BoxGeometry(Math.max(0.3, w - 0.3), 1.4, 7),
+          new THREE.MeshStandardMaterial({
+            color: i === 12 ? 0xf0abfc : (i % 2 ? 0x24406e : 0x1a2f52),
+            emissive: i === 12 ? 0xf0abfc : 0x101c36, emissiveIntensity: i === 12 ? 0.5 : 0.4
+          })
+        );
+        seg.position.x = rulerW / 2 - acc - w / 2; // same orientation as the logit bars: a→z left to right
+        seg.userData.i = i;
+        ruler.add(seg);
+        if (p > 0.04) {
+          const lb = textSprite(letters[i] || '∅', { color: i === 12 ? '#f0abfc' : '#93a4c8', fs: 38, bg: false });
+          lb.position.set(seg.position.x, -4, 0);
+          ruler.add(lb);
+        }
+        acc += w;
+      });
+      ruler.position.copy(wallCenter).addScaledVector(DIR, rulerZoff).add(new THREE.Vector3(0, rulerY + 14, 0));
+      dynamicG.add(ruler);
+      await tween(600, k => ruler.scale.set(easeOut(k), 1, 1));
+      // x of the centre of m's segment
+      let mx = 0; acc = 0;
+      for (let i = 0; i < 27; i++) { const w = V.probs[i] * rulerW; if (i === 12) { mx = rulerW / 2 - acc - w / 2; break; } acc += w; }
+      // The ball drops → bounces → rolls into m
+      const ball = new THREE.Mesh(
+        new THREE.SphereGeometry(2.4, 24, 24),
+        // Sampling is pure chance with no parameters: the ball uses the OP_PURE teal, so gold is
+        // not misread as "there is knowledge here"
+        new THREE.MeshStandardMaterial({ color: 0xf0fdfa, emissive: OP_PURE, emissiveIntensity: 0.7, roughness: 0.2 })
+      );
+      const ballBase = ruler.position.clone();
+      ball.position.copy(ballBase).add(new THREE.Vector3(mx * 0.2, 46, 0));
+      dynamicG.add(ball);
+      await tween(900, k => {
+        const t = easeIn(k);
+        ball.position.y = ballBase.y + 46 - 46 * t + 3.2;
+        ball.position.x = ballBase.x + mx * 0.2 + (mx * 0.55 - mx * 0.2) * k;
+      });
+      impact(ball.position, OP_PURE, { count: 50, shake: 0.5 });
+      await tween(700, k => { // one small bounce, then roll to the centre of m
+        ball.position.y = ballBase.y + 3.2 + Math.abs(Math.sin(k * Math.PI)) * 12 * (1 - k);
+        ball.position.x = ballBase.x + mx * 0.55 + (mx - mx * 0.55) * k;
+        ball.rotation.z -= 0.15;
+      });
+      impact(ball.position, 0xf0abfc, { count: 90, shake: 0.8 });
+      // The m cube is born
+      const mCube = CUBE_M();
+      mCube.add(glowSprite(0xf472b6, 30));
+      mCube.position.copy(ball.position).add(new THREE.Vector3(0, 6, 0));
+      mCube.scale.setScalar(0.05);
+      dynamicG.add(mCube);
+      await tween(700, k => {
+        mCube.scale.setScalar(0.05 + 0.95 * easeOut(k));
+        mCube.position.y = ball.position.y + 6 + 10 * easeOut(k);
+        mCube.rotation.y = k * Math.PI * 2;
+      });
+      disposeObj(ball);
+      // Pull the camera back; m flies back to the start
+      const loopLb = textSprite('new m → next input · autoregressive loop', { color: '#f0abfc', fs: 52 });
+      loopLb.position.copy(pathPos(150)).add(PORTRAIT ? new THREE.Vector3(-6, 74, 0) : new THREE.Vector3(115, 25, 0));
+      dynamicG.add(loopLb);
+      if (softmaxLabel) { disposeObj(softmaxLabel); softmaxLabel = null; }
+      wallLabel.visible = true;
+      setMidGatesVisible(true); // pulling back to see the whole pipeline, so restore every gate
+      showAllLabels = true;     // panorama map mode: every label lit at once
+      makeReturnArc();          // the autoregressive return leg: a dashed arc from the wall back to the start
+      setCam(FINALE_CAM, pathPos(196));
+      const p0 = mCube.position.clone();
+      const p1 = pathPos(S.START);
+      const mid = pathPos(150).add(new THREE.Vector3(165, 70, 0)); // follows the return arc
+      await tween(3400, k => {
+        const a = new THREE.Vector3().lerpVectors(p0, mid, k);
+        const b = new THREE.Vector3().lerpVectors(mid, p1, k);
+        mCube.position.lerpVectors(a, b, k); // quadratic Bézier curve
+        mCube.rotation.y += 0.04;
+      }, easeIO);
+      impact(p1, 0xf472b6, { count: 60, shake: 0.3, flash: 150 });
+      setHero(mCube, S.START);
+      hud('One full round', '', 'Press R to replay the whole journey; press ← to go back and hold on any stage.', '');
+    },
+    final() {
+      clearGhost(); buildSelfPod();
+      buildBars(V.probs.map(p => p * 52), 1, true, true);
+      setMidGatesVisible(true);
+      showAllLabels = true;
+      wallLabel.visible = true;
+      makeReturnArc();
+      const m = CUBE_M();
+      m.add(glowSprite(0xf472b6, 30));
+      setHero(m, S.START);
+      const loopLb = textSprite('new m → next input · autoregressive loop', { color: '#f0abfc', fs: 52 });
+      loopLb.position.copy(pathPos(150)).add(PORTRAIT ? new THREE.Vector3(-6, 74, 0) : new THREE.Vector3(115, 25, 0));
+      dynamicG.add(loopLb);
+      setCam(FINALE_CAM, pathPos(196));
+    }
+  }
+];
+
+/* ---- Shared builders: the three Q/K/V strips, this token's own K/V pod, logit / probability bars ---- */
+function makeQKVStrips(scaleIn = 1) {
+  const mk = (vals, lift, tag, col) => {
+    const s = makeStrip(vals, { opacity: 0.95 });
+    tintByHeads(s);
+    // Portrait: these glosses are the longest labels in the deck and the screen is narrowest
+    // there, so they render smaller to stay on screen. Landscape keeps the original size.
+    const lb = textSprite(tag, { color: col, fs: PORTRAIT ? 23 : 36, bg: false, onTop: true });
+    // Right-align the label to the left edge of the cube row: the sprite is centre-anchored, so a
+    // hard-coded x would slide onto the cubes as the label gets longer. The English labels are
+    // roughly twice the width of the Chinese ones, which is exactly what breaks a fixed offset.
+    // Row half-width = 15 gaps × pitch 3.9 / 2 + cube half-width 1.5 = 30.75, plus a gap of 3.
+    lb.position.set(-(30.75 + 3 + lb.scale.x / 2), 4, 0);
+    s.add(lb);
+    s.userData.label = lb;
+    s.position.copy(pathPos(S.ATTN + 6));
+    s.position.y += lift;
+    s.scale.setScalar(scaleIn);
+    dynamicG.add(s);
+    return s;
+  };
+  return {
+    qs: mk(V.q, 14, 'Q (what is being looked for)', '#f9a8d4'),
+    ks: mk(V.k, 0, 'K (what this position is)', '#c4b5fd'),
+    vs: mk(V.v, -14, 'V (what it can supply)', '#93c5fd'),
+    beams: [], wlabels: []
+  };
+}
+// Single-colour tinting (segments of the same head share its colour; q/k/v differ in brightness)
+function tintSolid(strip, colorHex, emiss = 0.4) {
+  const c = new THREE.Color(colorHex);
+  strip.userData.cubes.forEach(m => {
+    m.material.color.copy(c);
+    m.material.emissive.copy(c);
+    m.material.emissiveIntensity = emiss;
+  });
+}
+// Parking position for head h: head 1 on the main track, heads 2-4 on the left workbench
+function headHomePos(h) {
+  const base = pathPos(S.ATTN + 6);
+  if (h === 0) return base;
+  // Portrait: the three supporting heads move below the main track (the locker takes the space
+  // above); landscape keeps them on the workbench to the left
+  return base.add(PORTRAIT
+    ? new THREE.Vector3(-34, -32 - (h - 1) * 26, 0)
+    : new THREE.Vector3(-78, 38 - (h - 1) * 30, 0));
+}
+// One head's working set: three short q/k/v strips (4 cubes each), or a single output strip once done
+function makeHeadGroup(h, withOut = false) {
+  const grp = new THREE.Group();
+  const col = HEAD_COLORS[h];
+  if (withOut) {
+    const out = makeStrip(V.attnCat.slice(h * 4, h * 4 + 4), { cube: 2.6, pitch: 3.3, opacity: 0.98 });
+    tintSolid(out, col, 0.55);
+    grp.add(out);
+    grp.userData.out = out;
+  } else {
+    const mkPart = (arr, y, emiss, tag) => {
+      const s = makeStrip(arr.slice(h * 4, h * 4 + 4), { cube: 2.4, pitch: 3.1, opacity: 0.95 });
+      tintSolid(s, col, emiss);
+      s.position.y = y;
+      if (h === 0) {
+        const t = textSprite(tag, { color: colToCss(col), fs: 30, bg: false, onTop: true });
+        t.position.set(-11, 0, 0);
+        s.add(t);
+      }
+      grp.add(s);
+      return s;
+    };
+    // Only q lives in the head: K/V all sit in the KV Cache on the right and are reached by beams
+    grp.userData.q = mkPart(V.q, 0, 0.65, 'q');
+  }
+  const lb = textSprite(`head ${h + 1}`, { color: colToCss(col), fs: 30, bg: false, onTop: true });
+  lb.position.set(0, 13, 0);
+  grp.add(lb);
+  grp.userData.label = lb;
+  grp.position.copy(headHomePos(h));
+  if (h > 0) grp.scale.setScalar(0.85);
+  dynamicG.add(grp);
+  return grp;
+}
+// Head finished: q is swapped for a single output strip
+function swapHeadToOut(head, h) {
+  const q = head.userData.q;
+  if (q) { head.remove(q); disposeObj(q); head.userData.q = null; }
+  const out = makeStrip(V.attnCat.slice(h * 4, h * 4 + 4), { cube: 2.6, pitch: 3.3, opacity: 0.98 });
+  tintSolid(out, HEAD_COLORS[h], 0.55);
+  head.add(out);
+  head.userData.out = out;
+  return out;
+}
+// Supporting heads 2-4: dimmed to a (1 = hero brightness) so the eye follows head 1 alone
+const SIDE_HEAD_DIM = 0.32;
+function setHeadDim(g, a) {
+  const s = g.userData.q || g.userData.out;
+  if (s) s.userData.cubes.forEach(m => {
+    m.material.transparent = true;
+    m.material.opacity = 0.95 * a;
+    m.material.emissiveIntensity = 0.65 * a;
+  });
+  if (g.userData.label) g.userData.label.material.opacity = clamp(a + 0.12, 0, 1);
+}
+// Three slots: BOS and e (the past, purple) and m itself (the present, pink)
+function attnPodSpecs() {
+  return [
+    { pod: bosPod, col: '#c084fc', dy: 7 },
+    { pod: ePod, col: '#c084fc', dy: 0 },
+    { pod: selfPod, col: '#f0abfc', dy: -7 }
+  ];
+}
+// World coordinates of one row inside a slot (pods are top-level objects, so position is world space)
+function podRowPos(pod, which) {
+  return pod.position.clone().add(new THREE.Vector3(0, which === 'k' ? KV_ROW_DY : -KV_ROW_DY, 0));
+}
+// Where a weight number lands once computed: off the beam, against the left of the V row it is enlarging
+const WLABEL_HOME = new THREE.Vector3(PORTRAIT ? -34 : -42, -KV_ROW_DY, 0);
+const WLABEL_SHRINK = 0.72;
+function wlabelHome(pod) { return pod.position.clone().add(WLABEL_HOME); }
+// Beams always land on the K row: beat 1 of stage 9 is q scoring against k, and only a line into
+// K makes that cause and effect readable
+function makeAttnBeams(fromPos, scored = false) {
+  const op = scored ? 0.22 : 0.55;
+  const beams = [], wlabels = [];
+  attnPodSpecs().forEach((p, i) => {
+    const to = podRowPos(p.pod, 'k');
+    const b = makeBeam(fromPos.clone(), to, V.attnW[i] * 3.4, new THREE.Color(p.col).getHex());
+    b.material.opacity = op;
+    beams.push(b);
+    // The three slots are 15 apart vertically, so the labels have to spread along the beam;
+    // onTop keeps them from being hidden behind the locker's semi-transparent panel
+    const w = textSprite(V.attnW[i].toFixed(2), { color: p.col, fs: 40, onTop: true });
+    // Beat 2 stops midway along the beam, biased towards the head, so it does not cover the
+    // K/V cubes or the row tags inside the locker
+    w.userData.onBeam = new THREE.Vector3().lerpVectors(fromPos, to, 0.42).add(new THREE.Vector3(-12, p.dy, 0));
+    w.userData.atV = wlabelHome(p.pod);
+    w.userData.scale0 = w.scale.clone();
+    // scored = the held frame after scoring: the numbers have already slid next to the V rows
+    w.position.copy(scored ? w.userData.atV : w.userData.onBeam);
+    if (scored) w.scale.copy(w.userData.scale0).multiplyScalar(WLABEL_SHRINK);
+    dynamicG.add(w);
+    wlabels.push(w);
+  });
+  return { beams, wlabels };
+}
+// How much K grows while scoring, and how far it shrinks back afterwards
+const K_HI = 1.5, K_LO = 0.55;
+// Each V grows by its own weight (0.22 / 0.31 / 0.47 → 1.08 / 1.28 / 1.63); deliberately
+// exaggerated so it is visible that the number decides the share
+function vGrowScale(i) { return 0.6 + V.attnW[i] * 2.2; }
+function vGrowEmiss(i) { return 0.4 + V.attnW[i] * 1.5; }
+// Beat 1: emphasise K — the K rows grow and glow while the V rows step back
+function emphasizeK(k) {
+  attnPodSpecs().forEach(p => {
+    setRowEmphasis(p.pod.userData.k, 1 + (K_HI - 1) * k, 0.4 + 1.0 * k, ROW_BASE.op, p.pod.userData.kT);
+    setRowEmphasis(p.pod.userData.v, 1, 0.4 - 0.25 * k, ROW_BASE.op - 0.55 * k, p.pod.userData.vT);
+  });
+}
+// Beat 3a: once K has been scored it shrinks, dims and recedes
+function settleK(k) {
+  attnPodSpecs().forEach(p => {
+    setRowEmphasis(p.pod.userData.k, K_HI + (K_LO - K_HI) * k, 1.4 - 1.25 * k,
+      ROW_BASE.op - 0.5 * k, p.pod.userData.kT);
+  });
+}
+// Beat 3b: each number swells the V in its own slot; the caller names the slots one at a time
+function growV(i, k) {
+  const p = attnPodSpecs()[i];
+  setRowEmphasis(p.pod.userData.v, 1 + (vGrowScale(i) - 1) * k,
+    0.15 + (vGrowEmiss(i) - 0.15) * k, ROW_BASE.op - 0.55 * (1 - k), p.pod.userData.vT);
+}
+// The locker's held state after scoring (shared by the tail of play() and by final(), so the two cannot drift)
+function applyScoredCacheState() {
+  attnPodSpecs().forEach((p, i) => {
+    setRowEmphasis(p.pod.userData.k, K_LO, 0.15, ROW_BASE.op - 0.5, p.pod.userData.kT);
+    setRowEmphasis(p.pod.userData.v, vGrowScale(i), vGrowEmiss(i), ROW_BASE.op, p.pod.userData.vT);
+  });
+}
+
+let selfPod = null;
+let softmaxLabel = null; // the caption that replaces the wall label during the softmax stage
+// Finale: the dashed arc of the autoregressive return leg (from the wall back round to the start)
+function makeReturnArc() {
+  const curve = new THREE.QuadraticBezierCurve3(
+    pathPos(S.WALL - 20).add(new THREE.Vector3(40, 12, 0)),
+    pathPos(150).add(new THREE.Vector3(165, 70, 0)),
+    pathPos(S.START + 10)
+  );
+  const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(64));
+  const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
+    color: 0xf472b6, dashSize: 3, gapSize: 2.6, transparent: true, opacity: 0.65
+  }));
+  line.computeLineDistances();
+  dynamicG.add(line);
+  return line;
+}
+// Fill this token's K/V into slot 3 of the locker (still on dynamicG, so resetWorld can clear it)
+function buildSelfPod() {
+  if (selfPod) { disposeObj(selfPod); selfPod = null; } // idempotent: rebuilding a held frame must not stack copies
+  const pod = makeKVRows(V.k, V.v);
+  const lb = textSprite('m', { fs: 30, color: '#f0abfc', bg: false, onTop: true });
+  lb.position.set(-31, 0, 0);
+  pod.add(lb);
+  pod.position.copy(kvSlot(2));
+  kvSlotFrames[2].material.opacity = 0.7;
+  dynamicG.add(pod);
+  selfPod = pod;
+  return pod;
+}
+// The 64-dim hidden layer (optionally in the post-ReLU held state)
+function buildStrip64(reluApplied) {
+  const s = makeStrip(V.h64, { cube: 1.5, pitch: 2.02, hue: 0.12 });
+  if (reluApplied) {
+    s.userData.cubes.forEach((m, i) => {
+      if (V.h64[i] >= 0) return;
+      m.scale.y = 0.12;
+      m.material.color.set(0x475569);
+      m.material.emissive.copy(m.material.color);
+      m.material.emissiveIntensity = 0;
+    });
+  }
+  return s;
+}
+function barH(logit, k) { return Math.max(0.15, (logit + 2.6) * k); }
+function buildBars(vals, hScale, applyHeights, probMode = false) {
+  if (bars) { disposeObj(bars); bars = null; }
+  if (barLabels) { disposeObj(barLabels); barLabels = null; }
+  bars = new THREE.Group();
+  barLabels = new THREE.Group();
+  const origin = wallCenter.clone().addScaledVector(DIR, -14);
+  for (let i = 0; i < 27; i++) {
+    const geo = new THREE.BoxGeometry(BAR_W, 1, BAR_W);
+    geo.translate(0, 0.5, 0);
+    const isM = i === 12;
+    const bar = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: probMode ? (isM ? 0xf0abfc : 0x2dd4a7) : (isM ? 0x93c5fd : 0x60a5fa),
+      emissive: probMode ? (isM ? 0xf0abfc : 0x2dd4a7) : 0x1e3a5f,
+      emissiveIntensity: isM ? 0.55 : 0.3,
+      roughness: 0.35, metalness: 0.3
+    }));
+    bar.position.set((13 - i) * BAR_PITCH, origin.y - 10, origin.z); // a→z reads left to right on screen
+    bar.scale.y = applyHeights ? Math.max(0.15, probMode ? vals[i] : barH(vals[i], hScale)) : 0.01;
+    bars.add(bar);
+    // onTop: the winning bar would otherwise cover its own letter, and blind-test audiences
+    // could not tell whether it was l or m
+    const lb = textSprite(letters[i] || '∅', { color: isM ? '#f0abfc' : '#7d90b8', fs: 34, bg: false, onTop: true });
+    // Pulled towards the camera: left behind the bars, the tallest one hides its own letter
+    // (l and m become indistinguishable)
+    lb.position.set(bar.position.x, bar.position.y - 3.4, bar.position.z);
+    lb.position.addScaledVector(DIR, -9);
+    barLabels.add(lb);
+  }
+  dynamicG.add(bars, barLabels);
+}
+
+/* ================= Navigation state machine ================= */
+function resetWorld() {
+  for (const b of bursts) { dynamicG.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); }
+  bursts.length = 0;
+  tweens.clear();
+  [...dynamicG.children].forEach(disposeObj);
+  hero = null; ghost = null; bars = null; barLabels = null; selfPod = null; attn = null;
+  heroS = S.START; heroLift = 0; ghostLift = 0; ghostSide = 0;
+  timeScale = 1; shakeAmp = 0; flashLight.intensity = 0;
+  showAllLabels = false;
+  softmaxLabel = null;
+  kvSlotFrames[2].material.opacity = 0.25; // slot 3 of the locker returns to empty
+  resetPodRows(); // bosPod/ePod live on staticG, so stage 9's dimmed K / enlarged V would otherwise persist
+  if (wallLabel) wallLabel.visible = true;
+  setMidGatesVisible(true);
+  Object.values(gates).forEach(g => g.userData.wire.scale.setScalar(1));
+}
+function rebuildTo(n) {
+  resetWorld();
+  for (let i = 0; i < n; i++) steps[i].final();
+  idx = n;
+  if (n === 0) {
+    $('info').classList.add('hidden');
+    setCam(DEFAULT_CAM);
+    camFocus.copy(pathPos(S.START));
+  } else {
+    const st = steps[n - 1];
+    hud(`Held: ${st.name}`, `${n} / ${steps.length}`,
+        TOUCH ? 'Swipe up to continue, swipe down to go further back.' : 'Press space to continue, ← to go further back.', '');
+  }
+  hudProgress();
+}
+async function next() {
+  if (playing) { timeScale = 6; $('fastfwd').classList.add('on'); return; }
+  if (idx >= steps.length) return;
+  $('intro').classList.add('hidden');
+  playing = true;
+  hudProgress();
+  try { await steps[idx].play(); } catch (e) { console.error(e); }
+  playing = false;
+  timeScale = 1;
+  $('fastfwd').classList.remove('on');
+  idx++;
+  hudProgress();
+}
+function prev() {
+  if (playing || idx <= 0) return;
+  rebuildTo(idx - 1);
+}
+
+addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowRight') { e.preventDefault(); next(); }
+  else if (e.code === 'ArrowLeft') prev();
+  else if (e.code === 'KeyR') { if (!playing) { rebuildTo(0); } }
+  else if (e.code === 'KeyF') {
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  }
+});
+// Gestures: swipe up = next stage, swipe down = previous stage (the same direction as scrolling
+// a web page); swipe left / right likewise. A movement below the threshold counts as a plain tap,
+// which preserves the old "tap anywhere to advance" behaviour.
+// Note that pointerdown must not advance directly, or a finger touching down would advance
+// immediately and a swipe would never get the chance to be recognised.
+const SWIPE_MIN = 40;      // px; anything more counts as a swipe
+const SWIPE_MAX_MS = 800;  // a drag slower than this is not a gesture
+let gesture = null;
+addEventListener('pointerdown', e => {
+  gesture = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+addEventListener('pointercancel', () => { gesture = null; });
+addEventListener('pointerup', e => {
+  if (!gesture) return;
+  const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
+  const dt = performance.now() - gesture.t;
+  gesture = null;
+  const far = Math.max(Math.abs(dx), Math.abs(dy));
+  if (far < SWIPE_MIN) { next(); return; }          // a tap
+  if (dt > SWIPE_MAX_MS) return;                     // a slow drag is not a gesture
+  const forward = Math.abs(dy) > Math.abs(dx) ? dy < 0 : dx < 0;  // swipe up / swipe left = forward
+  forward ? next() : prev();
+});
+
+// #n jumps straight to a stage's held frame (the camera arrives in place rather than gliding from the start)
+function snapCam() {
+  camOff.copy(camOffTarget);
+  if (focusMode === 'fixed') camFocus.copy(focusFixed);
+  else if (hero) hero.getWorldPosition(camFocus);
+}
+if (TOUCH) $('progress').innerHTML = `Swipe up to begin · 0 / ${steps.length}`;
+
+const hashStep = parseInt(location.hash.slice(1), 10);
+if (hashStep >= 1 && hashStep <= steps.length) { $('intro').classList.add('hidden'); rebuildTo(hashStep); }
+
+/* ================= Main loop ================= */
+const clock = new THREE.Clock();
+const tmpV = new THREE.Vector3();
+const tmpL = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  stepTweens(dt);
+  stepBursts(dt);
+
+  // Gate idle animation
+  gates.id.userData.wire.rotation.y += dt * 0.5;
+  gates.wte.userData.wire.rotation.y -= dt * 0.4;
+  gates.wpe.userData.wire.rotation.y += dt * 0.45;
+  gates.rms.userData.wire.rotation.z += dt * 0.3;
+  gates.attn.userData.wire.rotation.z -= dt * 0.25;
+  gates.mlp.userData.wire.rotation.z += dt * 0.25;
+  gates.squeeze.userData.wire.rotation.z -= dt * 0.25;
+
+  // Idle spin of the single cube
+  if (hero && hero.userData.spinMesh) {
+    hero.userData.spinMesh.rotation.y += dt * 0.8;
+    hero.userData.spinMesh.rotation.x += dt * 0.3;
+  }
+
+  // Camera: follow + smoothing + shake
+  const focusT = focusMode === 'hero' && hero ? hero.getWorldPosition(tmpV) : (focusMode === 'fixed' ? focusFixed : camFocus);
+  camFocus.lerp(focusT, 1 - Math.exp(-3 * dt));
+  camOff.lerp(camOffTarget, 1 - Math.exp(-2.2 * dt));
+  camera.position.copy(camFocus).add(camOff);
+  if (shakeAmp > 0.001) {
+    camera.position.x += (Math.random() - 0.5) * shakeAmp * 2;
+    camera.position.y += (Math.random() - 0.5) * shakeAmp * 2;
+    shakeAmp *= Math.exp(-5 * dt);
+  }
+  camera.lookAt(camFocus);
+
+  // Flash decay
+  flashLight.intensity *= Math.exp(-6 * dt);
+
+  // Gate labels: 1) fade out when too close to the camera 2) labels for future steps stay hidden
+  // until the hero approaches
+  for (const e of fadeLabels) {
+    const d = e.sprite.getWorldPosition(tmpL).distanceTo(camera.position);
+    const near = clamp((d - 46) / 30, 0, 1);
+    const ahead = e.s - heroS;
+    const win = showAllLabels ? 1 : clamp(1 - (ahead - 7) / 7, 0, 1);
+    // Labels of gates left far behind also fade, so they are not confused with the current step.
+    // They clear faster than they used to: blind tests showed "rmsnorm" sitting faintly behind
+    // the KV Cache panel, and viewers kept trying to read it
+    const winB = showAllLabels ? 1 : clamp(1 - (-ahead - 14) / 10, 0, 1);
+    e.sprite.material.opacity = near * win * winB;
+  }
+  // The bodies of gates already passed dim too (except in the closing panorama)
+  for (const g of fadeGates) {
+    // Closing panorama: labels go to full brightness but the gate bodies stay half-dim, or the
+    // large rings cut across the labels
+    const past = showAllLabels ? 0.28 : clamp(1 - (heroS - g.s - 10) / 16, GATE_PAST_MIN, 1);
+    for (const e of g.mats) e.m.opacity = e.o * past;
+  }
+
+  kvDim += (kvDimTarget - kvDim) * (1 - Math.exp(-3.5 * dt));
+  renderWithKVDim();
+});
+camFocus.copy(pathPos(S.START));
+if (hashStep >= 1 && hashStep <= steps.length) snapCam(); // deep link: the camera does not glide in from the start
+</script>
+</body>
+</html>
