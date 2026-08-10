@@ -1796,8 +1796,11 @@ function makeQKVStrips(scaleIn = 1) {
   const mk = (vals, lift, tag, col) => {
     const s = makeStrip(vals, { opacity: 0.95 });
     tintByHeads(s);
-    const lb = textSprite(tag, { color: col, fs: 36, bg: false, onTop: true });
-    lb.position.set(-46, 4, 0);
+    // 直式:這三個標籤是全片最長的,螢幕又最窄,靠右對齊後會被切到畫面外,所以直式縮小字級
+    const lb = textSprite(tag, { color: col, fs: PORTRAIT ? 27 : 36, bg: false, onTop: true });
+    // 標籤靠右對齊到方塊列的左緣:sprite 是置中錨點,寫死 x 會隨標籤變長而壓到方塊上。
+    // 列半寬 = 15 格 × pitch 3.9 / 2 + 方塊半寬 1.5 = 30.75,再留 3 的空隙。
+    lb.position.set(-(30.75 + 3 + lb.scale.x / 2), 4, 0);
     s.add(lb);
     s.userData.label = lb;
     s.position.copy(pathPos(S.ATTN + 6));
@@ -1807,9 +1810,9 @@ function makeQKVStrips(scaleIn = 1) {
     return s;
   };
   return {
-    qs: mk(V.q, 14, 'Q(我在找什麼)', '#f9a8d4'),
-    ks: mk(V.k, 0, 'K(我是什麼)', '#c4b5fd'),
-    vs: mk(V.v, -14, 'V(我要給什麼)', '#93c5fd'),
+    qs: mk(V.q, 14, 'Q(查詢:要找什麼)', '#f9a8d4'),
+    ks: mk(V.k, 0, 'K(鍵:這個位置是什麼)', '#c4b5fd'),
+    vs: mk(V.v, -14, 'V(值:能提供什麼)', '#93c5fd'),
     beams: [], wlabels: []
   };
 }
