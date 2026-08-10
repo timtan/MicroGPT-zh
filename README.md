@@ -5,8 +5,11 @@
 ## 投影片
 
 - [intro_slide.html](https://timtan.github.io/MicroGPT-zh/intro_slide.html) — 開場投影片
+- [intro_slide_en.html](https://timtan.github.io/MicroGPT-zh/intro_slide_en.html) — 開場投影片（英文版）
 - [flow3d.html](https://timtan.github.io/MicroGPT-zh/flow3d.html) — 3D 訓練流程動畫投影片
+- [flow3d_en.html](https://timtan.github.io/MicroGPT-zh/flow3d_en.html) — 3D 訓練流程動畫投影片（英文版）
 - [slides.html](https://timtan.github.io/MicroGPT-zh/slides.html) — MicroGPT 概念投影片
+- [slides_en.html](https://timtan.github.io/MicroGPT-zh/slides_en.html) — MicroGPT 概念投影片（英文版）
 
 ## microgpt_en.py
 
